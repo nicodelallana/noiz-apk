@@ -1,0 +1,66 @@
+name: Build GTFS & Keep-Alive
+
+on:
+  schedule:
+    # Run nightly at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  build_and_publish:
+    name: Compile GTFS SQLite & Supabase Keep-Alive
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile GTFS into transit.sqlite
+        run: |
+          chmod +x tools/build_gtfs/build_transit_db.py
+          python3 tools/build_gtfs/build_transit_db.py
+
+      - name: Upload Build Artifacts to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: transit-sqlite-bundle
+          path: |
+            tools/build_gtfs/out/transit.sqlite.gz
+            tools/build_gtfs/out/manifest.json
+          retention-days: 7
+
+      - name: Publish to Supabase Storage (if configured)
+        if: env.SUPABASE_SERVICE_ROLE_KEY != ''
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://zbwrjtncyblaxaarbmsr.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          echo "Uploading transit.sqlite.gz and manifest.json to Supabase Storage..."
+          curl -s -X POST "${SUPABASE_URL}/storage/v1/object/transit-packs/transit.sqlite.gz" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/gzip" \
+            -H "x-upsert: true" \
+            --data-binary "@tools/build_gtfs/out/transit.sqlite.gz"
+
+          curl -s -X POST "${SUPABASE_URL}/storage/v1/object/transit-packs/manifest.json" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "x-upsert: true" \
+            --data-binary "@tools/build_gtfs/out/manifest.json"
+          echo "Upload complete."
+
+      - name: Supabase Keep-Alive Ping
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://zbwrjtncyblaxaarbmsr.supabase.co' }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpid3JqdG5jeWJsYXhhYXJibXNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2OTI5NjgsImV4cCI6MjEwNjI2ODk2OH0.Am4ivpE7c9FQppVa4ma_tns_raNRdy973oVt8SP2Zfw' }}
+        run: |
+          echo "Sending keep-alive ping to Supabase REST API..."
+          curl -fsS "${SUPABASE_URL}/rest/v1/profiles?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" > /dev/null
+          echo "Keep-alive ping successful."

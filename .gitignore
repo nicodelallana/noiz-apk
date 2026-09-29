@@ -30,3 +30,8 @@ openspec/.worksets/
 # Supabase CLI local state
 supabase/.temp/
 .temp/
+
+# GTFS ETL compiled outputs
+tools/build_gtfs/out/
+*.sqlite
+*.sqlite.gz
