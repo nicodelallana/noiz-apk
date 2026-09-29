@@ -26,3 +26,7 @@ Thumbs.db
 
 # OpenSpec scratch/local (keep tracking changes and specs)
 openspec/.worksets/
+
+# Supabase CLI local state
+supabase/.temp/
+.temp/
