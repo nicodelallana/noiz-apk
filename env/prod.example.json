@@ -1,0 +1,11 @@
+{
+  "ENVIRONMENT": "production",
+  "SUPABASE_URL": "https://YOUR_PROJECT_REF.supabase.co",
+  "SUPABASE_ANON_KEY": "YOUR_PRODUCTION_SUPABASE_ANON_KEY",
+  "METRO_BILBAO_API_URL": "https://cms.metrobilbao.eus/get/open_data",
+  "CTB_DATA_PORTAL_URL": "https://data.ctb.eus",
+  "CTB_GTFS_RT_BASE_URL": "https://ctb-gtfs-rt.s3.eu-south-2.amazonaws.com",
+  "BIZKAIBUS_RT_BASE_URL": "https://baliabideak.bizkaia.eus/Bizkaibus/GTFSRealTime",
+  "GOOGLE_WEB_CLIENT_ID": "",
+  "GOOGLE_IOS_CLIENT_ID": ""
+}
