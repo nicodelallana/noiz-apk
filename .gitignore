@@ -1,0 +1,28 @@
+# Files and directories that should not be tracked by git
+
+# Environment & Secrets
+env/*.json
+!env/*.example.json
+*.jks
+*.keystore
+key.properties
+GoogleService-Info.plist
+ios/Runner/GoogleService-Info.plist
+android/app/google-services.json
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+
+# IDE & OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# OpenSpec scratch/local (keep tracking changes and specs)
+openspec/.worksets/

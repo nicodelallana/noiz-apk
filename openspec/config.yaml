@@ -1,0 +1,38 @@
+schema: spec-driven
+
+context: |
+  Project: Bizkaia Transit (app móvil Android + iOS para consultar transporte público de Bizkaia de un vistazo: viajes guardados, widgets, incidencias, planificador y saldo Barik).
+  
+  Stack: Flutter (canal stable, FVM), Dart (strict null safety, very_good_analysis), Riverpod, GoRouter, Drift (SQLite offline), Supabase (Auth, Postgres RLS, Storage), Dio, Protobuf GTFS-RT (Isolate), home_widget + Kotlin/SwiftUI.
+  
+  Key Architecture Principles:
+  1. Offline-first: schedules live on the mobile device in SQLite (drift), downloaded as compact packs from Supabase Storage.
+  2. Direct real-time: mobile app polls CTB/Bizkaibus/Renfe GTFS-RT directly (no CORS on native).
+  3. "Theoretical + correction" model: widget always displays local scheduled time and overlays delay if available.
+  4. Layered architecture: presentation -> domain -> data. One adapter per operator normalizing to common models (Stop, Route, Trip, Departure, Alert).
+  5. Metro Bilbao L1/L2 rule: GTFS has single route 'MB'; line must be inferred by stations served (Lutxana-Plentzia -> L1; Gurutzeta-Kabiezes -> L2).
+  6. Service day handling: departure times > 24:00:00 belong to previous service day; always check today and yesterday with Europe/Madrid timezone.
+  
+  Conventions & Rules:
+  - Code, identifiers, and commits in English; UI and user documentation in es/eu/en; internal docs in Spanish.
+  - Conventional Commits (feat, fix, chore, docs, test).
+  - No business logic in widgets; no BuildContext in domain/data.
+  - All DB changes via versioned SQL migrations with RLS enabled on every table.
+  - Never add dependencies without justification in design.md.
+  - Rule: ninguna funcionalidad se programa sin un change de OpenSpec aprobado.
+  
+  For complete context, see openspec/project.md and spec.md.
+
+rules:
+  proposal:
+    - "Include problem statement, target phase, and measurable objectives"
+    - "Clearly specify operators affected and non-goals"
+  specs:
+    - "Every requirement MUST contain SHALL or MUST keywords"
+    - "Every requirement MUST have at least one scenario using level-4 header (#### Scenario: ...) with WHEN and THEN clauses"
+  design:
+    - "Document architectural decisions, data models, error handling, and performance considerations"
+    - "Justify any new dependencies or schema changes"
+  tasks:
+    - "Group tasks by phases or architectural layers"
+    - "Include verification and testing tasks"
