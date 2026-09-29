@@ -1,0 +1,21 @@
+name: Verify Data Feeds
+
+on:
+  schedule:
+    # Run every Monday at 04:00 UTC
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Verify Transit Feeds Health
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Feed Verification Script
+        run: |
+          chmod +x tools/verify_feeds.sh
+          ./tools/verify_feeds.sh

@@ -121,10 +121,10 @@ Punto de entrada común: **CTB (Consorcio de Transportes de Bizkaia)** en `https
 | Tarifas (CSV) | `GET https://cms.metrobilbao.eus/get/open_data/tickets/{lang}` — cabeceras: `_id, ticket_id, code, areas, price, age, periodicity, …` | [VERIFICADO] (la lista de columnas está truncada en la guía; descargar y leer la cabecera completa) |
 | Estaciones (JSON) | `GET https://cms.metrobilbao.eus/get/open_data/json/estaciones/{lang}` con parámetros `fields=stop_id,stop_name,stop_lat,stop_lon`, `sort=stop_name`, `filter[stop_name][op]=like&filter[stop_name][value]=…`, `filter[bbox]=lon_min,lat_min,lon_max,lat_max`. Caché: `max-age=60` | [VERIFICADO] |
 | Noticias / notas de prensa (JSON) | `GET …/get/open_data/json/noticias/{lang}` y `…/notas_prensa/{lang}` | [VERIFICADO] |
-| Avisos | Figura en el catálogo (`avisos`); la ruta JSON análoga sería `…/json/avisos/{lang}` | [POR VERIFICAR] — leer la ruta exacta en el catálogo |
+| Avisos | Figura en el catálogo (`avisos`); la ruta JSON `…/json/avisos/{lang}` devuelve 200 OK | [VERIFICADO] |
 | Guía oficial de la API | `https://www.metrobilbao.eus/es/open-data/dataset/api-guide` | [VERIFICADO] |
 | Tiempo real (protobuf, vía CTB) | `https://ctb-gtfs-rt.s3.eu-south-2.amazonaws.com/metro-bilbao-vehicle-positions.pb` | [VERIFICADO] |
-| | `…/metro-bilbao-trip-updates.pb` y `…/metro-bilbao-service-alerts.pb` | [POR VERIFICAR] (mismo prefijo `metro-bilbao-`; un proyecto de terceros descarga los tres) |
+| | `…/metro-bilbao-trip-updates.pb` y `…/metro-bilbao-service-alerts.pb` (comprobados: 200 OK con payload GTFS-RT) | [VERIFICADO] |
 | Ficha del dataset RT | `https://data.ctb.eus/dataset/metro-bilbao-online` | [VERIFICADO] |
 
 **Particularidades (importantes):**
