@@ -5,6 +5,8 @@ import 'package:lottie/lottie.dart';
 import '../../../domain/models/transit_models.dart';
 import '../../providers/metro_providers.dart';
 import '../auth/profile_settings_screen.dart';
+import '../saved_trips/save_trip_dialog.dart';
+import '../saved_trips/saved_trips_screen.dart';
 
 /// Metro Bilbao departures screen.
 ///
@@ -26,6 +28,27 @@ class MetroDeparturesScreen extends ConsumerWidget {
         title: const Text('Metro Bilbao'),
         centerTitle: false,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmarks_outlined),
+            tooltip: 'Mis viajes',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SavedTripsScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.bookmark_add_outlined),
+            tooltip: 'Guardar viaje',
+            onPressed: () {
+              showDialog<void>(
+                context: context,
+                builder: (_) => SaveTripDialog(initialOrigin: selectedStation),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.sync),
             tooltip: 'Sincronizar horarios',
