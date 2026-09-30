@@ -4,6 +4,7 @@ import 'package:lottie/lottie.dart';
 
 import '../../../domain/models/transit_models.dart';
 import '../../providers/metro_providers.dart';
+import '../auth/profile_settings_screen.dart';
 
 /// Metro Bilbao departures screen.
 ///
@@ -29,6 +30,17 @@ class MetroDeparturesScreen extends ConsumerWidget {
             icon: const Icon(Icons.sync),
             tooltip: 'Sincronizar horarios',
             onPressed: () => ref.refresh(scheduleSyncStatusProvider),
+          ),
+          IconButton(
+            icon: const Icon(Icons.account_circle_outlined),
+            tooltip: 'Mi cuenta',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const ProfileSettingsScreen(),
+                ),
+              );
+            },
           ),
         ],
       ),
