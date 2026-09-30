@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.RemoteViews
+import com.bizkaia.transit.MainActivity
 import com.bizkaia.transit.R
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetPlugin
@@ -140,9 +141,7 @@ class TransitWidgetProvider : AppWidgetProvider() {
 
         val pendingIntent = HomeWidgetLaunchIntent.getActivity(
             context,
-            context.packageManager.getLaunchIntentForPackage(context.packageName)?.component?.className?.let {
-                Class.forName(it)
-            } ?: context.javaClass,
+            MainActivity::class.java,
             targetUri
         )
 
