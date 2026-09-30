@@ -35,3 +35,10 @@ supabase/.temp/
 tools/build_gtfs/out/
 *.sqlite
 *.sqlite.gz
+
+# Flutter & Android build cache and machine-specific configs
+.flutter-plugins
+.flutter-plugins-dependencies
+android/.gradle/
+android/local.properties
+**/GeneratedPluginRegistrant.java
