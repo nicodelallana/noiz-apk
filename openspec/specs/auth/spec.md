@@ -6,7 +6,7 @@ Provides user authentication, session management, identity provider integrations
 ## Requirements
 
 ### Requirement: Inicio de sesión con Google
-The system SHALL allow a user to sign in or create an account using their Google account, with no password.
+The system SHALL allow a user to sign in or create an account using their Google account via Supabase Auth `signInWithIdToken`, persisting session credentials securely.
 
 #### Scenario: Primer inicio de sesión
 - **WHEN** a new user completes Google sign-in
