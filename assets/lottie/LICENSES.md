@@ -7,4 +7,4 @@ All Lottie animation files stored in `assets/lottie/` must comply with section 1
 
 | File | Description | Author / Source | License | Date Added |
 |---|---|---|---|---|
-| *(none yet)* | - | - | - | - |
+| `metro_loading.json` | Pulsing Metro Bilbao loader (3.1 KB) | Bizkaia Transit Team (Custom Bodymovin vector) | MIT | 2026-09-30 |
