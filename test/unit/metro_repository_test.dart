@@ -10,8 +10,8 @@ class MockQueryExecutor extends QueryExecutor {
     this.customSelectHandler,
   });
 
-  final Future<List<Map<String, Object?>>> Function(String sql, List<Object?> args)?
-      customSelectHandler;
+  final Future<List<Map<String, Object?>>> Function(
+      String sql, List<Object?> args)? customSelectHandler;
 
   @override
   TransactionExecutor beginTransaction() => throw UnimplementedError();
@@ -64,7 +64,9 @@ class FakeScheduleSyncService extends ScheduleSyncService {
 
 void main() {
   group('MetroRepositoryImpl - Timezone & Rollover Tests', () {
-    test('toMadridTime accurately calculates UTC+2 during daylight saving time (September)', () {
+    test(
+        'toMadridTime accurately calculates UTC+2 during daylight saving time (September)',
+        () {
       // 2026-09-30 06:00:00 UTC -> 08:00:00 Madrid (CEST, UTC+2)
       final utcTime = DateTime.utc(2026, 9, 30, 6, 0, 0);
       final madridTime = MetroRepositoryImpl.toMadridTime(utcTime);
@@ -74,7 +76,9 @@ void main() {
       expect(madridTime.day, 30);
     });
 
-    test('toMadridTime accurately calculates UTC+1 during standard time (December)', () {
+    test(
+        'toMadridTime accurately calculates UTC+1 during standard time (December)',
+        () {
       // 2026-12-15 06:00:00 UTC -> 07:00:00 Madrid (CET, UTC+1)
       final utcTime = DateTime.utc(2026, 12, 15, 6, 0, 0);
       final madridTime = MetroRepositoryImpl.toMadridTime(utcTime);
@@ -83,7 +87,8 @@ void main() {
       expect(madridTime.minute, 0);
     });
 
-    test('getStations performs accent-insensitive and case-insensitive search', () async {
+    test('getStations performs accent-insensitive and case-insensitive search',
+        () async {
       final mockExecutor = MockQueryExecutor(
         customSelectHandler: (sql, args) async {
           if (sql.contains('FROM stops')) {
@@ -133,7 +138,9 @@ void main() {
       expect(result2.first.name, 'San Mamés');
     });
 
-    test('getDepartures handles active service query and converts GTFS minutes correctly', () async {
+    test(
+        'getDepartures handles active service query and converts GTFS minutes correctly',
+        () async {
       final mockExecutor = MockQueryExecutor(
         customSelectHandler: (sql, args) async {
           if (sql.contains('FROM stops') && sql.contains('WHERE stop_id = ?')) {
@@ -222,7 +229,9 @@ void main() {
       expect(departures[1].scheduledTimeFormatted, '10:25');
     });
 
-    test('getDepartures in midnight madrugada queries rollover trips from yesterday', () async {
+    test(
+        'getDepartures in midnight madrugada queries rollover trips from yesterday',
+        () async {
       var queriedRollover = false;
 
       final mockExecutor = MockQueryExecutor(

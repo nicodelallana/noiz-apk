@@ -21,7 +21,8 @@ class SavedTripsScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Sincronizar viajes',
-            onPressed: () => ref.read(savedTripsControllerProvider.notifier).syncRemote(),
+            onPressed: () =>
+                ref.read(savedTripsControllerProvider.notifier).syncRemote(),
           ),
         ],
       ),
@@ -36,7 +37,8 @@ class SavedTripsScreen extends ConsumerWidget {
         },
       ),
       body: tripsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator.adaptive()),
+        loading: () =>
+            const Center(child: CircularProgressIndicator.adaptive()),
         error: (e, _) => Center(child: Text('Error al cargar viajes: $e')),
         data: (trips) {
           if (trips.isEmpty) {
@@ -49,7 +51,8 @@ class SavedTripsScreen extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer.withOpacity(0.4),
+                        color:
+                            theme.colorScheme.primaryContainer.withOpacity(0.4),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
@@ -124,7 +127,8 @@ class _SavedTripCard extends ConsumerWidget {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
+          side: BorderSide(
+              color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -135,7 +139,8 @@ class _SavedTripCard extends ConsumerWidget {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: const Color(0xFFE2001A),
                       borderRadius: BorderRadius.circular(4),
@@ -161,8 +166,12 @@ class _SavedTripCard extends ConsumerWidget {
                   ),
                   IconButton(
                     icon: Icon(
-                      trip.widgetEnabled ? Icons.widgets : Icons.widgets_outlined,
-                      color: trip.widgetEnabled ? theme.colorScheme.primary : Colors.grey,
+                      trip.widgetEnabled
+                          ? Icons.widgets
+                          : Icons.widgets_outlined,
+                      color: trip.widgetEnabled
+                          ? theme.colorScheme.primary
+                          : Colors.grey,
                       size: 20,
                     ),
                     tooltip: trip.widgetEnabled
@@ -215,7 +224,8 @@ class _SavedTripCard extends ConsumerWidget {
                       child: CircularProgressIndicator.adaptive(strokeWidth: 2),
                     ),
                     SizedBox(width: 8),
-                    Text('Calculando próxima salida...', style: TextStyle(fontSize: 12)),
+                    Text('Calculando próxima salida...',
+                        style: TextStyle(fontSize: 12)),
                   ],
                 ),
                 error: (_, __) => const Text(
@@ -235,7 +245,8 @@ class _SavedTripCard extends ConsumerWidget {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                          const Icon(Icons.access_time,
+                              size: 16, color: Colors.grey),
                           const SizedBox(width: 6),
                           Text(
                             'Salida a las ${departure.scheduledTimeFormatted}',
@@ -244,11 +255,13 @@ class _SavedTripCard extends ConsumerWidget {
                         ],
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: departure.minutesRemaining <= 3
                               ? const Color(0xFFE2001A).withOpacity(0.1)
-                              : theme.colorScheme.primaryContainer.withOpacity(0.5),
+                              : theme.colorScheme.primaryContainer
+                                  .withOpacity(0.5),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(

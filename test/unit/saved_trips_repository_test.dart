@@ -6,7 +6,9 @@ import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MockAppDatabase extends Mock implements AppDatabase {}
+
 class MockSupabaseClient extends Mock implements SupabaseClient {}
+
 class MockGoTrueClient extends Mock implements GoTrueClient {}
 
 void main() {
@@ -31,7 +33,8 @@ void main() {
 
   group('SavedTripsRepositoryImpl', () {
     test('saveTrip writes to local SQLite immediately', () async {
-      when(() => mockDb.insertOrUpdateSavedTrip(any())).thenAnswer((_) async {});
+      when(() => mockDb.insertOrUpdateSavedTrip(any()))
+          .thenAnswer((_) async {});
       when(() => mockDb.getSavedTrips('guest')).thenAnswer((_) async => []);
 
       final trip = SavedTrip(
@@ -50,10 +53,12 @@ void main() {
 
       await repo.saveTrip(trip);
 
-      verify(() => mockDb.insertOrUpdateSavedTrip(any(that: isA<RawSavedTripRecord>()))).called(1);
+      verify(() => mockDb.insertOrUpdateSavedTrip(
+          any(that: isA<RawSavedTripRecord>()))).called(1);
     });
 
-    test('getSavedTrips maps raw records to domain SavedTrip entities', () async {
+    test('getSavedTrips maps raw records to domain SavedTrip entities',
+        () async {
       final sampleRecord = RawSavedTripRecord(
         id: 'trip_1',
         userId: 'guest',
@@ -70,7 +75,8 @@ void main() {
         createdAt: '2026-09-30T08:00:00.000',
       );
 
-      when(() => mockDb.getSavedTrips('guest')).thenAnswer((_) async => [sampleRecord]);
+      when(() => mockDb.getSavedTrips('guest'))
+          .thenAnswer((_) async => [sampleRecord]);
 
       final trips = await repo.getSavedTrips();
 
@@ -99,18 +105,23 @@ void main() {
         createdAt: '2026-09-30T08:00:00.000',
       );
 
-      when(() => mockDb.getSavedTrips('guest')).thenAnswer((_) async => [guestRecord]);
-      when(() => mockDb.getSavedTrips('authenticated_user_123')).thenAnswer((_) async => []);
-      when(() => mockDb.updateTripUserId('guest', 'authenticated_user_123')).thenAnswer((_) async {});
+      when(() => mockDb.getSavedTrips('guest'))
+          .thenAnswer((_) async => [guestRecord]);
+      when(() => mockDb.getSavedTrips('authenticated_user_123'))
+          .thenAnswer((_) async => []);
+      when(() => mockDb.updateTripUserId('guest', 'authenticated_user_123'))
+          .thenAnswer((_) async {});
 
       // Mock Supabase from query
       final mockFrom = _MockSupabaseQueryBuilder();
       when(() => mockSupabase.from('saved_trips')).thenReturn(mockFrom);
-      when(() => mockFrom.upsert(any())).thenAnswer((_) async => <String, dynamic>{});
+      when(() => mockFrom.upsert(any()))
+          .thenAnswer((_) async => <String, dynamic>{});
 
       await repo.migrateGuestTripsToUser('authenticated_user_123');
 
-      verify(() => mockDb.updateTripUserId('guest', 'authenticated_user_123')).called(1);
+      verify(() => mockDb.updateTripUserId('guest', 'authenticated_user_123'))
+          .called(1);
     });
   });
 }

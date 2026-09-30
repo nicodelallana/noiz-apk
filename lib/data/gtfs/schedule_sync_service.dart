@@ -133,7 +133,8 @@ class ScheduleSyncService {
     }
 
     final dbPath = p.join(dir.path, TransitConstants.sqliteDbFileName);
-    final manifestPath = p.join(dir.path, TransitConstants.manifestMetaFileName);
+    final manifestPath =
+        p.join(dir.path, TransitConstants.manifestMetaFileName);
     final dbFile = File(dbPath);
     final manifestFile = File(manifestPath);
 
@@ -152,7 +153,8 @@ class ScheduleSyncService {
     // 1. Fetch remote manifest
     ScheduleManifest remoteManifest;
     try {
-      final manifestUrl = '$_storageBaseUrl/${TransitConstants.manifestFileName}';
+      final manifestUrl =
+          '$_storageBaseUrl/${TransitConstants.manifestFileName}';
       final response = await _dio.get<Map<String, dynamic>>(
         manifestUrl,
         options: Options(responseType: ResponseType.json),
@@ -197,7 +199,8 @@ class ScheduleSyncService {
     }
 
     // 3. Download compressed transit.sqlite.gz to temporary file
-    final gzTempPath = p.join(dir.path, '${TransitConstants.compressedDbFileName}.part');
+    final gzTempPath =
+        p.join(dir.path, '${TransitConstants.compressedDbFileName}.part');
     final gzTempFile = File(gzTempPath);
     if (gzTempFile.existsSync()) {
       gzTempFile.deleteSync();
@@ -226,7 +229,8 @@ class ScheduleSyncService {
       }
 
       // 4. Decompress using GZipCodec to temporary SQLite file
-      final uncompressedTempPath = p.join(dir.path, '${TransitConstants.sqliteDbFileName}.part');
+      final uncompressedTempPath =
+          p.join(dir.path, '${TransitConstants.sqliteDbFileName}.part');
       final uncompressedTempFile = File(uncompressedTempPath);
       if (uncompressedTempFile.existsSync()) {
         uncompressedTempFile.deleteSync();

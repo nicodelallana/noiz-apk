@@ -6,6 +6,7 @@ import '../../data/adapters/saved_trips_repository_impl.dart';
 import '../../domain/models/saved_trip_models.dart';
 import '../../domain/models/transit_models.dart';
 import '../../domain/repositories/saved_trips_repository.dart';
+import '../widgets/home_widget/widget_update_service.dart';
 import 'auth_providers.dart';
 import 'metro_providers.dart';
 
@@ -26,6 +27,16 @@ final savedTripsRepositoryProvider = Provider<SavedTripsRepository>((ref) {
   return repo;
 });
 
+/// Provider exposing the native widget update service.
+final widgetUpdateServiceProvider = Provider<WidgetUpdateService>((ref) {
+  final metroRepo = ref.watch(metroRepositoryProvider);
+  final savedTripsRepo = ref.watch(savedTripsRepositoryProvider);
+  return WidgetUpdateService(
+    metroRepository: metroRepo,
+    savedTripsRepository: savedTripsRepo,
+  );
+});
+
 /// Reactive stream of saved journeys.
 final savedTripsStreamProvider = StreamProvider<List<SavedTrip>>((ref) {
   final repo = ref.watch(savedTripsRepositoryProvider);
@@ -34,9 +45,11 @@ final savedTripsStreamProvider = StreamProvider<List<SavedTrip>>((ref) {
 
 /// Controller handling saved trip mutations.
 class SavedTripsController extends StateNotifier<AsyncValue<void>> {
-  SavedTripsController(this._repo) : super(const AsyncValue.data(null));
+  SavedTripsController(this._repo, this._widgetService)
+      : super(const AsyncValue.data(null));
 
   final SavedTripsRepository _repo;
+  final WidgetUpdateService _widgetService;
 
   Future<void> saveTrip({
     required String name,
@@ -67,6 +80,7 @@ class SavedTripsController extends StateNotifier<AsyncValue<void>> {
         createdAt: DateTime.now(),
       );
       await _repo.saveTrip(trip);
+      await _widgetService.update();
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -77,6 +91,7 @@ class SavedTripsController extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       await _repo.deleteTrip(tripId);
+      await _widgetService.update();
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -86,6 +101,7 @@ class SavedTripsController extends StateNotifier<AsyncValue<void>> {
   Future<void> toggleWidget(String tripId, bool enabled) async {
     try {
       await _repo.toggleWidgetEnabled(tripId, enabled);
+      await _widgetService.update();
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -94,6 +110,7 @@ class SavedTripsController extends StateNotifier<AsyncValue<void>> {
   Future<void> syncRemote() async {
     try {
       await _repo.syncRemote();
+      await _widgetService.update();
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -103,7 +120,8 @@ class SavedTripsController extends StateNotifier<AsyncValue<void>> {
 final savedTripsControllerProvider =
     StateNotifierProvider<SavedTripsController, AsyncValue<void>>((ref) {
   final repo = ref.watch(savedTripsRepositoryProvider);
-  return SavedTripsController(repo);
+  final widgetService = ref.watch(widgetUpdateServiceProvider);
+  return SavedTripsController(repo, widgetService);
 });
 
 /// Future provider calculating next departure countdown for a specific saved trip.

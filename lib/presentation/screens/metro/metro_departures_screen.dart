@@ -68,7 +68,8 @@ class MetroDeparturesScreen extends ConsumerWidget {
         ],
       ),
       body: syncState.when(
-        loading: () => const _MetroLoadingIndicator(message: 'Descargando horarios...'),
+        loading: () =>
+            const _MetroLoadingIndicator(message: 'Descargando horarios...'),
         error: (error, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -105,10 +106,13 @@ class MetroDeparturesScreen extends ConsumerWidget {
   void _initializeDefaultStation(WidgetRef ref) {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final stations = await ref.read(metroStationsProvider.future);
-      if (stations.isNotEmpty && ref.read(selectedMetroStationProvider) == null) {
+      if (stations.isNotEmpty &&
+          ref.read(selectedMetroStationProvider) == null) {
         // Default to San Mamés if found, otherwise first station
         final defaultStation = stations.firstWhere(
-          (s) => s.name.toLowerCase().contains('mamés') || s.name.toLowerCase().contains('mames'),
+          (s) =>
+              s.name.toLowerCase().contains('mamés') ||
+              s.name.toLowerCase().contains('mames'),
           orElse: () => stations.first,
         );
         ref.read(selectedMetroStationProvider.notifier).state = defaultStation;
@@ -190,11 +194,13 @@ class _StationPickerHeader extends StatelessWidget {
                 children: [
                   Text(
                     'Estación de salida',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.outline),
                   ),
                   Text(
                     station?.name ?? 'Seleccionar estación...',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -232,8 +238,9 @@ class _LineFilterChips extends ConsumerWidget {
             ),
             label: const Text('L1'),
             selected: currentFilter == MetroLine.l1,
-            onSelected: (_) =>
-                ref.read(selectedMetroLineFilterProvider.notifier).state = MetroLine.l1,
+            onSelected: (_) => ref
+                .read(selectedMetroLineFilterProvider.notifier)
+                .state = MetroLine.l1,
           ),
           const SizedBox(width: 8),
           ChoiceChip(
@@ -243,8 +250,9 @@ class _LineFilterChips extends ConsumerWidget {
             ),
             label: const Text('L2'),
             selected: currentFilter == MetroLine.l2,
-            onSelected: (_) =>
-                ref.read(selectedMetroLineFilterProvider.notifier).state = MetroLine.l2,
+            onSelected: (_) => ref
+                .read(selectedMetroLineFilterProvider.notifier)
+                .state = MetroLine.l2,
           ),
         ],
       ),
@@ -260,7 +268,8 @@ class _DeparturesList extends ConsumerWidget {
     final departuresState = ref.watch(metroDeparturesStreamProvider);
 
     return departuresState.when(
-      loading: () => const _MetroLoadingIndicator(message: 'Consultando próximas salidas...'),
+      loading: () => const _MetroLoadingIndicator(
+          message: 'Consultando próximas salidas...'),
       error: (e, _) => Center(
         child: Text('Error al cargar salidas: $e'),
       ),
@@ -422,11 +431,13 @@ class _StationSearchModal extends ConsumerWidget {
             ),
             Expanded(
               child: stationsAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator.adaptive()),
+                loading: () =>
+                    const Center(child: CircularProgressIndicator.adaptive()),
                 error: (e, _) => Center(child: Text('Error: $e')),
                 data: (stations) {
                   if (stations.isEmpty) {
-                    return const Center(child: Text('No se encontraron estaciones'));
+                    return const Center(
+                        child: Text('No se encontraron estaciones'));
                   }
 
                   return ListView.builder(
@@ -443,7 +454,8 @@ class _StationSearchModal extends ConsumerWidget {
                               .map(
                                 (line) => Container(
                                   margin: const EdgeInsets.only(left: 4),
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: Color(line.colorHex),
                                     borderRadius: BorderRadius.circular(4),
@@ -461,8 +473,11 @@ class _StationSearchModal extends ConsumerWidget {
                               .toList(),
                         ),
                         onTap: () {
-                          ref.read(selectedMetroStationProvider.notifier).state = st;
-                          ref.read(stationSearchQueryProvider.notifier).state = '';
+                          ref
+                              .read(selectedMetroStationProvider.notifier)
+                              .state = st;
+                          ref.read(stationSearchQueryProvider.notifier).state =
+                              '';
                           Navigator.of(context).pop();
                         },
                       );

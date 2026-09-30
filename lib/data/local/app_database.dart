@@ -419,7 +419,8 @@ class AppDatabase {
     if (activeServiceIds.isEmpty) return [];
     await _ensureOpen();
 
-    final servicePlaceholders = List.filled(activeServiceIds.length, '?').join(',');
+    final servicePlaceholders =
+        List.filled(activeServiceIds.length, '?').join(',');
 
     final sql = StringBuffer('''
       SELECT 
@@ -530,7 +531,8 @@ class AppDatabase {
   /// Deletes a saved trip from local SQLite by ID.
   Future<void> deleteSavedTrip(String id) async {
     await _ensureOpen();
-    await _executor.runCustom('DELETE FROM user_saved_trips WHERE id = ?;', [id]);
+    await _executor
+        .runCustom('DELETE FROM user_saved_trips WHERE id = ?;', [id]);
   }
 
   /// Updates widget enablement for a specific trip.
