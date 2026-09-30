@@ -53,7 +53,8 @@ class SavedTripsRepositoryImpl implements SavedTripsRepository {
   @override
   Future<void> saveTrip(SavedTrip trip) async {
     final effectiveUser = trip.userId.isEmpty ? _currentUserId : trip.userId;
-    final tripToSave = trip.userId.isEmpty ? trip.copyWith(userId: effectiveUser) : trip;
+    final tripToSave =
+        trip.userId.isEmpty ? trip.copyWith(userId: effectiveUser) : trip;
 
     // 1. Write to local SQLite first (guarantees offline availability)
     final record = RawSavedTripRecord(
@@ -173,7 +174,8 @@ class SavedTripsRepositoryImpl implements SavedTripsRepository {
           .eq('user_id', effectiveUser)
           .order('sort_order', ascending: true);
 
-      final remoteTrips = (response as List<dynamic>).cast<Map<String, dynamic>>();
+      final remoteTrips =
+          (response as List<dynamic>).cast<Map<String, dynamic>>();
 
       for (final r in remoteTrips) {
         final originId = r['origin_stop_id'] as String;
@@ -196,7 +198,8 @@ class SavedTripsRepositoryImpl implements SavedTripsRepository {
           directionId: r['direction_id'] as int?,
           widgetEnabled: (r['widget_enabled'] as bool?) ?? true,
           sortOrder: (r['sort_order'] as int?) ?? 0,
-          createdAt: (r['created_at'] as String?) ?? DateTime.now().toIso8601String(),
+          createdAt:
+              (r['created_at'] as String?) ?? DateTime.now().toIso8601String(),
         );
 
         await _db.insertOrUpdateSavedTrip(localRecord);

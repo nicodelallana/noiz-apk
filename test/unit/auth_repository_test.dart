@@ -8,10 +8,15 @@ import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MockSupabaseClient extends Mock implements SupabaseClient {}
+
 class MockGoTrueClient extends Mock implements GoTrueClient {}
+
 class MockGoogleSignIn extends Mock implements GoogleSignIn {}
+
 class MockGoogleSignInAccount extends Mock implements GoogleSignInAccount {}
-class MockGoogleSignInAuthentication extends Mock implements GoogleSignInAuthentication {}
+
+class MockGoogleSignInAuthentication extends Mock
+    implements GoogleSignInAuthentication {}
 
 void main() {
   late MockSupabaseClient mockSupabase;
@@ -46,14 +51,19 @@ void main() {
           ));
     });
 
-    test('signInWithGoogle exchanges idToken with Supabase and returns UserProfile', () async {
+    test(
+        'signInWithGoogle exchanges idToken with Supabase and returns UserProfile',
+        () async {
       final mockAccount = MockGoogleSignInAccount();
       final mockGoogleAuth = MockGoogleSignInAuthentication();
 
-      when(() => mockGoogleSignIn.signIn()).thenAnswer((_) async => mockAccount);
-      when(() => mockAccount.authentication).thenAnswer((_) async => mockGoogleAuth);
+      when(() => mockGoogleSignIn.signIn())
+          .thenAnswer((_) async => mockAccount);
+      when(() => mockAccount.authentication)
+          .thenAnswer((_) async => mockGoogleAuth);
       when(() => mockGoogleAuth.idToken).thenReturn('google_id_token_123');
-      when(() => mockGoogleAuth.accessToken).thenReturn('google_access_token_456');
+      when(() => mockGoogleAuth.accessToken)
+          .thenReturn('google_access_token_456');
 
       final fakeUser = User(
         id: 'user_uuid_789',
@@ -101,7 +111,8 @@ void main() {
       );
 
       when(() => mockAuth.currentUser).thenReturn(fakeUser);
-      when(() => mockSupabase.rpc('delete_user_account')).thenAnswer((_) async => null);
+      when(() => mockSupabase.rpc('delete_user_account'))
+          .thenAnswer((_) async => null);
       when(() => mockGoogleSignIn.signOut()).thenAnswer((_) async => null);
       when(() => mockAuth.signOut()).thenAnswer((_) async {});
 

@@ -14,7 +14,8 @@ class AuthRepositoryImpl implements AuthRepository {
     SupabaseClient? supabaseClient,
     GoogleSignIn? googleSignIn,
   })  : _supabase = supabaseClient ?? Supabase.instance.client,
-        _googleSignIn = googleSignIn ?? GoogleSignIn(scopes: ['email', 'profile']);
+        _googleSignIn =
+            googleSignIn ?? GoogleSignIn(scopes: ['email', 'profile']);
 
   final SupabaseClient _supabase;
   final GoogleSignIn _googleSignIn;
@@ -164,8 +165,8 @@ class AuthRepositoryImpl implements AuthRepository {
     final displayName = (metadata['full_name'] as String?) ??
         (metadata['name'] as String?) ??
         (user.email != null ? user.email!.split('@').first : 'Usuario');
-    final avatarUrl = (metadata['avatar_url'] as String?) ??
-        (metadata['picture'] as String?);
+    final avatarUrl =
+        (metadata['avatar_url'] as String?) ?? (metadata['picture'] as String?);
 
     return UserProfile(
       id: user.id,

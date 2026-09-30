@@ -91,7 +91,8 @@ void main() {
       }
     });
 
-    test('downloads, verifies checksum, and unpacks transit database', () async {
+    test('downloads, verifies checksum, and unpacks transit database',
+        () async {
       final service = ScheduleSyncService(
         storageBaseUrl: serverBaseUrl,
         documentsDirectoryProvider: () async => tempDir,
@@ -110,7 +111,8 @@ void main() {
       expect(await service.isDatabasePresent(), isTrue);
     });
 
-    test('skips download if local database and manifest hash are identical', () async {
+    test('skips download if local database and manifest hash are identical',
+        () async {
       final service = ScheduleSyncService(
         storageBaseUrl: serverBaseUrl,
         documentsDirectoryProvider: () async => tempDir,

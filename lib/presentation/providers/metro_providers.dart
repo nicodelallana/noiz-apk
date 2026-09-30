@@ -40,7 +40,8 @@ final scheduleSyncStatusProvider = FutureProvider<SyncResult>((ref) async {
 final selectedMetroStationProvider = StateProvider<Stop?>((ref) => null);
 
 /// Line filter (null = all lines, L1, or L2).
-final selectedMetroLineFilterProvider = StateProvider<MetroLine?>((ref) => null);
+final selectedMetroLineFilterProvider =
+    StateProvider<MetroLine?>((ref) => null);
 
 /// Search query for station filtering in modal.
 final stationSearchQueryProvider = StateProvider<String>((ref) => '');
@@ -54,7 +55,8 @@ final metroStationsProvider = FutureProvider<List<Stop>>((ref) async {
 
 /// Auto-refreshing departures stream for the selected station and line filter.
 /// Updates every 30 seconds to maintain accurate countdown minutes.
-final metroDeparturesStreamProvider = StreamProvider.autoDispose<List<Departure>>((ref) async* {
+final metroDeparturesStreamProvider =
+    StreamProvider.autoDispose<List<Departure>>((ref) async* {
   final repo = ref.watch(metroRepositoryProvider);
   final station = ref.watch(selectedMetroStationProvider);
   final lineFilter = ref.watch(selectedMetroLineFilterProvider);

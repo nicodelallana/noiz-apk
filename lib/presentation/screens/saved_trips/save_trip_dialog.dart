@@ -121,7 +121,8 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               title: const Text('Mostrar en Widget'),
-              subtitle: const Text('Disponible para acceso rápido en pantalla de inicio'),
+              subtitle: const Text(
+                  'Disponible para acceso rápido en pantalla de inicio'),
               value: _widgetEnabled,
               onChanged: (val) => setState(() => _widgetEnabled = val),
             ),
@@ -137,7 +138,9 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
           onPressed: _origin == null || _destination == null
               ? null
               : () async {
-                  await ref.read(savedTripsControllerProvider.notifier).saveTrip(
+                  await ref
+                      .read(savedTripsControllerProvider.notifier)
+                      .saveTrip(
                         name: _nameController.text.trim().isNotEmpty
                             ? _nameController.text.trim()
                             : '${_origin!.name} → ${_destination!.name}',
@@ -151,7 +154,8 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
                   if (context.mounted) {
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Viaje guardado en Mis Viajes.')),
+                      const SnackBar(
+                          content: Text('Viaje guardado en Mis Viajes.')),
                     );
                   }
                 },

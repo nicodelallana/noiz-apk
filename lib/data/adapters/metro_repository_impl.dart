@@ -111,7 +111,8 @@ class MetroRepositoryImpl implements MetroRepository {
     // 1. Resolve current time in Europe/Madrid timezone
     final nowMadrid = toMadridTime(referenceTime ?? DateTime.now());
     final currentHour = nowMadrid.hour;
-    final currentTimeStr = _formatTime(nowMadrid.hour, nowMadrid.minute, nowMadrid.second);
+    final currentTimeStr =
+        _formatTime(nowMadrid.hour, nowMadrid.minute, nowMadrid.second);
 
     final departures = <Departure>[];
 
@@ -162,7 +163,8 @@ class MetroRepositoryImpl implements MetroRepository {
       if (activeServicesYesterday.isNotEmpty) {
         // e.g. 00:30:00 -> 24:30:00; 01:15:00 -> 25:15:00
         final rolloverHour = currentHour + 24;
-        final rolloverTimeStr = _formatTime(rolloverHour, nowMadrid.minute, nowMadrid.second);
+        final rolloverTimeStr =
+            _formatTime(rolloverHour, nowMadrid.minute, nowMadrid.second);
 
         final rolloverRows = await _db.getDepartures(
           stationId: stationId,
@@ -212,11 +214,13 @@ class MetroRepositoryImpl implements MetroRepository {
 
     // Last Sunday of March
     final lastSundayMarch = _lastSundayOfMonth(year, 3);
-    final dstStart = DateTime.utc(year, 3, lastSundayMarch, 1, 0); // 01:00 UTC = 02:00 CET
+    final dstStart =
+        DateTime.utc(year, 3, lastSundayMarch, 1, 0); // 01:00 UTC = 02:00 CET
 
     // Last Sunday of October
     final lastSundayOctober = _lastSundayOfMonth(year, 10);
-    final dstEnd = DateTime.utc(year, 10, lastSundayOctober, 1, 0); // 01:00 UTC = 03:00 CEST
+    final dstEnd = DateTime.utc(
+        year, 10, lastSundayOctober, 1, 0); // 01:00 UTC = 03:00 CEST
 
     // Daylight Saving Time (CEST) is UTC+2, standard time (CET) is UTC+1
     final isDst = utc.isAfter(dstStart) && utc.isBefore(dstEnd);

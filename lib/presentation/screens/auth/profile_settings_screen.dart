@@ -19,7 +19,8 @@ class ProfileSettingsScreen extends ConsumerWidget {
         title: const Text('Mi Cuenta'),
       ),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator.adaptive()),
+        loading: () =>
+            const Center(child: CircularProgressIndicator.adaptive()),
         error: (e, _) => Center(child: Text('Error al cargar perfil: $e')),
         data: (profile) {
           if (profile == null) {
@@ -69,7 +70,8 @@ class _ProfileContent extends ConsumerWidget {
                           profile.displayName.isNotEmpty
                               ? profile.displayName[0].toUpperCase()
                               : '?',
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              fontSize: 24, fontWeight: FontWeight.bold),
                         )
                       : null,
                 ),
@@ -150,10 +152,13 @@ class _ProfileContent extends ConsumerWidget {
               onPressed: () async {
                 Navigator.of(dialogCtx).pop();
                 try {
-                  await ref.read(authControllerProvider.notifier).deleteAccount();
+                  await ref
+                      .read(authControllerProvider.notifier)
+                      .deleteAccount();
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Cuenta eliminada con éxito.')),
+                      const SnackBar(
+                          content: Text('Cuenta eliminada con éxito.')),
                     );
                   }
                 } catch (e) {
@@ -186,7 +191,8 @@ class _UnauthenticatedView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.account_circle_outlined, size: 72, color: Colors.grey),
+            const Icon(Icons.account_circle_outlined,
+                size: 72, color: Colors.grey),
             const SizedBox(height: 16),
             const Text(
               'No has iniciado sesión',
