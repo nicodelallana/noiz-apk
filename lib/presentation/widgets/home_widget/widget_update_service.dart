@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 
-import '../../../domain/models/saved_trip_models.dart';
 import '../../../domain/models/transit_models.dart';
 import '../../../domain/repositories/metro_repository.dart';
 import '../../../domain/repositories/saved_trips_repository.dart';

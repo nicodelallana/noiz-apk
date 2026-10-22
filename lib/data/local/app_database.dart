@@ -342,8 +342,9 @@ class AppDatabase {
     ''';
     final exceptionRows = await _executor.runSelect(exceptionsSql, [dateStr]);
     for (final row in exceptionRows) {
-      final serviceId = row['service_id']! as String;
-      final type = row['exception_type']! as int;
+      final serviceId = row['service_id'] as String?;
+      final type = (row['exception_type'] as num?)?.toInt();
+      if (serviceId == null || type == null) continue;
       if (type == 1) {
         activeServices.add(serviceId);
       } else if (type == 2) {

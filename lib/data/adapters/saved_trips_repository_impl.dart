@@ -14,14 +14,22 @@ class SavedTripsRepositoryImpl implements SavedTripsRepository {
     required AppDatabase database,
     SupabaseClient? supabaseClient,
   })  : _db = database,
-        _supabase = supabaseClient ?? Supabase.instance.client,
+        _supabase = supabaseClient ?? _tryGetSupabaseClient(),
         _tripsStreamController = StreamController<List<SavedTrip>>.broadcast();
 
   final AppDatabase _db;
-  final SupabaseClient _supabase;
+  final SupabaseClient? _supabase;
   final StreamController<List<SavedTrip>> _tripsStreamController;
 
-  String get _currentUserId => _supabase.auth.currentUser?.id ?? 'guest';
+  static SupabaseClient? _tryGetSupabaseClient() {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String get _currentUserId => _supabase?.auth.currentUser?.id ?? 'guest';
 
   @override
   Stream<List<SavedTrip>> watchSavedTrips({String? userId}) {
@@ -78,7 +86,7 @@ class SavedTripsRepositoryImpl implements SavedTripsRepository {
     await _notifyStream(effectiveUser);
 
     // 3. Asynchronously sync to Supabase if authenticated
-    if (effectiveUser != 'guest') {
+    if (effectiveUser != 'guest' && _supabase != null) {
       try {
         await _supabase.from('saved_trips').upsert({
           'id': tripToSave.id,
@@ -110,7 +118,7 @@ class SavedTripsRepositoryImpl implements SavedTripsRepository {
     await _notifyStream(effectiveUser);
 
     // 3. Delete from Supabase if authenticated
-    if (effectiveUser != 'guest') {
+    if (effectiveUser != 'guest' && _supabase != null) {
       try {
         await _supabase.from('saved_trips').delete().eq('id', tripId);
       } catch (_) {
@@ -130,7 +138,7 @@ class SavedTripsRepositoryImpl implements SavedTripsRepository {
     await _notifyStream(effectiveUser);
 
     // 3. Update Supabase if authenticated
-    if (effectiveUser != 'guest') {
+    if (effectiveUser != 'guest' && _supabase != null) {
       try {
         await _supabase.from('saved_trips').update({
           'widget_enabled': enabled,
@@ -150,7 +158,7 @@ class SavedTripsRepositoryImpl implements SavedTripsRepository {
     await _notifyStream(effectiveUser);
 
     // 3. Sync updated sort order to Supabase
-    if (effectiveUser != 'guest') {
+    if (effectiveUser != 'guest' && _supabase != null) {
       try {
         for (var i = 0; i < orderedTripIds.length; i++) {
           await _supabase.from('saved_trips').update({
@@ -164,7 +172,7 @@ class SavedTripsRepositoryImpl implements SavedTripsRepository {
   @override
   Future<void> syncRemote() async {
     final effectiveUser = _currentUserId;
-    if (effectiveUser == 'guest') return;
+    if (effectiveUser == 'guest' || _supabase == null) return;
 
     try {
       // 1. Pull remote trips from Supabase Postgres
@@ -215,7 +223,7 @@ class SavedTripsRepositoryImpl implements SavedTripsRepository {
   Future<void> migrateGuestTripsToUser(String userId) async {
     // 1. Fetch any trips created anonymously in guest mode
     final guestTrips = await _db.getSavedTrips('guest');
-    if (guestTrips.isEmpty) return;
+    if (guestTrips.isEmpty || _supabase == null) return;
 
     // 2. Re-assign user_id in SQLite
     await _db.updateTripUserId('guest', userId);

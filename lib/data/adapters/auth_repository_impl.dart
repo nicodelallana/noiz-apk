@@ -13,16 +13,28 @@ class AuthRepositoryImpl implements AuthRepository {
   AuthRepositoryImpl({
     SupabaseClient? supabaseClient,
     GoogleSignIn? googleSignIn,
-  })  : _supabase = supabaseClient ?? Supabase.instance.client,
+  })  : _supabase = supabaseClient ?? _tryGetSupabaseClient(),
         _googleSignIn =
             googleSignIn ?? GoogleSignIn(scopes: ['email', 'profile']);
 
-  final SupabaseClient _supabase;
+  final SupabaseClient? _supabase;
   final GoogleSignIn _googleSignIn;
+
+  static SupabaseClient? _tryGetSupabaseClient() {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Stream<UserProfile?> get authStateChanges {
-    return _supabase.auth.onAuthStateChange.map((authState) {
+    final client = _supabase;
+    if (client == null) {
+      return Stream.value(null);
+    }
+    return client.auth.onAuthStateChange.map((authState) {
       final user = authState.session?.user;
       if (user == null) return null;
       return _mapSupabaseUserToProfile(user);
@@ -31,12 +43,14 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<UserProfile?> getCurrentUser() async {
-    final user = _supabase.auth.currentUser;
+    final client = _supabase;
+    if (client == null) return null;
+    final user = client.auth.currentUser;
     if (user == null) return null;
 
     // Attempt to read profile from profiles table first
     try {
-      final response = await _supabase
+      final response = await client
           .from('profiles')
           .select('id, display_name, avatar_url, created_at')
           .eq('id', user.id)
@@ -62,6 +76,10 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<UserProfile?> signInWithGoogle() async {
+    final client = _supabase;
+    if (client == null) {
+      throw const AuthException('Supabase no está configurado en este entorno.');
+    }
     try {
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
@@ -77,7 +95,7 @@ class AuthRepositoryImpl implements AuthRepository {
         throw const AuthException('No Google ID Token available.');
       }
 
-      final authResponse = await _supabase.auth.signInWithIdToken(
+      final authResponse = await client.auth.signInWithIdToken(
         provider: OAuthProvider.google,
         idToken: idToken,
         accessToken: accessToken,
@@ -94,6 +112,10 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<UserProfile?> signInWithApple() async {
+    final client = _supabase;
+    if (client == null) {
+      throw const AuthException('Supabase no está configurado en este entorno.');
+    }
     try {
       final credential = await SignInWithApple.getAppleIDCredential(
         scopes: [
@@ -107,7 +129,7 @@ class AuthRepositoryImpl implements AuthRepository {
         throw const AuthException('No Apple identity token returned.');
       }
 
-      final authResponse = await _supabase.auth.signInWithIdToken(
+      final authResponse = await client.auth.signInWithIdToken(
         provider: OAuthProvider.apple,
         idToken: idToken,
       );
@@ -122,7 +144,7 @@ class AuthRepositoryImpl implements AuthRepository {
             .join(' ');
         if (fullName.isNotEmpty) {
           try {
-            await _supabase.from('profiles').update({
+            await client.from('profiles').update({
               'display_name': fullName,
             }).eq('id', user.id);
           } catch (_) {}
@@ -142,19 +164,22 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> signOut() async {
+    final client = _supabase;
     await Future.wait([
       _googleSignIn.signOut(),
-      _supabase.auth.signOut(),
+      if (client != null) client.auth.signOut(),
     ]);
   }
 
   @override
   Future<void> deleteAccount() async {
-    final user = _supabase.auth.currentUser;
+    final client = _supabase;
+    if (client == null) return;
+    final user = client.auth.currentUser;
     if (user == null) return;
 
     // Call server-side RPC function which cascades deletion across all tables
-    await _supabase.rpc('delete_user_account');
+    await client.rpc<void>('delete_user_account');
 
     // Clean up local session
     await signOut();

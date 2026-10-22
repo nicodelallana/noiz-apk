@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Bizkaia Transit</string>
-    <string name="widget_description">Próximas salidas de tus viajes guardados de Bizkaia Transit</string>
+    <string name="app_name">Noiz</string>
+    <string name="widget_description">Próximas salidas de tus viajes guardados en Noiz</string>
 </resources>

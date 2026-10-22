@@ -67,7 +67,7 @@ class AuthScreen extends ConsumerWidget {
               const SizedBox(height: 24),
 
               Text(
-                'Bizkaia Transit',
+                'Noiz',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,

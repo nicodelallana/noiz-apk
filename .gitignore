@@ -42,3 +42,5 @@ tools/build_gtfs/out/
 android/.gradle/
 android/local.properties
 **/GeneratedPluginRegistrant.java
+# Widget Preview related
+.widget_preview/

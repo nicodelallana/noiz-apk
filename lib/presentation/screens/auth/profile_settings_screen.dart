@@ -12,7 +12,6 @@ class ProfileSettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(currentUserProfileProvider);
-    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(

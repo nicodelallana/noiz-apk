@@ -3,6 +3,7 @@ import 'package:bizkaia_transit/domain/models/transit_models.dart';
 import 'package:bizkaia_transit/domain/repositories/metro_repository.dart';
 import 'package:bizkaia_transit/domain/repositories/saved_trips_repository.dart';
 import 'package:bizkaia_transit/presentation/widgets/home_widget/widget_update_service.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -18,6 +19,11 @@ void main() {
   late WidgetUpdateService service;
 
   setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('home_widget'),
+      (MethodCall methodCall) async => true,
+    );
     mockMetroRepo = MockMetroRepository();
     mockSavedTripsRepo = MockSavedTripsRepository();
     service = WidgetUpdateService(

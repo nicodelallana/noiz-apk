@@ -17,6 +17,9 @@ class MockQueryExecutor extends QueryExecutor {
   TransactionExecutor beginTransaction() => throw UnimplementedError();
 
   @override
+  QueryExecutor beginExclusive() => this;
+
+  @override
   Future<bool> ensureOpen(QueryExecutorUser user) async => true;
 
   @override
@@ -167,12 +170,16 @@ void main() {
                 'parent_station': '',
               }
             ];
+          } else if (sql.contains('FROM calendar_dates')) {
+            return [];
           } else if (sql.contains('FROM calendar')) {
             return [
               {'service_id': 'service_weekday'}
             ];
-          } else if (sql.contains('FROM calendar_dates')) {
-            return [];
+          } else if (sql.contains('SELECT DISTINCT t.inferred_line')) {
+            return [
+              {'inferred_line': 'L2'}
+            ];
           } else if (sql.contains('FROM stop_times')) {
             return [
               {
@@ -193,10 +200,6 @@ void main() {
                 'inferred_line': 'L2',
                 'parent_station': '35',
               },
-            ];
-          } else if (sql.contains('SELECT DISTINCT t.inferred_line')) {
-            return [
-              {'inferred_line': 'L2'}
             ];
           }
           return [];
@@ -236,12 +239,28 @@ void main() {
 
       final mockExecutor = MockQueryExecutor(
         customSelectHandler: (sql, args) async {
-          if (sql.contains('FROM calendar')) {
+          if (sql.contains('FROM calendar_dates')) {
+            return [];
+          } else if (sql.contains('FROM calendar')) {
             return [
               {'service_id': 'svc_1'}
             ];
-          } else if (sql.contains('FROM calendar_dates')) {
-            return [];
+          } else if (sql.contains('SELECT DISTINCT t.inferred_line')) {
+            return [
+              {'inferred_line': 'L2'}
+            ];
+          } else if (sql.contains('FROM stops')) {
+            return [
+              {
+                'stop_id': '35',
+                'operator_id': 'metro',
+                'stop_name': 'Bagatza',
+                'stop_lat': 43.2988,
+                'stop_lon': -2.9926,
+                'zone_id': 'B2',
+                'parent_station': '',
+              }
+            ];
           } else if (sql.contains('FROM stop_times')) {
             // Check if rollover hour > 24 was queried
             if (args.any((a) => a is String && a.startsWith('24:'))) {
@@ -259,22 +278,6 @@ void main() {
               ];
             }
             return [];
-          } else if (sql.contains('FROM stops')) {
-            return [
-              {
-                'stop_id': '35',
-                'operator_id': 'metro',
-                'stop_name': 'Bagatza',
-                'stop_lat': 43.2988,
-                'stop_lon': -2.9926,
-                'zone_id': 'B2',
-                'parent_station': '',
-              }
-            ];
-          } else if (sql.contains('SELECT DISTINCT t.inferred_line')) {
-            return [
-              {'inferred_line': 'L2'}
-            ];
           }
           return [];
         },

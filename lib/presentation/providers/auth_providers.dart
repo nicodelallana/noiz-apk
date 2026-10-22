@@ -89,3 +89,7 @@ final authControllerProvider =
   final repo = ref.watch(authRepositoryProvider);
   return AuthController(repo, ref);
 });
+
+/// Indicates whether the user has completed or skipped onboarding (guest mode).
+final onboardingCompletedProvider = StateProvider<bool>((ref) => false);
+

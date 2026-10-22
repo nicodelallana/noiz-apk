@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bizkaia_transit/data/adapters/saved_trips_repository_impl.dart';
 import 'package:bizkaia_transit/data/local/app_database.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
@@ -12,6 +14,10 @@ class MockSupabaseClient extends Mock implements SupabaseClient {}
 class MockGoTrueClient extends Mock implements GoTrueClient {}
 
 void main() {
+  setUpAll(() {
+    registerFallbackValue(FakeRawSavedTripRecord());
+  });
+
   late MockAppDatabase mockDb;
   late MockSupabaseClient mockSupabase;
   late MockGoTrueClient mockAuth;
@@ -114,9 +120,9 @@ void main() {
 
       // Mock Supabase from query
       final mockFrom = _MockSupabaseQueryBuilder();
-      when(() => mockSupabase.from('saved_trips')).thenReturn(mockFrom);
+      when(() => mockSupabase.from('saved_trips')).thenAnswer((_) => mockFrom);
       when(() => mockFrom.upsert(any()))
-          .thenAnswer((_) async => <String, dynamic>{});
+          .thenAnswer((_) => FakePostgrestFilterBuilder(<String, dynamic>{}));
 
       await repo.migrateGuestTripsToUser('authenticated_user_123');
 
@@ -127,3 +133,26 @@ void main() {
 }
 
 class _MockSupabaseQueryBuilder extends Mock implements SupabaseQueryBuilder {}
+
+class FakeRawSavedTripRecord extends Fake implements RawSavedTripRecord {}
+
+class FakePostgrestFilterBuilder<T> extends Fake
+    implements PostgrestFilterBuilder<T> {
+  FakePostgrestFilterBuilder([this._value]);
+  final T? _value;
+
+  @override
+  Future<R> then<R>(FutureOr<R> Function(T value) onValue, {Function? onError}) {
+    return Future<T?>.value(_value).then((v) => onValue(v as T), onError: onError);
+  }
+
+  @override
+  Future<T> whenComplete(FutureOr<void> Function() action) {
+    return Future<T?>.value(_value).then((v) => v as T).whenComplete(action);
+  }
+
+  @override
+  Future<T> catchError(Function onError, {bool Function(Object error)? test}) {
+    return Future<T?>.value(_value).then((v) => v as T).catchError(onError, test: test);
+  }
+}

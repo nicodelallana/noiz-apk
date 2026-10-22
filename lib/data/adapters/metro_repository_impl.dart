@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import '../../domain/models/transit_models.dart';
 import '../../domain/repositories/metro_repository.dart';
 import '../gtfs/schedule_sync_service.dart';
@@ -262,6 +260,23 @@ class MetroRepositoryImpl implements MetroRepository {
 
     final daysToAdd = hour ~/ 24;
     final normalizedHour = hour % 24;
+
+    if (serviceBaseDate.isUtc) {
+      final date = DateTime.utc(
+        serviceBaseDate.year,
+        serviceBaseDate.month,
+        serviceBaseDate.day,
+      ).add(Duration(days: daysToAdd));
+
+      return DateTime.utc(
+        date.year,
+        date.month,
+        date.day,
+        normalizedHour,
+        minute,
+        second,
+      );
+    }
 
     final date = DateTime(
       serviceBaseDate.year,

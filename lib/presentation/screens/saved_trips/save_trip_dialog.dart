@@ -5,6 +5,7 @@ import '../../../domain/models/saved_trip_models.dart';
 import '../../../domain/models/transit_models.dart';
 import '../../providers/metro_providers.dart';
 import '../../providers/saved_trips_providers.dart';
+import '../../widgets/animations/save_trip_success_dialog.dart';
 
 /// Modal dialog for bookmarking a new transit journey.
 class SaveTripDialog extends ConsumerStatefulWidget {
@@ -51,7 +52,6 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
   @override
   Widget build(BuildContext context) {
     final stationsAsync = ref.watch(metroStationsProvider);
-    final theme = Theme.of(context);
 
     return AlertDialog(
       title: const Text('Guardar viaje'),
@@ -77,12 +77,16 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
               error: (e, _) => Text('Error: $e'),
               data: (stations) => DropdownButtonFormField<Stop>(
                 value: _origin,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Estación de origen',
                   prefixIcon: Icon(Icons.trip_origin, color: Colors.green),
                 ),
                 items: stations
-                    .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
+                    .map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(s.name, overflow: TextOverflow.ellipsis),
+                        ))
                     .toList(),
                 onChanged: (val) {
                   setState(() {
@@ -100,12 +104,16 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
               error: (_, __) => const SizedBox.shrink(),
               data: (stations) => DropdownButtonFormField<Stop>(
                 value: _destination,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Estación de destino',
                   prefixIcon: Icon(Icons.location_on, color: Colors.red),
                 ),
                 items: stations
-                    .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
+                    .map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(s.name, overflow: TextOverflow.ellipsis),
+                        ))
                     .toList(),
                 onChanged: (val) {
                   setState(() {
@@ -138,12 +146,13 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
           onPressed: _origin == null || _destination == null
               ? null
               : () async {
+                  final finalName = _nameController.text.trim().isNotEmpty
+                      ? _nameController.text.trim()
+                      : '${_origin!.name} → ${_destination!.name}';
                   await ref
                       .read(savedTripsControllerProvider.notifier)
                       .saveTrip(
-                        name: _nameController.text.trim().isNotEmpty
-                            ? _nameController.text.trim()
-                            : '${_origin!.name} → ${_destination!.name}',
+                        name: finalName,
                         operator: TransitOperator.metro,
                         originStopId: _origin!.id,
                         originStopName: _origin!.name,
@@ -153,9 +162,9 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
                       );
                   if (context.mounted) {
                     Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Viaje guardado en Mis Viajes.')),
+                    await SaveTripSuccessDialog.show(
+                      context,
+                      tripName: finalName,
                     );
                   }
                 },

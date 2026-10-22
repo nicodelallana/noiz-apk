@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:bizkaia_transit/data/adapters/auth_repository_impl.dart';
-import 'package:bizkaia_transit/domain/models/auth_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mocktail/mocktail.dart';
@@ -18,7 +17,32 @@ class MockGoogleSignInAccount extends Mock implements GoogleSignInAccount {}
 class MockGoogleSignInAuthentication extends Mock
     implements GoogleSignInAuthentication {}
 
+class FakePostgrestFilterBuilder<T> extends Fake
+    implements PostgrestFilterBuilder<T> {
+  FakePostgrestFilterBuilder([this._value]);
+  final T? _value;
+
+  @override
+  Future<R> then<R>(FutureOr<R> Function(T value) onValue, {Function? onError}) {
+    return Future<T?>.value(_value).then((v) => onValue(v as T), onError: onError);
+  }
+
+  @override
+  Future<T> whenComplete(FutureOr<void> Function() action) {
+    return Future<T?>.value(_value).then((v) => v as T).whenComplete(action);
+  }
+
+  @override
+  Future<T> catchError(Function onError, {bool Function(Object error)? test}) {
+    return Future<T?>.value(_value).then((v) => v as T).catchError(onError, test: test);
+  }
+}
+
 void main() {
+  setUpAll(() {
+    registerFallbackValue(OAuthProvider.google);
+  });
+
   late MockSupabaseClient mockSupabase;
   late MockGoTrueClient mockAuth;
   late MockGoogleSignIn mockGoogleSignIn;
@@ -111,14 +135,14 @@ void main() {
       );
 
       when(() => mockAuth.currentUser).thenReturn(fakeUser);
-      when(() => mockSupabase.rpc('delete_user_account'))
-          .thenAnswer((_) async => null);
+      when(() => mockSupabase.rpc<void>('delete_user_account'))
+          .thenAnswer((_) => FakePostgrestFilterBuilder<void>());
       when(() => mockGoogleSignIn.signOut()).thenAnswer((_) async => null);
       when(() => mockAuth.signOut()).thenAnswer((_) async {});
 
       await authRepo.deleteAccount();
 
-      verify(() => mockSupabase.rpc('delete_user_account')).called(1);
+      verify(() => mockSupabase.rpc<void>('delete_user_account')).called(1);
       verify(() => mockAuth.signOut()).called(1);
       verify(() => mockGoogleSignIn.signOut()).called(1);
     });
