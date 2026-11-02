@@ -51,7 +51,7 @@ class AuthScreen extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFE30613).withOpacity(0.3),
+                        color: const Color(0xFFE30613).withValues(alpha: 0.3),
                         blurRadius: 16,
                         offset: const Offset(0, 8),
                       ),

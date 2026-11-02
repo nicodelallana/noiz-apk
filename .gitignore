@@ -47,3 +47,10 @@ android/local.properties
 
 # Reference videos
 videos/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Taste skill local inspection & scratch runs
+.taste-skill/

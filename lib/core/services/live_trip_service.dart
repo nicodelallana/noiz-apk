@@ -18,6 +18,7 @@ final liveTripServiceProvider = Provider<LiveTripService>((ref) {
 abstract class LiveTripService {
   Future<bool> isSupported();
   Future<bool> requestPermission();
+  Future<bool> checkPermission();
   Future<void> startTrip(LiveTripState state);
   Future<void> updateTrip(LiveTripState state);
   Future<void> endTrip();
@@ -44,6 +45,18 @@ class LiveTripServiceImpl implements LiveTripService {
     try {
       final granted =
           await _channel.invokeMethod<bool>('requestPermission');
+      return granted ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> checkPermission() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return true;
+    try {
+      final granted =
+          await _channel.invokeMethod<bool>('checkPermission');
       return granted ?? false;
     } on PlatformException {
       return false;

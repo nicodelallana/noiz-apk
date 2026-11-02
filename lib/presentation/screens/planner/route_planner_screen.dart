@@ -19,8 +19,8 @@ class RoutePlannerScreen extends ConsumerStatefulWidget {
 }
 
 class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
-  final _originController = TextEditingController(text: 'Santurtzi');
-  final _destController = TextEditingController(text: 'Zarautz');
+  final _originController = TextEditingController(text: 'Moyua');
+  final _destController = TextEditingController(text: 'Santurtzi');
   List<TransitItinerary>? _itineraries;
   bool _isLoading = false;
 
@@ -35,6 +35,146 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
     _originController.dispose();
     _destController.dispose();
     super.dispose();
+  }
+
+  void _swapStops() {
+    HapticFeedback.mediumImpact();
+    final temp = _originController.text;
+    _originController.text = _destController.text;
+    _destController.text = temp;
+    _searchRoutes();
+  }
+
+  Future<void> _pickStation({required bool isOrigin}) async {
+    HapticFeedback.lightImpact();
+    final repo = ref.read(transitRepositoryProvider);
+    final stops = await repo.getStops();
+
+    if (!mounted) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        String query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = query.isEmpty
+                ? stops
+                : stops
+                    .where((s) => s.name.toLowerCase().contains(query.toLowerCase()))
+                    .toList();
+
+            return Container(
+              decoration: const BoxDecoration(
+                color: AppColors.darkSurface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border(
+                  top: BorderSide(color: AppColors.darkBorderStrong, width: 1.5),
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.darkBorderStrong,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      isOrigin ? 'Seleccionar parada de origen' : 'Seleccionar parada de destino',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.darkTextPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      onChanged: (v) => setModalState(() => query = v.trim()),
+                      style: const TextStyle(
+                        color: AppColors.darkTextPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(
+                          BarikIcons.magnifyingGlass,
+                          color: AppColors.darkTextSecondary,
+                        ),
+                        hintText: 'Buscar parada...',
+                        hintStyle: const TextStyle(color: AppColors.darkTextSecondary),
+                        filled: true,
+                        fillColor: AppColors.darkSurfaceElevated,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.5,
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const Divider(
+                          height: 1,
+                          color: AppColors.darkBorder,
+                        ),
+                        itemBuilder: (ctx, idx) {
+                          final stop = filtered[idx];
+                          return ListTile(
+                            leading: Icon(
+                              isOrigin ? BarikIcons.circle : BarikIcons.mapPin,
+                              size: 16,
+                              color: isOrigin ? AppColors.opMetroBilbao : AppColors.realtimeGreen,
+                            ),
+                            title: Text(
+                              stop.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.darkTextPrimary,
+                              ),
+                            ),
+                            subtitle: Text(
+                              stop.operatorId.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.darkTextSecondary,
+                              ),
+                            ),
+                            onTap: () {
+                              if (isOrigin) {
+                                _originController.text = stop.name;
+                              } else {
+                                _destController.text = stop.name;
+                              }
+                              Navigator.of(context).pop();
+                              _searchRoutes();
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _searchRoutes() async {
@@ -92,6 +232,11 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                         color: AppColors.opMetroBilbao,
                         size: 14,
                       ),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.list_alt_rounded, color: AppColors.darkTextSecondary, size: 20),
+                        tooltip: 'Elegir parada de la lista',
+                        onPressed: () => _pickStation(isOrigin: true),
+                      ),
                       hintText: '¿Desde dónde sales?',
                       hintStyle: const TextStyle(
                         color: AppColors.darkTextSecondary,
@@ -105,7 +250,17 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 10),
+                  // Swap Button
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Center(
+                      child: IconButton(
+                        icon: const Icon(Icons.swap_vert_rounded, color: AppColors.darkTextPrimary),
+                        tooltip: 'Intercambiar origen y destino',
+                        onPressed: _swapStops,
+                      ),
+                    ),
+                  ),
 
                   // Destination Input
                   TextField(
@@ -120,6 +275,11 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                         color: AppColors.realtimeGreen,
                         size: 16,
                       ),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.list_alt_rounded, color: AppColors.darkTextSecondary, size: 20),
+                        tooltip: 'Elegir parada de la lista',
+                        onPressed: () => _pickStation(isOrigin: false),
+                      ),
                       hintText: '¿A dónde vas?',
                       hintStyle: const TextStyle(
                         color: AppColors.darkTextSecondary,
@@ -133,7 +293,7 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
 
                   SizedBox(
                     width: double.infinity,
@@ -252,36 +412,60 @@ class _ItineraryResultCard extends ConsumerWidget {
             child: FilledButton.icon(
               onPressed: () async {
                 HapticFeedback.mediumImpact();
+                final firstLeg = itinerary.legs.first;
+                final hasPerm = await ref
+                    .read(liveTripServiceProvider)
+                    .requestPermission();
+
                 final liveTrip = LiveTripState(
                   tripId: 'plan_${DateTime.now().millisecondsSinceEpoch}',
-                  operatorId: 'metro',
-                  mode: 'metro',
-                  lineId: 'L2',
-                  lineName: 'L2',
-                  lineColor: '#1E293B',
+                  operatorId: firstLeg.operatorId ?? 'metro',
+                  mode: firstLeg.operatorId == 'metro' ? 'metro' : 'bus',
+                  lineId: firstLeg.lineName ?? 'Línea',
+                  lineName: firstLeg.lineName ?? 'Línea',
+                  lineColor: firstLeg.lineColorHex ?? '#E8590C',
                   origin: itinerary.origin,
                   destination: itinerary.destination,
-                  currentStop: itinerary.legs.first.originStopName,
-                  nextStop: itinerary.legs.first.destStopName,
-                  stopsRemaining: 18,
+                  currentStop: firstLeg.originStopName,
+                  nextStop: firstLeg.destStopName,
+                  stopsRemaining: firstLeg.stopsCount,
                   progress: 0.1,
                   arrivalTime: itinerary.arrivalTime,
                   status: LiveTripStatus.tracking,
                   isRealtime: true,
                   delaySeconds: 0,
-                  instruction: 'Bájate en San Mamés para transbordo',
+                  instruction: firstLeg.instruction,
                   updatedAt: DateTime.now(),
                 );
 
-                await ref.read(activeLiveTripProvider.notifier).startTrip(liveTrip);
+                await ref
+                    .read(activeLiveTripProvider.notifier)
+                    .startTrip(liveTrip);
 
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       backgroundColor: AppColors.darkSurfaceElevated,
-                      content: Text(
-                        'Siguiendo viaje en la pantalla de bloqueo hacia ${itinerary.destination}',
-                        style: const TextStyle(color: AppColors.darkTextPrimary),
+                      content: Row(
+                        children: [
+                          const Icon(
+                            Icons.notifications_active_rounded,
+                            color: AppColors.realtimeGreen,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              hasPerm
+                                  ? 'Siguiendo ruta hacia ${itinerary.destination} en la pantalla de bloqueo'
+                                  : 'Viaje iniciado. Para ver el progreso en bloqueo, activa las notificaciones.',
+                              style: const TextStyle(
+                                color: AppColors.darkTextPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );

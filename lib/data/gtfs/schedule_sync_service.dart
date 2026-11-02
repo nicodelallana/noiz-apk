@@ -139,7 +139,8 @@ class ScheduleSyncService {
     final dbFile = File(dbPath);
     final manifestFile = File(manifestPath);
 
-    if (!dbFile.existsSync() || dbFile.lengthSync() < 1024) {
+    // If database does not exist or is legacy > 10MB single-operator pack, seed bundled DB
+    if (!dbFile.existsSync() || dbFile.lengthSync() < 1024 || dbFile.lengthSync() > 10 * 1024 * 1024) {
       try {
         final data = await rootBundle.load('assets/db/transit.sqlite');
         final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
@@ -194,6 +195,17 @@ class ScheduleSyncService {
     // 2. Check if local database is already identical to remote
     final bool hasValidLocalDb =
         dbFile.existsSync() && dbFile.lengthSync() > 1024;
+
+    // Avoid overwriting multi-operator DB with legacy remote pack
+    if (remoteManifest.version.startsWith('1.') && hasValidLocalDb) {
+      return SyncResult(
+        status: SyncStatus.upToDate,
+        databasePath: dbPath,
+        version: '2.0.0-multi-operator',
+        message: 'Local multi-operator database is active and up to date',
+      );
+    }
+
     final bool hashMatches = localManifest != null &&
         localManifest.compressedSha256 == remoteManifest.compressedSha256 &&
         localManifest.uncompressedSha256 == remoteManifest.uncompressedSha256;

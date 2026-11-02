@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/saved_trip_models.dart';
 import '../../providers/saved_trips_providers.dart';
+import '../../widgets/animations/empty_transit_view.dart';
 import 'save_trip_dialog.dart';
 
 /// "Mis viajes" screen displaying user bookmarked commutes with next departures.
@@ -12,7 +13,6 @@ class SavedTripsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tripsAsync = ref.watch(savedTripsStreamProvider);
-    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -42,41 +42,10 @@ class SavedTripsScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Error al cargar viajes: $e')),
         data: (trips) {
           if (trips.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color:
-                            theme.colorScheme.primaryContainer.withOpacity(0.4),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.bookmark_border,
-                        size: 56,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'No tienes viajes guardados',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Guarda tus trayectos habituales (como Bagatza ⇄ Kabiezes) para ver las próximas salidas de un vistazo.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: theme.colorScheme.outline),
-                    ),
-                  ],
-                ),
-              ),
+            return const EmptyTransitView(
+              title: 'No tienes viajes guardados',
+              message:
+                  'Guarda tus trayectos habituales (como Bagatza ⇄ Kabiezes) para ver las próximas salidas de un vistazo.',
             );
           }
 
@@ -128,7 +97,7 @@ class _SavedTripCard extends ConsumerWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-              color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -142,8 +111,8 @@ class _SavedTripCard extends ConsumerWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE2001A),
-                      borderRadius: BorderRadius.circular(4),
+                      color: Color(trip.operator.colorHex),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       trip.operator.name,
@@ -259,9 +228,9 @@ class _SavedTripCard extends ConsumerWidget {
                             horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: departure.minutesRemaining <= 3
-                              ? const Color(0xFFE2001A).withOpacity(0.1)
+                              ? const Color(0xFFE2001A).withValues(alpha: 0.12)
                               : theme.colorScheme.primaryContainer
-                                  .withOpacity(0.5),
+                                  .withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(

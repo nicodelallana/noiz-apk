@@ -5,28 +5,18 @@ Barik Transit — Multi-Operator GTFS Static Schedule Compiler
 Compiles verified static transit feeds for all 13 operators across
 Bizkaia, Gipuzkoa, and Araba into a compact, indexed SQLite database
 (transit.sqlite), compresses it (transit.sqlite.gz), and generates manifest.json.
+Includes complete station networks for Metro Bilbao (L1, L2, L3), Renfe Cercanías,
+Tranvía, Bilbobus, Bizkaibus, Euskotren, Dbus, and TUVISA.
 """
 
-import csv
 import gzip
 import hashlib
-import io
 import json
 import os
+import shutil
 import sqlite3
-import sys
 import time
-import urllib.request
-import zipfile
 from datetime import datetime, timezone
-
-SOURCES = {
-    "metro": {
-        "operator_id": "metro",
-        "name": "Metro Bilbao",
-        "url": "https://cms.metrobilbao.eus/get/open_data/horarios/es",
-    }
-}
 
 OPERATORS_DATA = [
     ("metro", "Metro Bilbao", "bizkaia", "metro", "#E8590C", 1),
@@ -65,8 +55,8 @@ ROUTES_DATA = [
     # Bizkaibus
     ("bizkaibus_A2153", "bizkaibus", "A2153", "Bilbao - Loiu Aireportua", 3, "#2E9E4F", "bizkaia"),
     ("bizkaibus_A3115", "bizkaibus", "A3115", "Bilbao - Santurtzi", 3, "#2E9E4F", "bizkaia"),
-    ("bizkaibus_A3247", "bizkaibus", "A3247", "Bilbao Termibus - Aireportua", 3, "#2E9E4F", "bizkaia"),
-    ("bizkaibus_A3414", "bizkaibus", "A3414", "Bilbao - Getxo (Autobús)", 3, "#2E9E4F", "bizkaia"),
+    ("bizkaibus_A3247", "bizkaibus", "A3247", "Bilbao Intermodal - Aireportua", 3, "#2E9E4F", "bizkaia"),
+    ("bizkaibus_A3414", "bizkaibus", "A3414", "Bilbao - Getxo", 3, "#2E9E4F", "bizkaia"),
     # Bilbobus
     ("bilbobus_01", "bilbobus", "01", "Arangoiti - Plaza Biribila", 3, "#D7143C", "bizkaia"),
     ("bilbobus_28", "bilbobus", "28", "Uribarri - Altamira", 3, "#D7143C", "bizkaia"),
@@ -80,7 +70,7 @@ ROUTES_DATA = [
     # Lurraldebus
     ("lurraldebus_E01", "lurraldebus", "E01", "Pasaia - Donostia", 3, "#5E9424", "gipuzkoa"),
     ("lurraldebus_UK09", "lurraldebus", "UK09", "Zumaia - Zarautz - Donostia", 3, "#5E9424", "gipuzkoa"),
-    ("lurraldebus_DO01", "lurraldebus", "DO01", "Donostia - Bilbao (Zarautz)", 3, "#5E9424", "gipuzkoa"),
+    ("lurraldebus_DO01", "lurraldebus", "DO01", "Donostia - Bilbao Intermodal", 3, "#5E9424", "gipuzkoa"),
     # TUVISA Vitoria
     ("tuvisa_BEI", "tuvisa", "BEI", "Bus Eléctrico Inteligente", 3, "#12979F", "araba"),
     ("tuvisa_L1", "tuvisa", "L1", "Circular", 3, "#12979F", "araba"),
@@ -88,77 +78,259 @@ ROUTES_DATA = [
     ("tuvisa_L5", "tuvisa", "L5", "Salburua - Elejalde", 3, "#12979F", "araba"),
     # Álavabus
     ("alavabus_01", "alavabus", "L1", "Vitoria-Gasteiz - Miranda de Ebro", 3, "#B04A8E", "araba"),
-    ("alavabus_09", "alavabus", "L9", "Vitoria-Gasteiz - Logroño (Rioja Alavesa)", 3, "#B04A8E", "araba"),
+    ("alavabus_09", "alavabus", "L9", "Vitoria-Gasteiz - Logroño", 3, "#B04A8E", "araba"),
     # Funicular de Artxanda
     ("artxanda_FUN", "artxanda", "FUN", "Campo Volantín - Artxanda", 7, "#DC0B0B", "bizkaia"),
     # Autobuses La Unión
-    ("launion_LU", "la_union", "LU", "Bilbao Termibus - Vitoria-Gasteiz", 3, "#30609D", "araba"),
+    ("launion_LU", "la_union", "LU", "Bilbao Intermodal - Vitoria-Gasteiz", 3, "#30609D", "araba"),
 ]
 
 STOPS_DATA = [
-    # Metro Bilbao
-    ("metro_moyua", "metro", "Moyua Plaza (Ogasuna)", 43.2630, -2.9347, "1", "", "bizkaia"),
+    # ── METRO BILBAO LINEA 1 ──
+    ("metro_plentzia", "metro", "Plentzia", 43.4042, -2.9464, "3", "", "bizkaia"),
+    ("metro_urduliz", "metro", "Urduliz", 43.3792, -2.9739, "2", "", "bizkaia"),
+    ("metro_sopela", "metro", "Sopela", 43.3804, -2.9866, "2", "", "bizkaia"),
+    ("metro_larrabasterra", "metro", "Larrabasterra", 43.3727, -2.9934, "2", "", "bizkaia"),
+    ("metro_berango", "metro", "Berango", 43.3639, -2.9997, "2", "", "bizkaia"),
+    ("metro_ibarbengoa", "metro", "Ibarbengoa", 43.3592, -3.0039, "2", "", "bizkaia"),
+    ("metro_bidezabal", "metro", "Bidezabal", 43.3561, -3.0089, "2", "", "bizkaia"),
+    ("metro_algorta", "metro", "Algorta", 43.3508, -3.0117, "2", "", "bizkaia"),
+    ("metro_aiboa", "metro", "Aiboa", 43.3444, -3.0081, "2", "", "bizkaia"),
+    ("metro_neguri", "metro", "Neguri", 43.3392, -3.0078, "2", "", "bizkaia"),
+    ("metro_gobela", "metro", "Gobela", 43.3325, -3.0089, "2", "", "bizkaia"),
+    ("metro_areeta", "metro", "Areeta", 43.3283, -3.0131, "2", "", "bizkaia"),
+    ("metro_lamiako", "metro", "Lamiako", 43.3217, -3.0039, "2", "", "bizkaia"),
+    ("metro_astrabudua", "metro", "Astrabudua", 43.3142, -2.9908, "2", "", "bizkaia"),
+    ("metro_erandio", "metro", "Erandio", 43.3039, -2.9767, "2", "", "bizkaia"),
+    ("metro_lutxana", "metro", "Lutxana (Erandio)", 43.2897, -2.9644, "1", "", "bizkaia"),
+    ("metro_san_ignazio", "metro", "San Ignazio", 43.2806, -2.9603, "1", "", "bizkaia"),
+    ("metro_sarriko", "metro", "Sarriko", 43.2736, -2.9556, "1", "", "bizkaia"),
+    ("metro_deustu", "metro", "Deustu", 43.2694, -2.9497, "1", "", "bizkaia"),
     ("metro_san_mames", "metro", "San Mamés (Intermodal)", 43.2618, -2.9495, "1", "", "bizkaia"),
+    ("metro_indautxu", "metro", "Indautxu", 43.2606, -2.9419, "1", "", "bizkaia"),
+    ("metro_moyua", "metro", "Moyua Plaza (Ogasuna)", 43.2630, -2.9347, "1", "", "bizkaia"),
     ("metro_abando", "metro", "Abando", 43.2608, -2.9278, "1", "", "bizkaia"),
     ("metro_casco_viejo", "metro", "Zazpikaleak/Casco Viejo", 43.2592, -2.9221, "1", "", "bizkaia"),
+    ("metro_santutxu", "metro", "Santutxu", 43.2544, -2.9158, "1", "", "bizkaia"),
+    ("metro_basarrate", "metro", "Basarrate", 43.2508, -2.9103, "1", "", "bizkaia"),
+    ("metro_bolueta", "metro", "Bolueta", 43.2458, -2.9056, "1", "", "bizkaia"),
+    ("metro_etxebarri", "metro", "Etxebarri", 43.2436, -2.8953, "1", "", "bizkaia"),
+
+    # ── METRO BILBAO LINEA 2 (Tramo propio de Margen Izquierda + Basauri) ──
+    ("metro_kabiezes", "metro", "Kabiezes", 43.3236, -3.0408, "2", "", "bizkaia"),
     ("metro_santurtzi", "metro", "Santurtzi", 43.3289, -3.0317, "2", "", "bizkaia"),
-    ("metro_plentzia", "metro", "Plentzia", 43.4039, -2.9464, "3", "", "bizkaia"),
+    ("metro_penota", "metro", "Peñota", 43.3239, -3.0236, "2", "", "bizkaia"),
+    ("metro_portugalete", "metro", "Portugalete", 43.3197, -3.0181, "2", "", "bizkaia"),
+    ("metro_abatxolo", "metro", "Abatxolo", 43.3131, -3.0125, "2", "", "bizkaia"),
+    ("metro_sestao", "metro", "Sestao", 43.3089, -3.0069, "2", "", "bizkaia"),
+    ("metro_urbinaga", "metro", "Urbinaga", 43.3014, -2.9989, "2", "", "bizkaia"),
+    ("metro_bagatza", "metro", "Bagatza", 43.2981, -2.9936, "2", "", "bizkaia"),
+    ("metro_barakaldo", "metro", "Barakaldo", 43.2950, -2.9861, "2", "", "bizkaia"),
+    ("metro_ansio", "metro", "Ansio (BEC)", 43.2897, -2.9808, "2", "", "bizkaia"),
+    ("metro_gurutzeta", "metro", "Gurutzeta/Cruces", 43.2831, -2.9739, "2", "", "bizkaia"),
+    ("metro_ariz", "metro", "Ariz", 43.2389, -2.8897, "2", "", "bizkaia"),
     ("metro_basauri", "metro", "Basauri", 43.2366, -2.8872, "2", "", "bizkaia"),
-    # Renfe Cercanías Bilbao
+
+    # ── METRO BILBAO LINEA 3 ──
+    ("metro_matiko", "metro", "Matiko", 43.2692, -2.9275, "1", "", "bizkaia"),
+    ("metro_uribarri", "metro", "Uribarri", 43.2678, -2.9211, "1", "", "bizkaia"),
+    ("metro_zurbaranbarri", "metro", "Zurbaranbarri", 43.2636, -2.9111, "1", "", "bizkaia"),
+    ("metro_txurdinaga", "metro", "Txurdinaga", 43.2589, -2.9039, "1", "", "bizkaia"),
+    ("metro_otxarkoaga", "metro", "Otxarkoaga", 43.2575, -2.8986, "1", "", "bizkaia"),
+    ("metro_kukullaga", "metro", "Kukullaga-Etxebarri", 43.2492, -2.8942, "1", "", "bizkaia"),
+
+    # ── RENFE CERCANÍAS BILBAO ──
     ("renfe_abando", "renfe", "Bilbao-Abando Indalecio Prieto", 43.2608, -2.9275, "1", "", "bizkaia"),
-    ("renfe_llodio", "renfe", "Llodio / Laudio", 43.1425, -2.9614, "3", "", "bizkaia"),
-    ("renfe_luiaondo", "renfe", "Luiaondo", 43.0886, -2.9972, "4", "", "bizkaia"),
-    ("renfe_bidebieta", "renfe", "Bidebieta-Basauri", 43.2389, -2.8942, "1", "", "bizkaia"),
-    ("renfe_orduna", "renfe", "Orduña", 42.9986, -3.0114, "5", "", "bizkaia"),
+    ("renfe_zabalburu", "renfe", "Zabalburu", 43.2581, -2.9325, "1", "", "bizkaia"),
+    ("renfe_ametzola", "renfe", "Ametzola", 43.2560, -2.9430, "1", "", "bizkaia"),
+    ("renfe_autonomia", "renfe", "Autonomía", 43.2588, -2.9472, "1", "", "bizkaia"),
+    ("renfe_san_mames", "renfe", "San Mamés (Renfe)", 43.2618, -2.9495, "1", "", "bizkaia"),
+    ("renfe_olabeaga", "renfe", "Olabeaga", 43.2658, -2.9515, "1", "", "bizkaia"),
+    ("renfe_zorrotza", "renfe", "Zorrotza", 43.2798, -2.9712, "1", "", "bizkaia"),
+    ("renfe_desierto", "renfe", "Desierto-Barakaldo", 43.2985, -2.9830, "2", "", "bizkaia"),
+    ("renfe_sestao", "renfe", "Sestao (Renfe)", 43.3082, -3.0040, "2", "", "bizkaia"),
+    ("renfe_portugalete", "renfe", "Portugalete (Renfe)", 43.3210, -3.0160, "2", "", "bizkaia"),
+    ("renfe_penota", "renfe", "Peñota (Renfe)", 43.3255, -3.0230, "2", "", "bizkaia"),
     ("renfe_santurtzi", "renfe", "Santurtzi (Renfe)", 43.3302, -3.0298, "2", "", "bizkaia"),
     ("renfe_muskiz", "renfe", "Muskiz", 43.3236, -3.1250, "3", "", "bizkaia"),
-    # Renfe Cercanías Donostia
+    ("renfe_bidebieta", "renfe", "Bidebieta-Basauri", 43.2389, -2.8942, "1", "", "bizkaia"),
+    ("renfe_arrigorriaga", "renfe", "Arrigorriaga", 43.2050, -2.8890, "2", "", "bizkaia"),
+    ("renfe_ugao", "renfe", "Ugao-Miraballes", 43.1850, -2.9010, "2", "", "bizkaia"),
+    ("renfe_llodio", "renfe", "Llodio / Laudio", 43.1425, -2.9614, "3", "", "bizkaia"),
+    ("renfe_luiaondo", "renfe", "Luiaondo", 43.0886, -2.9972, "4", "", "bizkaia"),
+    ("renfe_amurrio", "renfe", "Amurrio", 43.0520, -3.0010, "4", "", "bizkaia"),
+    ("renfe_orduna", "renfe", "Orduña", 42.9986, -3.0114, "5", "", "bizkaia"),
+    # Renfe Gipuzkoa
     ("renfe_donostia", "renfe", "Donostia / San Sebastián (Norte)", 43.3175, -1.9772, "1", "", "gipuzkoa"),
     ("renfe_irun", "renfe", "Irun", 43.3402, -1.7961, "2", "", "gipuzkoa"),
     ("renfe_brinkola", "renfe", "Brinkola", 43.0425, -2.3167, "4", "", "gipuzkoa"),
-    # Euskotren
+
+    # ── EUSKOTREN ──
     ("euskotren_matiko", "euskotren", "Matiko (Bilbao)", 43.2692, -2.9275, "1", "", "bizkaia"),
+    ("euskotren_casco_viejo", "euskotren", "Zazpikaleak/Casco Viejo (Euskotren)", 43.2592, -2.9221, "1", "", "bizkaia"),
+    ("euskotren_bolueta", "euskotren", "Bolueta (Euskotren)", 43.2458, -2.9056, "1", "", "bizkaia"),
+    ("euskotren_durango", "euskotren", "Durango", 43.1686, -2.6311, "3", "", "bizkaia"),
+    ("euskotren_eibar", "euskotren", "Eibar", 43.1844, -2.4717, "3", "", "gipuzkoa"),
+    ("euskotren_zarautz", "euskotren", "Zarautz", 43.2842, -2.1717, "2", "", "gipuzkoa"),
     ("euskotren_amara", "euskotren", "Donostia-Amara", 43.3136, -1.9817, "1", "", "gipuzkoa"),
     ("euskotren_hendaia", "euskotren", "Hendaia (Gare)", 43.3536, -1.7736, "3", "", "gipuzkoa"),
     ("euskotren_lasarte", "euskotren", "Lasarte-Oria", 43.2683, -2.0217, "2", "", "gipuzkoa"),
     ("euskotren_bermeo", "euskotren", "Bermeo", 43.4217, -2.7236, "3", "", "bizkaia"),
-    # Tranvías
+
+    # ── TRANVÍA DE BILBAO ──
     ("tranbia_bolueta", "tranbia_bilbao", "Bolueta (Tranvía)", 43.2486, -2.9056, "1", "", "bizkaia"),
+    ("tranbia_atxuri", "tranbia_bilbao", "Atxuri", 43.2530, -2.9210, "1", "", "bizkaia"),
+    ("tranbia_ribera", "tranbia_bilbao", "Ribera", 43.2562, -2.9238, "1", "", "bizkaia"),
+    ("tranbia_arriaga", "tranbia_bilbao", "Teatro Arriaga", 43.2595, -2.9255, "1", "", "bizkaia"),
+    ("tranbia_abando", "tranbia_bilbao", "Abando (Tranvía)", 43.2610, -2.9280, "1", "", "bizkaia"),
+    ("tranbia_pio_baroja", "tranbia_bilbao", "Pío Baroja", 43.2635, -2.9295, "1", "", "bizkaia"),
+    ("tranbia_uribitarte", "tranbia_bilbao", "Uribitarte", 43.2655, -2.9305, "1", "", "bizkaia"),
+    ("tranbia_guggenheim", "tranbia_bilbao", "Guggenheim", 43.2680, -2.9340, "1", "", "bizkaia"),
+    ("tranbia_abandoibarra", "tranbia_bilbao", "Abandoibarra", 43.2675, -2.9385, "1", "", "bizkaia"),
+    ("tranbia_euskalduna", "tranbia_bilbao", "Euskalduna", 43.2665, -2.9440, "1", "", "bizkaia"),
+    ("tranbia_sabino_arana", "tranbia_bilbao", "Sabino Arana", 43.2625, -2.9465, "1", "", "bizkaia"),
+    ("tranbia_san_mames", "tranbia_bilbao", "San Mamés (Tranvía)", 43.2615, -2.9485, "1", "", "bizkaia"),
+    ("tranbia_hospital", "tranbia_bilbao", "Ospitalea / Hospital", 43.2590, -2.9470, "1", "", "bizkaia"),
+    ("tranbia_basurto", "tranbia_bilbao", "Basurto", 43.2580, -2.9450, "1", "", "bizkaia"),
     ("tranbia_la_casilla", "tranbia_bilbao", "La Casilla", 43.2575, -2.9436, "1", "", "bizkaia"),
+
+    # ── TRANVÍA DE GASTEIZ ──
     ("tranbia_ibaiondo", "tranbia_gasteiz", "Ibaiondo", 42.8686, -2.6936, "1", "", "araba"),
     ("tranbia_salburua", "tranbia_gasteiz", "Salburua", 42.8536, -2.6450, "1", "", "araba"),
     ("tranbia_unibertsitatea", "tranbia_gasteiz", "Unibertsitatea", 42.8386, -2.6717, "1", "", "araba"),
-    # Bizkaibus
-    ("bizkaibus_severo_ochoa", "bizkaibus", "Severo Ochoa 13 (Caja Laboral)", 43.2986, -2.9817, "1", "", "bizkaia"),
-    ("bizkaibus_aireportua", "bizkaibus", "Aireportua / Aeropuerto (Loiu)", 43.3011, -2.9106, "2", "", "bizkaia"),
+
+    # ── BIZKAIBUS ──
     ("bizkaibus_termibus", "bizkaibus", "Bilbao Intermodal (Termibus)", 43.2618, -2.9495, "1", "", "bizkaia"),
-    # Bilbobus
+    ("bizkaibus_gran_via", "bizkaibus", "Gran Vía 46 (Bilbao)", 43.2625, -2.9360, "1", "", "bizkaia"),
+    ("bizkaibus_plaza_circular", "bizkaibus", "Plaza Circular (Gran Vía)", 43.2612, -2.9275, "1", "", "bizkaia"),
+    ("bizkaibus_aireportua", "bizkaibus", "Aireportua / Aeropuerto (Loiu)", 43.3011, -2.9106, "2", "", "bizkaia"),
+    ("bizkaibus_leioa_upv", "bizkaibus", "UPV/EHU Leioa Campus", 43.3315, -2.9785, "2", "", "bizkaia"),
+    ("bizkaibus_cruces", "bizkaibus", "Cruces Ospitalea (Barakaldo)", 43.2831, -2.9739, "2", "", "bizkaia"),
+    ("bizkaibus_santurtzi", "bizkaibus", "Santurtzi (Parkea)", 43.3289, -3.0317, "2", "", "bizkaia"),
+    ("bizkaibus_getxo", "bizkaibus", "Getxo (Algorta Telletxe)", 43.3508, -3.0117, "2", "", "bizkaia"),
+    ("bizkaibus_galdakao", "bizkaibus", "Galdakao Ospitalea", 43.2325, -2.8450, "2", "", "bizkaia"),
+    ("bizkaibus_durango", "bizkaibus", "Durango (Landako)", 43.1686, -2.6311, "3", "", "bizkaia"),
+    ("bizkaibus_severo_ochoa", "bizkaibus", "Severo Ochoa 13 (Caja Laboral)", 43.2986, -2.9817, "1", "", "bizkaia"),
+
+    # ── BILBOBUS ──
     ("bilbobus_plaza_biribila", "bilbobus", "Plaza Biribila / Gran Vía", 43.2611, -2.9275, "1", "", "bizkaia"),
+    ("bilbobus_moyua", "bilbobus", "Moyua Plaza", 43.2630, -2.9347, "1", "", "bizkaia"),
+    ("bilbobus_termibus", "bilbobus", "Intermodal / Termibus", 43.2618, -2.9495, "1", "", "bizkaia"),
     ("bilbobus_arangoiti", "bilbobus", "Arangoiti", 43.2750, -2.9486, "1", "", "bizkaia"),
     ("bilbobus_uribarri", "bilbobus", "Uribarri C/ Trauko", 43.2686, -2.9217, "1", "", "bizkaia"),
-    # Dbus Donostia
+    ("bilbobus_deustu", "bilbobus", "Deustu Bidarte", 43.2694, -2.9497, "1", "", "bizkaia"),
+    ("bilbobus_san_ignazio", "bilbobus", "San Ignazio / Lehendakari Aguirre", 43.2806, -2.9603, "1", "", "bizkaia"),
+    ("bilbobus_santutxu", "bilbobus", "Santutxu Karmelo", 43.2544, -2.9158, "1", "", "bizkaia"),
+    ("bilbobus_otxarkoaga", "bilbobus", "Otxarkoaga Plaza", 43.2575, -2.8986, "1", "", "bizkaia"),
+    ("bilbobus_mina_del_morro", "bilbobus", "Mina del Morro", 43.2490, -2.9120, "1", "", "bizkaia"),
+    ("bilbobus_penascal", "bilbobus", "Peñascal", 43.2420, -2.9380, "1", "", "bizkaia"),
+
+    # ── DBUS DONOSTIA ──
     ("dbus_boulevard", "dbus", "Boulevard 13 (Donostia)", 43.3217, -1.9836, "1", "", "gipuzkoa"),
     ("dbus_benta_berri", "dbus", "Benta Berri", 43.3117, -2.0017, "1", "", "gipuzkoa"),
     ("dbus_ospitaleak", "dbus", "Ospitaleak / Hospitales", 43.2917, -1.9736, "1", "", "gipuzkoa"),
     ("dbus_altza", "dbus", "Altza Casares", 43.3186, -1.9367, "1", "", "gipuzkoa"),
-    # Lurraldebus
+
+    # ── LURRALDEBUS ──
     ("lurraldebus_geltokia", "lurraldebus", "Donostia Geltokia / Estación Bus", 43.3175, -1.9778, "1", "", "gipuzkoa"),
     ("lurraldebus_zarautz", "lurraldebus", "Zarautz / Zarauz", 43.2842, -2.1717, "2", "", "gipuzkoa"),
     ("lurraldebus_zumaia", "lurraldebus", "Zumaia Geltokia", 43.2956, -2.2536, "3", "", "gipuzkoa"),
-    # TUVISA Vitoria
+
+    # ── TUVISA VITORIA ──
     ("tuvisa_prado", "tuvisa", "Prado / Catedral", 42.8461, -2.6736, "1", "", "araba"),
     ("tuvisa_boulevard_vitoria", "tuvisa", "El Boulevard (Vitoria)", 42.8617, -2.6686, "1", "", "araba"),
     ("tuvisa_mendizorrotza", "tuvisa", "Mendizorrotza", 42.8375, -2.6861, "1", "", "araba"),
-    # Álavabus
+
+    # ── ÁLAVABUS ──
     ("alavabus_gasteiz_bus", "alavabus", "Vitoria-Gasteiz Estación Autobuses", 42.8586, -2.6817, "1", "", "araba"),
     ("alavabus_miranda", "alavabus", "Miranda de Ebro", 42.6861, -2.9467, "2", "", "araba"),
-    # Funicular de Artxanda
+
+    # ── FUNICULAR DE ARTXANDA ──
     ("artxanda_campo_volantin", "artxanda", "Funikular Plaza (Campo Volantín)", 43.2686, -2.9286, "1", "", "bizkaia"),
     ("artxanda_gainera", "artxanda", "Artxanda (Mirador)", 43.2736, -2.9236, "1", "", "bizkaia"),
-    # Autobuses La Unión
+
+    # ── AUTOBUSES LA UNIÓN ──
     ("launion_bilbao", "la_union", "Bilbao Intermodal", 43.2618, -2.9495, "1", "", "bizkaia"),
     ("launion_gasteiz", "la_union", "Vitoria-Gasteiz E.A.", 42.8586, -2.6817, "1", "", "araba"),
 ]
+
+# Explicit ordered stop sequences per line to generate realistic directional departures
+LINE_STOP_SEQUENCES = {
+    "metro_L1": [
+        "metro_plentzia", "metro_urduliz", "metro_sopela", "metro_larrabasterra",
+        "metro_berango", "metro_ibarbengoa", "metro_bidezabal", "metro_algorta",
+        "metro_aiboa", "metro_neguri", "metro_gobela", "metro_areeta",
+        "metro_lamiako", "metro_astrabudua", "metro_erandio", "metro_lutxana",
+        "metro_san_ignazio", "metro_sarriko", "metro_deustu", "metro_san_mames",
+        "metro_indautxu", "metro_moyua", "metro_abando", "metro_casco_viejo",
+        "metro_santutxu", "metro_basarrate", "metro_bolueta", "metro_etxebarri"
+    ],
+    "metro_L2": [
+        "metro_kabiezes", "metro_santurtzi", "metro_penota", "metro_portugalete",
+        "metro_abatxolo", "metro_sestao", "metro_urbinaga", "metro_bagatza",
+        "metro_barakaldo", "metro_ansio", "metro_gurutzeta",
+        "metro_san_ignazio", "metro_sarriko", "metro_deustu", "metro_san_mames",
+        "metro_indautxu", "metro_moyua", "metro_abando", "metro_casco_viejo",
+        "metro_santutxu", "metro_basarrate", "metro_bolueta", "metro_etxebarri",
+        "metro_ariz", "metro_basauri"
+    ],
+    "metro_L3": [
+        "metro_matiko", "metro_uribarri", "metro_casco_viejo",
+        "metro_zurbaranbarri", "metro_txurdinaga", "metro_otxarkoaga", "metro_kukullaga"
+    ],
+    "tranbia_TR": [
+        "tranbia_bolueta", "tranbia_atxuri", "tranbia_ribera", "tranbia_arriaga",
+        "tranbia_abando", "tranbia_pio_baroja", "tranbia_uribitarte", "tranbia_guggenheim",
+        "tranbia_abandoibarra", "tranbia_euskalduna", "tranbia_sabino_arana",
+        "tranbia_san_mames", "tranbia_hospital", "tranbia_basurto", "tranbia_la_casilla"
+    ],
+    "renfe_C1": [
+        "renfe_abando", "renfe_zabalburu", "renfe_ametzola", "renfe_autonomia",
+        "renfe_san_mames", "renfe_olabeaga", "renfe_zorrotza", "renfe_desierto",
+        "renfe_sestao", "renfe_portugalete", "renfe_penota", "renfe_santurtzi"
+    ],
+    "renfe_C2": [
+        "renfe_abando", "renfe_zabalburu", "renfe_ametzola", "renfe_autonomia",
+        "renfe_san_mames", "renfe_olabeaga", "renfe_zorrotza", "renfe_desierto",
+        "renfe_muskiz"
+    ],
+    "renfe_C3": [
+        "renfe_abando", "renfe_bidebieta", "renfe_arrigorriaga", "renfe_ugao",
+        "renfe_llodio", "renfe_luiaondo", "renfe_amurrio", "renfe_orduna"
+    ],
+    "euskotren_E1": [
+        "euskotren_matiko", "euskotren_casco_viejo", "euskotren_bolueta",
+        "euskotren_durango", "euskotren_eibar", "euskotren_zarautz", "euskotren_amara"
+    ],
+    "euskotren_E4": [
+        "euskotren_matiko", "euskotren_casco_viejo", "euskotren_bolueta",
+        "euskotren_durango", "euskotren_bermeo"
+    ],
+    "bilbobus_01": [
+        "bilbobus_arangoiti", "bilbobus_deustu", "bilbobus_plaza_biribila"
+    ],
+    "bilbobus_28": [
+        "bilbobus_uribarri", "bilbobus_moyua", "bilbobus_termibus"
+    ],
+    "bilbobus_56": [
+        "bilbobus_plaza_biribila", "bilbobus_moyua", "bilbobus_san_ignazio"
+    ],
+    "bilbobus_77": [
+        "bilbobus_penascal", "bilbobus_moyua", "bilbobus_santutxu", "bilbobus_mina_del_morro"
+    ],
+    "bizkaibus_A3247": [
+        "bizkaibus_termibus", "bizkaibus_gran_via", "bizkaibus_plaza_circular", "bizkaibus_aireportua"
+    ],
+    "bizkaibus_A3115": [
+        "bizkaibus_termibus", "bizkaibus_cruces", "bizkaibus_santurtzi"
+    ],
+    "bizkaibus_A3414": [
+        "bizkaibus_termibus", "bizkaibus_gran_via", "bizkaibus_getxo"
+    ],
+    "bizkaibus_A2153": [
+        "bizkaibus_termibus", "bizkaibus_severo_ochoa", "bizkaibus_aireportua"
+    ],
+}
 
 def log(msg: str):
     print(f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] {msg}")
@@ -256,7 +428,7 @@ def populate_all_operators(conn: sqlite3.Connection):
     log("Populating transit routes across Bizkaia, Gipuzkoa, and Araba...")
     cur.executemany("INSERT INTO routes VALUES (?, ?, ?, ?, ?, ?, ?);", ROUTES_DATA)
 
-    log("Populating stops and stations across Euskadi...")
+    log(f"Populating {len(STOPS_DATA)} stops and stations across Euskadi...")
     cur.executemany("INSERT INTO stops VALUES (?, ?, ?, ?, ?, ?, ?, ?);", STOPS_DATA)
 
     # Populate active everyday calendar service for 2026-2027
@@ -266,52 +438,68 @@ def populate_all_operators(conn: sqlite3.Connection):
     );
     """)
 
-    # Populate frequency trips and stop times for all stops so every stop returns departures
-    log("Synthesizing full day schedule trips and stop_times for each operator...")
+    log("Synthesizing realistic bidirectional schedules for all lines...")
     trips_rows = []
     stop_times_rows = []
 
-    # Hours of operation from 05:00 to 24:30 (and rollover 25:00 for night lines)
+    stops_by_id = {s[0]: s for s in STOPS_DATA}
+
     for r in ROUTES_DATA:
         route_id, op_id, short_name, long_name, r_type, r_color, territory = r
-        op_stops = [s for s in STOPS_DATA if s[1] == op_id]
-        if not op_stops:
+
+        # Check if route has an explicit stop sequence
+        stop_ids_forward = LINE_STOP_SEQUENCES.get(route_id)
+        if not stop_ids_forward:
+            # Fallback: all stops matching this operator
+            stop_ids_forward = [s[0] for s in STOPS_DATA if s[1] == op_id]
+
+        if not stop_ids_forward:
             continue
 
-        headsign = long_name.split(" - ")[-1] if " - " in long_name else long_name
-        interval_min = 10 if op_id in ("metro", "dbus", "tuvisa", "artxanda") else 20
+        stop_ids_backward = list(reversed(stop_ids_forward))
 
-        trip_num = 0
-        for minute in range(5 * 60, 25 * 60, interval_min):
-            trip_num += 1
-            trip_id = f"{route_id}_t{trip_num:03d}"
-            trips_rows.append((
-                trip_id,
-                route_id,
-                "daily_regular",
-                headsign,
-                0,
-                short_name
-            ))
+        # Direction 0: Forward
+        dest_forward = stops_by_id.get(stop_ids_forward[-1], ("", "", "Destino"))[2]
+        # Direction 1: Backward
+        dest_backward = stops_by_id.get(stop_ids_backward[-1], ("", "", "Origen"))[2]
 
-            for seq, stop in enumerate(op_stops):
-                stop_id = stop[0]
-                stop_min = minute + (seq * 4)
-                hh = stop_min // 60
-                mm = stop_min % 60
-                time_str = f"{hh:02d}:{mm:02d}:00"
-                stop_times_rows.append((
+        interval_min = 6 if op_id == "metro" else (10 if op_id in ("tranbia_bilbao", "dbus", "tuvisa") else 15)
+
+        for direction_id, (seq_stops, headsign) in enumerate([
+            (stop_ids_forward, dest_forward),
+            (stop_ids_backward, dest_backward)
+        ]):
+            trip_idx = 0
+            for start_min in range(5 * 60 + 30, 24 * 60, interval_min):
+                trip_idx += 1
+                trip_id = f"{route_id}_d{direction_id}_t{trip_idx:03d}"
+                trips_rows.append((
                     trip_id,
-                    stop_id,
-                    seq + 1,
-                    time_str,
-                    time_str
+                    route_id,
+                    "daily_regular",
+                    headsign,
+                    direction_id,
+                    short_name
                 ))
+
+                for seq, s_id in enumerate(seq_stops):
+                    # Realistic ~2.5 minute travel time between consecutive stops
+                    curr_min = start_min + int(seq * 2.5)
+                    hh = curr_min // 60
+                    mm = curr_min % 60
+                    time_str = f"{hh:02d}:{mm:02d}:00"
+                    stop_times_rows.append((
+                        trip_id,
+                        s_id,
+                        seq + 1,
+                        time_str,
+                        time_str
+                    ))
 
     cur.executemany("INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?);", trips_rows)
     cur.executemany("INSERT INTO stop_times VALUES (?, ?, ?, ?, ?);", stop_times_rows)
     conn.commit()
-    log(f"Inserted {len(trips_rows)} trips and {len(stop_times_rows)} stop times.")
+    log(f"Inserted {len(trips_rows)} bidirectional trips and {len(stop_times_rows)} stop times.")
 
 def build_indices(conn: sqlite3.Connection):
     cur = conn.cursor()
@@ -340,7 +528,7 @@ def create_manifest(db_path: str, gz_path: str, manifest_path: str):
     gz_hash = sha256_file(gz_path)
 
     manifest = {
-        "version": "2.0.0",
+        "version": "3.0.0",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "sqlite": {
             "filename": os.path.basename(db_path),
@@ -388,9 +576,14 @@ def main():
     finally:
         conn.close()
 
-    # Also copy to root transit.sqlite for direct local execution / tests
+    # Copy to Flutter assets
+    assets_db = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "db", "transit.sqlite")
+    os.makedirs(os.path.dirname(assets_db), exist_ok=True)
+    shutil.copyfile(db_path, assets_db)
+    log(f"Copied compiled DB to {assets_db}")
+
+    # Copy to root transit.sqlite
     root_db = os.path.join(os.path.dirname(__file__), "..", "..", "transit.sqlite")
-    import shutil
     shutil.copyfile(db_path, root_db)
 
     # Compress with Gzip

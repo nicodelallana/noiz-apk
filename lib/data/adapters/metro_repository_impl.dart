@@ -124,6 +124,7 @@ class MetroRepositoryImpl implements MetroRepository {
         activeServiceIds: activeServicesToday,
         minDepartureTime: currentTimeStr,
         maxDepartureTime: '23:59:59',
+        destinationStopId: destinationStopId,
         lineFilter: lineFilter?.id,
         limit: limit,
       );
@@ -168,6 +169,7 @@ class MetroRepositoryImpl implements MetroRepository {
           stationId: stationId,
           activeServiceIds: activeServicesYesterday,
           minDepartureTime: rolloverTimeStr,
+          destinationStopId: destinationStopId,
           lineFilter: lineFilter?.id,
           limit: limit,
         );

@@ -18,12 +18,13 @@ import com.bizkaia.transit.R
  * Android Foreground Service for lock-screen live transit journey tracking.
  *
  * Implements Android 14+ foreground service standards (with specialUse type),
- * public lock-screen visibility, dynamic progress tracking, and chronometer countdown.
+ * public lock-screen visibility, high priority for lockscreen appearance, dynamic progress tracking,
+ * and chronometer countdown.
  */
 class TransitLiveService : Service() {
 
     companion object {
-        const val CHANNEL_ID = "transit_live_trip_channel"
+        const val CHANNEL_ID = "transit_live_trip_channel_v4"
         const val CHANNEL_NAME = "Viaje en directo"
         const val NOTIFICATION_ID = 4001
 
@@ -149,12 +150,12 @@ class TransitLiveService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Muestra el progreso de tu viaje en tiempo real en la pantalla de bloqueo"
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 enableVibration(false)
-                setShowBadge(false)
+                setShowBadge(true)
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -221,17 +222,19 @@ class TransitLiveService : Service() {
         val progressPercent = (progress.coerceIn(0.0, 1.0) * 100).toInt()
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(contentText)
-            .setSubText("Barik Live")
+            .setSubText("Noiz Live")
             .setColor(parsedColor)
             .setColorized(true)
             .setContentIntent(pendingTapIntent)
             .setOngoing(status != "ended")
             .setOnlyAlertOnce(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setProgress(100, progressPercent, false)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Finalizar", pendingStopIntent)
 

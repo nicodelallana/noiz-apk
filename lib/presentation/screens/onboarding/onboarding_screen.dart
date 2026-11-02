@@ -231,7 +231,7 @@ class _StaticIcon extends StatelessWidget {
       width: 120,
       height: 120,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         shape: BoxShape.circle,
       ),
       child: Icon(icon, size: 56, color: color),
@@ -292,11 +292,11 @@ class _AnimatedIconState extends State<_AnimatedIcon>
           width: 120,
           height: 120,
           decoration: BoxDecoration(
-            color: widget.color.withOpacity(0.1),
+            color: widget.color.withValues(alpha: 0.1),
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: widget.color.withOpacity(0.15),
+                color: widget.color.withValues(alpha: 0.15),
                 blurRadius: 32,
                 spreadRadius: 8,
               ),
@@ -350,7 +350,7 @@ class _SignInPage extends ConsumerWidget {
               borderRadius: BorderRadius.circular(22),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFE2001A).withOpacity(0.3),
+                  color: const Color(0xFFE2001A).withValues(alpha: 0.3),
                   blurRadius: 24,
                   offset: const Offset(0, 10),
                 ),

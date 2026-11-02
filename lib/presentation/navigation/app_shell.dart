@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,6 +9,7 @@ import 'package:bizkaia_transit/core/theme/app_theme.dart';
 import 'package:bizkaia_transit/core/theme/barik_icons.dart';
 import 'package:bizkaia_transit/domain/models/live_trip_models.dart';
 import 'package:bizkaia_transit/presentation/navigation/transport_mode_fab.dart';
+import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
 import 'package:bizkaia_transit/presentation/screens/simulator/live_activity_simulator_screen.dart';
 
 /// Main application shell with bottom navigation and central transport FAB.
@@ -33,6 +35,7 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   void _onTabSelected(int index) {
+    HapticFeedback.selectionClick();
     final path = switch (index) {
       0 => '/',
       1 => '/saved-trips',
@@ -45,9 +48,10 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final transportMode = ref.watch(transportModeProvider);
-    final isBus = transportMode == TransportMode.bus;
-    final activeTheme = AppTheme.themeFor(isBus: isBus);
+    final activeOperator = ref.watch(selectedOperatorProvider);
+    final activeTheme = AppTheme.themeFor(
+      accentColor: Color(activeOperator.colorHex),
+    );
     final activeTrip = ref.watch(activeLiveTripProvider);
 
     return AnimatedTheme(

@@ -114,11 +114,12 @@ class _TransitMapViewState extends State<TransitMapView> {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFF151822),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF2C3246)),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.18),
+                          color: Colors.black.withValues(alpha: 0.35),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),
@@ -140,7 +141,7 @@ class _TransitMapViewState extends State<TransitMapView> {
                           widget.stationName,
                           style: theme.textTheme.labelMedium?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1F2937),
+                            color: const Color(0xFFF5F7FF),
                           ),
                         ),
                       ],
@@ -172,18 +173,14 @@ class _TransitMapViewState extends State<TransitMapView> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      widget.isBusMode
-                          ? Icons.directions_bus_rounded
-                          : Icons.subway_rounded,
+                    const Icon(
+                      Icons.map_rounded,
                       size: 14,
                       color: Colors.white,
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      widget.isBusMode
-                          ? 'Bizkaibus • En vivo'
-                          : 'Metro Bilbao • En vivo',
+                      widget.stationName,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,

@@ -8,6 +8,7 @@ import 'package:bizkaia_transit/core/theme/barik_icons.dart';
 import 'package:bizkaia_transit/domain/models/live_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
+import 'package:bizkaia_transit/presentation/widgets/animations/arrival_pulse_indicator.dart';
 import 'package:bizkaia_transit/presentation/widgets/scenic_progress_track.dart';
 
 /// Next Departure Hero Card, matching the reference's primary layout.
@@ -147,13 +148,25 @@ class DepartureHeroCard extends ConsumerWidget {
                 textBaseline: TextBaseline.alphabetic,
                 children: [
                   // Scheduled Clock Time
-                  Text(
-                    departure.scheduledTimeFormatted,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkTextSecondary,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.schedule_rounded,
+                        size: 15,
+                        color: AppColors.darkTextSecondary,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        departure.scheduledTimeFormatted,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                          color: AppColors.darkTextSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                   if (delaySeconds > 60) ...[
                     const SizedBox(width: 6),
@@ -162,6 +175,7 @@ class DepartureHeroCard extends ConsumerWidget {
                       style: const TextStyle(
                         fontSize: 14,
                         decoration: TextDecoration.lineThrough,
+                        fontFeatures: [FontFeature.tabularFigures()],
                         color: AppColors.darkTextSecondary,
                       ),
                     ),
@@ -169,17 +183,23 @@ class DepartureHeroCard extends ConsumerWidget {
 
                   const Spacer(),
 
-                  // Massive Countdown
+                  // Massive Countdown with pulse when imminent
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      if (departure.minutesRemaining <= 3 && isRealtime) ...[
+                        const ArrivalPulseIndicator(size: 24),
+                        const SizedBox(width: 6),
+                      ],
                       Text(
                         '${departure.minutesRemaining}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 34,
                           fontWeight: FontWeight.w900,
-                          color: AppColors.darkTextPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: departure.minutesRemaining <= 3
+                              ? AppColors.realtimeGreen
+                              : AppColors.darkTextPrimary,
                           letterSpacing: -1,
                         ),
                       ),
@@ -247,6 +267,10 @@ class DepartureHeroCard extends ConsumerWidget {
                         updatedAt: DateTime.now(),
                       );
 
+                      final hasPerm = await ref
+                          .read(liveTripServiceProvider)
+                          .requestPermission();
+
                       await ref
                           .read(activeLiveTripProvider.notifier)
                           .startTrip(liveTrip);
@@ -255,11 +279,27 @@ class DepartureHeroCard extends ConsumerWidget {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             backgroundColor: AppColors.darkSurfaceElevated,
-                            content: Text(
-                              'Siguiendo viaje en la pantalla de bloqueo: ${departure.lineCode} a ${departure.headsign}',
-                              style: const TextStyle(
-                                color: AppColors.darkTextPrimary,
-                              ),
+                            content: Row(
+                              children: [
+                                const Icon(
+                                  Icons.notifications_active_rounded,
+                                  color: AppColors.realtimeGreen,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    hasPerm
+                                        ? 'Siguiendo ${departure.lineCode} a ${departure.headsign} en la pantalla de bloqueo'
+                                        : 'Viaje iniciado. Si no ves la notificación en bloqueo, activa los avisos en ajustes.',
+                                    style: const TextStyle(
+                                      color: AppColors.darkTextPrimary,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         );

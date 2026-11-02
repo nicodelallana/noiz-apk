@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:bizkaia_transit/core/services/location_service.dart';
 import 'package:bizkaia_transit/data/adapters/transit_repository_impl.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
@@ -30,8 +31,14 @@ final operatorListProvider = Provider<List<TransitOperator>>((ref) {
       .toList();
 });
 
-/// Active selected stop for departure display
+/// User's current GPS location if location permission is granted
+final userLocationProvider = StateProvider<UserLocation?>((ref) => null);
+
+/// Active selected stop (origin) for departure display
 final selectedTransitStopProvider = StateProvider<Stop?>((ref) => null);
+
+/// Optional active destination stop filter ("de qué parada a qué parada")
+final selectedDestinationStopProvider = StateProvider<Stop?>((ref) => null);
 
 /// Stops for the currently selected operator
 final stopsForActiveOperatorProvider = FutureProvider<List<Stop>>((ref) async {
@@ -44,39 +51,68 @@ final stopsForActiveOperatorProvider = FutureProvider<List<Stop>>((ref) async {
     territory: territory,
   );
 
-  // Auto-select first stop if none selected or if active stop belongs to another operator
   final current = ref.read(selectedTransitStopProvider);
+  final userLoc = ref.read(userLocationProvider);
+
   if (stops.isNotEmpty &&
       (current == null || current.operatorId != operator.id)) {
-    ref.read(selectedTransitStopProvider.notifier).state = stops.first;
+    Stop bestStop = stops.first;
+    if (userLoc != null) {
+      bestStop = stops.reduce((a, b) {
+        final aLat = a.latitude ?? 0.0;
+        final aLon = a.longitude ?? 0.0;
+        final bLat = b.latitude ?? 0.0;
+        final bLon = b.longitude ?? 0.0;
+        final da = (aLat - userLoc.latitude) * (aLat - userLoc.latitude) +
+            (aLon - userLoc.longitude) * (aLon - userLoc.longitude);
+        final db = (bLat - userLoc.latitude) * (bLat - userLoc.latitude) +
+            (bLon - userLoc.longitude) * (bLon - userLoc.longitude);
+        return da < db ? a : b;
+      });
+    }
+    ref.read(selectedTransitStopProvider.notifier).state = bestStop;
+    // Clear destination filter if switching operator
+    ref.read(selectedDestinationStopProvider.notifier).state = null;
   }
 
   return stops;
 });
 
-/// Live departures for the actively selected stop
+/// Live departures for the actively selected stop, with optional destination filter
 final departuresForActiveStopProvider =
     FutureProvider<List<Departure>>((ref) async {
-  final stop = ref.watch(selectedTransitStopProvider);
-  if (stop == null) return [];
-
+  var stop = ref.watch(selectedTransitStopProvider);
+  final destStop = ref.watch(selectedDestinationStopProvider);
   final repo = ref.watch(transitRepositoryProvider);
   final op = ref.watch(selectedOperatorProvider);
 
+  if (stop == null || stop.operatorId != op.id) {
+    final stops = await ref.watch(stopsForActiveOperatorProvider.future);
+    if (stops.isEmpty) return [];
+    stop = stops.first;
+    Future.microtask(() {
+      ref.read(selectedTransitStopProvider.notifier).state = stops.first;
+    });
+  }
+
   return repo.getDepartures(
     stopId: stop.id,
+    destinationStopId: destStop?.id,
     operatorId: op.id,
   );
 });
 
-/// Nearby transit stops within walking distance
+/// Nearby transit stops within walking distance, centered on user GPS if allowed
 final nearbyStopsProvider = FutureProvider<List<Stop>>((ref) async {
   final repo = ref.watch(transitRepositoryProvider);
-  // Default centered around Moyua Plaza / Bilbao core (supports real GPS if location allowed)
+  final userLoc = ref.watch(userLocationProvider);
+  final lat = userLoc?.latitude ?? 43.2630;
+  final lon = userLoc?.longitude ?? -2.9347;
+
   return repo.getNearbyStops(
-    latitude: 43.2630,
-    longitude: -2.9347,
-    radiusKm: 2.5,
+    latitude: lat,
+    longitude: lon,
+    radiusKm: 3.0,
   );
 });
 

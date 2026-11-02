@@ -49,6 +49,7 @@ class TransitRepositoryImpl implements TransitRepository {
   @override
   Future<List<Departure>> getDepartures({
     required String stopId,
+    String? destinationStopId,
     String? operatorId,
     DateTime? atTime,
   }) async {
@@ -57,8 +58,9 @@ class TransitRepositoryImpl implements TransitRepository {
     final minTime = '${time.hour.toString().padLeft(2, '0')}:'
         '${time.minute.toString().padLeft(2, '0')}:00';
 
-    final rawDepartures = await _db.getDepartures(
+    var rawDepartures = await _db.getDepartures(
       stationId: stopId,
+      destinationStopId: destinationStopId,
       activeServiceIds: activeServices.isNotEmpty
           ? activeServices
           : {'daily_regular'},
@@ -66,11 +68,27 @@ class TransitRepositoryImpl implements TransitRepository {
       limit: 15,
     );
 
+    // If no departures remaining for today (e.g. late night), show upcoming morning departures
+    if (rawDepartures.isEmpty) {
+      rawDepartures = await _db.getDepartures(
+        stationId: stopId,
+        destinationStopId: destinationStopId,
+        activeServiceIds: activeServices.isNotEmpty
+            ? activeServices
+            : {'daily_regular'},
+        minDepartureTime: '06:00:00',
+        limit: 15,
+      );
+    }
+
     return rawDepartures.map((raw) {
       final parts = raw.departureTime.split(':');
       final hour = int.tryParse(parts[0]) ?? time.hour;
       final minute = int.tryParse(parts[1]) ?? time.minute;
-      final sched = DateTime(time.year, time.month, time.day, hour % 24, minute);
+      var sched = DateTime(time.year, time.month, time.day, hour % 24, minute);
+      if (sched.isBefore(time)) {
+        sched = sched.add(const Duration(days: 1));
+      }
       final remaining = sched.difference(time).inMinutes;
 
       final isRt = operatorId != 'alavabus' &&
@@ -142,10 +160,56 @@ class TransitRepositoryImpl implements TransitRepository {
     required String destination,
   }) async {
     final now = DateTime.now();
+    final originClean = origin.trim().toLowerCase();
+    final destClean = destination.trim().toLowerCase();
+
+    // 1. Search if stops exist in database
+    final allStops = await getStops();
+    final originStop = allStops.where((s) =>
+        s.name.toLowerCase().contains(originClean) ||
+        originClean.contains(s.name.toLowerCase())).firstOrNull;
+    final destStop = allStops.where((s) =>
+        s.name.toLowerCase().contains(destClean) ||
+        destClean.contains(s.name.toLowerCase())).firstOrNull;
+
+    if (originStop != null && destStop != null) {
+      final directRoute =
+          await _db.findDirectRoute(originStop.id, destStop.id);
+      if (directRoute != null) {
+        final duration = (directRoute.stopsCount * 2.5).round().clamp(3, 120);
+        final dep = now.add(const Duration(minutes: 3));
+        final arr = dep.add(Duration(minutes: duration));
+
+        return [
+          TransitItinerary(
+            origin: originStop.name,
+            destination: destStop.name,
+            totalDurationMinutes: duration,
+            transfersCount: 0,
+            departureTime: dep,
+            arrivalTime: arr,
+            legs: [
+              TransitLeg(
+                type: TransitLegType.transit,
+                instruction:
+                    'Sube en ${originStop.name} (${directRoute.lineName} hacia ${directRoute.tripHeadsign})',
+                originStopName: originStop.name,
+                destStopName: destStop.name,
+                durationMinutes: duration,
+                lineName: directRoute.lineName,
+                lineColorHex: directRoute.routeColorHex ?? '#E8590C',
+                operatorId: directRoute.operatorId,
+                stopsCount: directRoute.stopsCount,
+              ),
+            ],
+          ),
+        ];
+      }
+    }
 
     // Multimodal route generator matching the reference video (e.g. Santurtzi -> Zarautz)
-    final isZarautz = destination.toLowerCase().contains('zarautz') ||
-        origin.toLowerCase().contains('santurtzi');
+    final isZarautz = destClean.contains('zarautz') ||
+        originClean.contains('santurtzi');
 
     if (isZarautz) {
       final departureTime = now.add(const Duration(minutes: 6));

@@ -270,12 +270,20 @@ class AppDatabase {
     return LazyDatabase(() async {
       final docs = await getApplicationDocumentsDirectory();
       final dbFile = File(p.join(docs.path, TransitConstants.sqliteDbFileName));
-      if (!dbFile.existsSync() || dbFile.lengthSync() < 1024) {
-        try {
-          final data = await rootBundle.load('assets/db/transit.sqlite');
+      try {
+        final data = await rootBundle.load('assets/db/transit.sqlite');
+        if (!dbFile.existsSync() || dbFile.lengthSync() != data.lengthInBytes) {
           final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
           await dbFile.writeAsBytes(bytes, flush: true);
-        } catch (_) {}
+        }
+      } catch (_) {
+        if (!dbFile.existsSync() || dbFile.lengthSync() < 1024) {
+          try {
+            final data = await rootBundle.load('assets/db/transit.sqlite');
+            final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+            await dbFile.writeAsBytes(bytes, flush: true);
+          } catch (_) {}
+        }
       }
       return NativeDatabase.createInBackground(dbFile);
     });
@@ -423,11 +431,12 @@ class AppDatabase {
     };
   }
 
-  /// Queries upcoming scheduled departures for a station.
+  /// Queries upcoming scheduled departures for a station, with optional destination filtering.
   Future<List<RawDepartureRecord>> getDepartures({
     required String stationId,
     required Set<String> activeServiceIds,
     required String minDepartureTime,
+    String? destinationStopId,
     String? lineFilter,
     String? maxDepartureTime,
     int limit = 20,
@@ -462,6 +471,18 @@ class AppDatabase {
       minDepartureTime,
     ];
 
+    if (destinationStopId != null && destinationStopId.isNotEmpty) {
+      sql.write('''
+        AND EXISTS (
+          SELECT 1 FROM stop_times dest_st
+          WHERE dest_st.trip_id = st.trip_id
+            AND dest_st.stop_id = ?
+            AND dest_st.stop_sequence > st.stop_sequence
+        )
+      ''');
+      args.add(destinationStopId);
+    }
+
     if (maxDepartureTime != null) {
       sql.write(' AND st.departure_time <= ?');
       args.add(maxDepartureTime);
@@ -477,6 +498,28 @@ class AppDatabase {
 
     final rows = await _executor.runSelect(sql.toString(), args);
     return rows.map(RawDepartureRecord.fromMap).toList();
+  }
+
+  /// Searches for a direct transit connection between two stops.
+  Future<DirectRouteRecord?> findDirectRoute(String originStopId, String destStopId) async {
+    await _ensureOpen();
+    final rows = await _executor.runSelect('''
+      SELECT 
+        t.inferred_line, 
+        t.trip_headsign, 
+        (s2.stop_sequence - s1.stop_sequence) as stops_count,
+        r.operator_id,
+        r.route_color
+      FROM stop_times s1
+      JOIN stop_times s2 ON s1.trip_id = s2.trip_id AND s1.stop_sequence < s2.stop_sequence
+      JOIN trips t ON s1.trip_id = t.trip_id
+      JOIN routes r ON t.route_id = r.route_id
+      WHERE (s1.stop_id = ? OR s1.stop_id LIKE ?)
+        AND (s2.stop_id = ? OR s2.stop_id LIKE ?)
+      LIMIT 1;
+    ''', [originStopId, '%$originStopId%', destStopId, '%$destStopId%']);
+    if (rows.isEmpty) return null;
+    return DirectRouteRecord.fromMap(rows.first);
   }
 
   // ---------------------------------------------------------------------------
@@ -587,4 +630,30 @@ class AppDatabase {
       _isOpen = false;
     }
   }
+}
+
+class DirectRouteRecord {
+  const DirectRouteRecord({
+    required this.lineName,
+    required this.tripHeadsign,
+    required this.stopsCount,
+    required this.operatorId,
+    this.routeColorHex,
+  });
+
+  factory DirectRouteRecord.fromMap(Map<String, dynamic> map) {
+    return DirectRouteRecord(
+      lineName: (map['inferred_line'] as String?) ?? 'Línea',
+      tripHeadsign: (map['trip_headsign'] as String?) ?? 'Destino',
+      stopsCount: (map['stops_count'] as num?)?.toInt() ?? 1,
+      operatorId: (map['operator_id'] as String?) ?? 'metro',
+      routeColorHex: map['route_color'] as String?,
+    );
+  }
+
+  final String lineName;
+  final String tripHeadsign;
+  final int stopsCount;
+  final String operatorId;
+  final String? routeColorHex;
 }

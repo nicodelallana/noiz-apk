@@ -54,7 +54,7 @@ class _ProfileContent extends ConsumerWidget {
         // 1. User Header Card
         Card(
           elevation: 0,
-          color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(

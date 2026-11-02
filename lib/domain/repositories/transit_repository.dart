@@ -85,6 +85,7 @@ abstract class TransitRepository {
 
   Future<List<Departure>> getDepartures({
     required String stopId,
+    String? destinationStopId,
     String? operatorId,
     DateTime? atTime,
   });
