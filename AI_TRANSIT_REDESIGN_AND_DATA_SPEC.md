@@ -360,13 +360,85 @@ Genera, en este orden y sin saltarte pasos:
 
 ---
 
-# PARTE III: Checklist de Verificación para el Agente
+# PARTE III: Requisitos Obligatorios para Publicación en Google Play Store y Apple App Store
+
+Cualquier desarrollo, refactorización o cambio en la aplicación debe cumplir estrictamente las directrices de revisión de **Google Play Developer Program Policies** y **Apple App Store Review Guidelines**. La IA debe auditar y asegurar los siguientes puntos:
+
+## 1. Cumplimiento Legal y Propiedad Intelectual
+- **Aviso Legal de Independencia (Disclaimer Obligatorio):**
+  - Debe figurar de forma clara en la pantalla de bienvenida/onboarding, en la sección de Ajustes y en el texto de la ficha de ambas tiendas:
+    > *"Esta aplicación es una herramienta independiente y no cuenta con afiliación oficial ni representación de Metro Bilbao S.A., Renfe Operadora, Euskotren, Bilbobus, Bizkaibus ni el Consorcio de Transportes de Bizkaia (CTB). La información procede de portales oficiales de datos abiertos bajo licencias públicas de reutilización."*
+- **Pantalla de Atribución y Licencias:**
+  - Crear una pantalla o modal accesible desde Ajustes (`/settings/licenses` o similar) con la lista completa de fuentes de datos, enlaces originales y sus respectivas licencias (CC BY 4.0, Open Data Euskadi, etc.).
+- **Marcas Registradas e Iconografía:**
+  - No utilizar logotipos vectoriales idénticos a los registrados como isotipos de marca oficial para el icono de la aplicación (evita el rechazo por *Impersonation* en Google Play y *Copycat/IP infringement* en Apple).
+  - Usar pictogramas genéricos vectoriales de alta calidad (M para metro con tipografía propia, Bus, Tren, Tranvía) acompañados de los códigos de color característicos de cada línea.
+
+## 2. Privacidad y Seguridad de Datos (Data Safety & App Privacy)
+- **Política de Privacidad Pública y Accesible:**
+  - Enlace HTTPS a la política de privacidad accesible dentro de la aplicación y en la ficha de la tienda sin necesidad de iniciar sesión.
+- **Borrado de Cuenta y Datos (Exigencia Crítica de Apple 5.1.1(v) y Google Play):**
+  - Si la aplicación permite registrarse o iniciar sesión mediante Supabase (Google/Apple), **es obligatorio** que exista un botón visible en Ajustes: `"Eliminar mi cuenta y datos personales"`.
+  - Debe ejecutar el borrado permanente del usuario en `auth.users` y en cascada en las tablas de Postgres (`user_favorites`, `live_activity_tokens`).
+  - Debe proporcionarse también una URL web de solicitud de borrado para cumplir con la política de Google Play.
+- **Autenticación con Terceros (Apple Guideline 4.8):**
+  - Dado que se ofrece inicio de sesión con Google (`google_sign_in`), **es obligatorio** ofrecer también **Sign in with Apple** (`sign_in_with_apple`) con idéntica visibilidad y tamaño.
+  - La app debe permitir su uso completo como **Invitado** (*Guest Mode* / Modo sin cuenta) para consultar horarios, mapas y alertas sin forzar el registro.
+
+## 3. Configuración Nativa para Google Play Store
+- **Target SDK y Versiones:**
+  - `compileSdk = 35`, `targetSdk = 35` (o el requerimiento mínimo vigente por Google Play, mínimo 34).
+  - Formato de paquete: **Android App Bundle (`.aab`)** generado con `flutter build appbundle --release`.
+- **Permisos de Localización y Justificación:**
+  - Permisos declarados: `ACCESS_FINE_LOCATION` y `ACCESS_COARSE_LOCATION`.
+  - Declaración estricta de uso: sólo en primer plano (*While in use*) para ubicar paradas cercanas y calcular distancias. No solicitar ubicación en segundo plano (`ACCESS_BACKGROUND_LOCATION`).
+- **Foreground Service en Android 14+ (API 34+):**
+  - En `AndroidManifest.xml`, el servicio `TransitLiveService` debe tener declarado explícitamente su tipo:
+    ```xml
+    <service
+        android:name=".TransitLiveService"
+        android:foregroundServiceType="specialUse"
+        android:exported="false">
+        <property
+            android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+            android:value="Live public transit departure timer on lock screen requested by user" />
+    </service>
+    ```
+  - Esto evita el rechazo automático de Google Play al subir el bundle por uso no justificado de Foreground Services.
+- **Permiso de Notificaciones en Android 13+ (API 33+):**
+  - Solicitar en tiempo de ejecución `POST_NOTIFICATIONS` de manera contextual (sólo cuando el usuario pulsa "Fijar salida en pantalla de bloqueo"), nunca al arrancar la app.
+
+## 4. Configuración Nativa para Apple App Store
+- **Propósito de Permisos en `ios/Runner/Info.plist`:**
+  - Descripciones redactadas de forma humana, transparente y en español:
+    ```xml
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Noiz necesita acceder a tu ubicación para mostrarte las paradas de transporte público más cercanas a ti en el mapa y en la lista de salidas.</string>
+    <key>NSUserNotificationsUsageDescription</key>
+    <string>Recibe alertas en tiempo real sobre incidencias en tus líneas habituales y el tiempo restante de tu próximo transporte en la pantalla de bloqueo.</string>
+    ```
+- **Live Activities y Dynamic Island:**
+  - Incluir en `Info.plist`:
+    ```xml
+    <key>NSSupportsLiveActivities</key>
+    <true/>
+    ```
+- **Soporte de Pantallas y Modo Oscuro:**
+  - Comprobación estricta de contrastes en Modo Claro y Modo Oscuro: ningún texto, icono o botón puede ser ilegible o invisible según el tema del sistema.
+  - Soporte de iPhone: fijar orientaciones soportadas (`UIInterfaceOrientationPortrait`) si no hay diseño adaptativo para horizontal.
+
+---
+
+# PARTE IV: Checklist Integral de Verificación y Aceptación
 
 Cuando ejecutes las tareas asignadas en este documento, debes verificar uno a uno los siguientes puntos:
 
-- [ ] **Scroll 60 FPS:** Ninguna pantalla principal produce caídas de frames al desplazarse rápidamente.
+- [ ] **Scroll 60/120 FPS:** Ninguna pantalla principal produce caídas de frames al desplazarse rápidamente.
 - [ ] **Sustitución de Pantalla:** La ruta `/map` está activa en la barra inferior en lugar de `/saved-trips`, cargando la ubicación real del usuario de forma inmediata y explorando paradas al mover la cámara.
 - [ ] **Avisos Ordenados por Proximidad:** La pantalla `/alerts` muestra arriba del todo las incidencias que afectan a estaciones o líneas a menos de 3 km del usuario.
 - [ ] **Live Activity Profesional:** La notificación persistente en Android se visualiza claramente en la pantalla de bloqueo con tipografía legible, badge de línea, minutos restantes y acciones de control.
 - [ ] **Limpieza de UI:** Todos los elementos superfluos o botones de simulación eliminados del flujo del usuario común.
+- [ ] **Cumplimiento Google Play:** Foreground service type documentado en manifest, targetSdk 34+, generación de `.aab`, borrado de cuenta implementado.
+- [ ] **Cumplimiento Apple Store:** Sign in with Apple disponible junto a Google, textos de `Info.plist` transparentes, `NSSupportsLiveActivities` habilitado.
+- [ ] **Aviso Legal y Atribución:** Disclaimer oficial presente y pantalla de licencias accesible sin errores.
 - [ ] **Compilación y Tests:** `flutter analyze` reporta 0 errores o advertencias, y `flutter test` pasa al 100%.
