@@ -34,7 +34,7 @@ class LiveTripServiceImpl implements LiveTripService {
     try {
       final supported = await _channel.invokeMethod<bool>('isSupported');
       return supported ?? false;
-    } on PlatformException {
+    } on Exception {
       return false;
     }
   }
@@ -46,7 +46,7 @@ class LiveTripServiceImpl implements LiveTripService {
       final granted =
           await _channel.invokeMethod<bool>('requestPermission');
       return granted ?? false;
-    } on PlatformException {
+    } on Exception {
       return false;
     }
   }
@@ -58,7 +58,7 @@ class LiveTripServiceImpl implements LiveTripService {
       final granted =
           await _channel.invokeMethod<bool>('checkPermission');
       return granted ?? false;
-    } on PlatformException {
+    } on Exception {
       return false;
     }
   }
@@ -67,7 +67,7 @@ class LiveTripServiceImpl implements LiveTripService {
   Future<void> startTrip(LiveTripState state) async {
     try {
       await _channel.invokeMethod<void>('startTrip', state.toJson());
-    } on PlatformException catch (e) {
+    } on Exception catch (e) {
       // Platform channel error logged gracefully without crashing app
       assert(() {
         // ignore: avoid_print
@@ -81,7 +81,7 @@ class LiveTripServiceImpl implements LiveTripService {
   Future<void> updateTrip(LiveTripState state) async {
     try {
       await _channel.invokeMethod<void>('updateTrip', state.toJson());
-    } on PlatformException catch (e) {
+    } on Exception catch (e) {
       assert(() {
         // ignore: avoid_print
         print('LiveTripService error on updateTrip: $e');
@@ -94,7 +94,7 @@ class LiveTripServiceImpl implements LiveTripService {
   Future<void> endTrip() async {
     try {
       await _channel.invokeMethod<void>('endTrip');
-    } on PlatformException catch (e) {
+    } on Exception catch (e) {
       assert(() {
         // ignore: avoid_print
         print('LiveTripService error on endTrip: $e');

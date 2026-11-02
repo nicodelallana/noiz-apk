@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:bizkaia_transit/core/constants/transit_constants.dart';
 import 'package:bizkaia_transit/core/services/location_service.dart';
+import 'package:bizkaia_transit/core/utils/geo.dart';
 import 'package:bizkaia_transit/data/adapters/transit_repository_impl.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
@@ -33,6 +37,51 @@ final operatorListProvider = Provider<List<TransitOperator>>((ref) {
 
 /// User's current GPS location if location permission is granted
 final userLocationProvider = StateProvider<UserLocation?>((ref) => null);
+
+/// Resolves the user's position once per session: shows only the system
+/// permission dialog and, if it is denied or no fix arrives, silently falls
+/// back to Plaza Moyúa (Bilbao) instead of surfacing an error.
+final resolvedUserLocationProvider = FutureProvider<UserLocation>((ref) async {
+  final service = ref.watch(locationServiceProvider);
+  final granted =
+      await service.hasPermission() || await service.requestPermission();
+  if (granted) {
+    final loc = await service.getCurrentLocation();
+    if (loc != null) {
+      ref.read(userLocationProvider.notifier).state = loc;
+      return loc;
+    }
+  }
+  return const UserLocation(
+    latitude: TransitConstants.defaultLatitude,
+    longitude: TransitConstants.defaultLongitude,
+  );
+});
+
+/// Stops (all operators) within `radiusKm` of a point, for the map's first load.
+final stopsAroundProvider = FutureProvider.family<List<Stop>,
+    ({double lat, double lon, double radiusKm})>((ref, area) {
+  final repo = ref.watch(transitRepositoryProvider);
+  // 1° latitude ≈ 111 km; widen longitude by cos(lat) for the bounding box.
+  final dLat = area.radiusKm / 111;
+  final dLon = area.radiusKm / (111 * math.cos(area.lat * math.pi / 180));
+  return repo
+      .getStopsInBounds(
+        minLat: area.lat - dLat,
+        maxLat: area.lat + dLat,
+        minLon: area.lon - dLon,
+        maxLon: area.lon + dLon,
+      )
+      .then(
+        (stops) => stops
+            .where(
+              (s) =>
+                  haversineKm(area.lat, area.lon, s.latitude!, s.longitude!) <=
+                  area.radiusKm,
+            )
+            .toList(),
+      );
+});
 
 /// Active selected stop (origin) for departure display
 final selectedTransitStopProvider = StateProvider<Stop?>((ref) => null);
@@ -102,12 +151,22 @@ final departuresForActiveStopProvider =
   );
 });
 
+/// Upcoming departures for any stop, independent of the home screen selection
+/// (map sheet, stop detail screen).
+final departuresForStopProvider =
+    FutureProvider.autoDispose.family<List<Departure>, Stop>((ref, stop) {
+  return ref.watch(transitRepositoryProvider).getDepartures(
+        stopId: stop.id,
+        operatorId: stop.operatorId,
+      );
+});
+
 /// Nearby transit stops within walking distance, centered on user GPS if allowed
 final nearbyStopsProvider = FutureProvider<List<Stop>>((ref) async {
   final repo = ref.watch(transitRepositoryProvider);
   final userLoc = ref.watch(userLocationProvider);
-  final lat = userLoc?.latitude ?? 43.2630;
-  final lon = userLoc?.longitude ?? -2.9347;
+  final lat = userLoc?.latitude ?? TransitConstants.defaultLatitude;
+  final lon = userLoc?.longitude ?? TransitConstants.defaultLongitude;
 
   return repo.getNearbyStops(
     latitude: lat,
@@ -116,10 +175,52 @@ final nearbyStopsProvider = FutureProvider<List<Stop>>((ref) async {
   );
 });
 
-/// Service alerts across Euskadi filtered by territory
+/// Service alerts across all of Euskadi.
 final serviceAlertsProvider =
     FutureProvider<List<ServiceAlert>>((ref) async {
   final repo = ref.watch(transitRepositoryProvider);
-  final territory = ref.watch(selectedTerritoryProvider);
-  return repo.getServiceAlerts(territory: territory);
+  return repo.getServiceAlerts();
+});
+
+/// An alert paired with its closest affected stop and that stop's distance
+/// (km) to the user; both null when no affected stop has coordinates.
+typedef RankedAlert = ({
+  ServiceAlert alert,
+  Stop? nearestStop,
+  double? distanceKm,
+});
+
+/// Alerts ranked by proximity: the closest affected stop of each alert is
+/// measured against the user's position (or Plaza Moyúa as fallback).
+final rankedServiceAlertsProvider =
+    FutureProvider<List<RankedAlert>>((ref) async {
+  final alerts = await ref.watch(serviceAlertsProvider.future);
+  final here = await ref.watch(resolvedUserLocationProvider.future);
+  final repo = ref.watch(transitRepositoryProvider);
+
+  final ranked = <RankedAlert>[];
+  for (final alert in alerts) {
+    double? best;
+    Stop? bestStop;
+    for (final stopId in alert.affectedStopIds) {
+      final stop = await repo.getStopById(stopId);
+      if (stop?.latitude == null || stop?.longitude == null) continue;
+      final d = haversineKm(
+        here.latitude,
+        here.longitude,
+        stop!.latitude!,
+        stop.longitude!,
+      );
+      if (best == null || d < best) {
+        best = d;
+        bestStop = stop;
+      }
+    }
+    ranked.add((alert: alert, nearestStop: bestStop, distanceKm: best));
+  }
+  ranked.sort(
+    (a, b) => (a.distanceKm ?? double.infinity)
+        .compareTo(b.distanceKm ?? double.infinity),
+  );
+  return ranked;
 });

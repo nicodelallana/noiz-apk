@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../providers/auth_providers.dart';
+import '../legal/legal_texts.dart';
 
 /// Animated onboarding shown when the user is not signed in.
 ///
@@ -504,6 +505,19 @@ class _SignInPage extends ConsumerWidget {
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.outline,
               fontSize: 11,
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Independence notice required by both stores.
+          Text(
+            LegalTexts.disclaimer,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+              fontSize: 10.5,
+              height: 1.35,
             ),
           ),
 

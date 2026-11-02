@@ -61,6 +61,7 @@ class ServiceAlert {
     required this.title,
     required this.description,
     this.activePeriod,
+    this.affectedStopIds = const [],
   });
 
   final String id;
@@ -71,6 +72,10 @@ class ServiceAlert {
   final String title;
   final String description;
   final String? activePeriod;
+
+  /// Stops informed by the alert (GTFS-RT `informed_entity.stop_id`), used
+  /// to rank alerts by distance to the user.
+  final List<String> affectedStopIds;
 }
 
 /// Unified Transit Repository for all operators and modes across Euskadi.
@@ -95,6 +100,16 @@ abstract class TransitRepository {
     required double longitude,
     double radiusKm = 1.5,
   });
+
+  /// Stations of every operator inside the visible map region.
+  Future<List<Stop>> getStopsInBounds({
+    required double minLat,
+    required double maxLat,
+    required double minLon,
+    required double maxLon,
+  });
+
+  Future<Stop?> getStopById(String stopId);
 
   Future<List<TransitItinerary>> planRoute({
     required String origin,

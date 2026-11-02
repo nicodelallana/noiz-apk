@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../domain/models/auth_models.dart';
 import '../../providers/auth_providers.dart';
+import '../legal/licenses_screen.dart';
 import 'auth_screen.dart';
 
 /// User profile and account management screen with mandatory account deletion compliance.
@@ -23,12 +25,21 @@ class ProfileSettingsScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Error al cargar perfil: $e')),
         data: (profile) {
           if (profile == null) {
-            return _UnauthenticatedView(
-              onLoginPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const AuthScreen()),
-                );
-              },
+            // Guest mode: the whole app works without an account.
+            return ListView(
+              padding: const EdgeInsets.only(bottom: 110),
+              children: [
+                _UnauthenticatedView(
+                  onLoginPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AuthScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const _LegalSection(),
+              ],
             );
           }
 
@@ -127,6 +138,10 @@ class _ProfileContent extends ConsumerWidget {
           ),
           onTap: () => _confirmAccountDeletion(context, ref),
         ),
+
+        const Divider(height: 32),
+        const _LegalSection(),
+        const SizedBox(height: 110),
       ],
     );
   }
@@ -177,6 +192,32 @@ class _ProfileContent extends ConsumerWidget {
   }
 }
 
+/// Data sources, licences and the independence disclaimer (store policy).
+class _LegalSection extends StatelessWidget {
+  const _LegalSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.gavel_rounded),
+            title: const Text('Fuentes de datos y licencias'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => context.push('/settings/licenses'),
+          ),
+          const SizedBox(height: 8),
+          const DisclaimerCard(),
+        ],
+      ),
+    );
+  }
+}
+
 class _UnauthenticatedView extends StatelessWidget {
   const _UnauthenticatedView({required this.onLoginPressed});
 
@@ -186,7 +227,7 @@ class _UnauthenticatedView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32.0),
+        padding: const EdgeInsets.fromLTRB(32, 40, 32, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

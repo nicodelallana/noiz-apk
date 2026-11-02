@@ -25,7 +25,7 @@ void main() {
       // Verify "Ajustes" is NOT present
       expect(find.text('Ajustes'), findsNothing);
       expect(find.text('Inicio'), findsOneWidget);
-      expect(find.text('Viajes'), findsOneWidget);
+      expect(find.text('Mapa'), findsOneWidget);
       expect(find.text('Alertas'), findsOneWidget);
     });
 

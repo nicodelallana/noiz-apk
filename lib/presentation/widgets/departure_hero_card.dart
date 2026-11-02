@@ -19,12 +19,16 @@ class DepartureHeroCard extends ConsumerWidget {
     required this.departure,
     required this.operator,
     required this.originName,
+    this.followingDeparture,
     this.onTap,
   });
 
   final Departure departure;
   final TransitOperator operator;
   final String originName;
+
+  /// The departure after this one, for "Siguiente: N min" on the lock screen.
+  final Departure? followingDeparture;
   final VoidCallback? onTap;
 
   @override
@@ -255,16 +259,20 @@ class DepartureHeroCard extends ConsumerWidget {
                         destination: departure.headsign,
                         currentStop: originName,
                         nextStop: departure.headsign,
-                        stopsRemaining: 4,
-                        progress: 0.25,
+                        // Waiting at the origin: no in-vehicle progress yet.
+                        stopsRemaining: 0,
+                        progress: 0,
                         arrivalTime: arrival,
                         status: isRealtime
                             ? LiveTripStatus.tracking
                             : LiveTripStatus.scheduled,
                         isRealtime: isRealtime,
                         delaySeconds: delaySeconds,
-                        instruction: 'Bájate en ${departure.headsign}',
                         updatedAt: DateTime.now(),
+                        operatorName: operator.name,
+                        platform: departure.platform,
+                        followingDepartureTime:
+                            followingDeparture?.scheduledTime,
                       );
 
                       final hasPerm = await ref

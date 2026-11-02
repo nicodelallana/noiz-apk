@@ -397,6 +397,29 @@ class AppDatabase {
     return rows.map(RawStopRecord.fromMap).toList();
   }
 
+  /// Stations of every operator inside a lat/lon bounding box (map viewport).
+  Future<List<RawStopRecord>> getStationsInBounds({
+    required double minLat,
+    required double maxLat,
+    required double minLon,
+    required double maxLon,
+    int limit = 300,
+  }) async {
+    await _ensureOpen();
+
+    const sql = '''
+      SELECT stop_id, operator_id, stop_name, stop_lat, stop_lon, zone_id, parent_station
+      FROM stops
+      WHERE stop_lat BETWEEN ? AND ?
+        AND stop_lon BETWEEN ? AND ?
+        AND (parent_station IS NULL OR parent_station = '')
+      LIMIT ?
+    ''';
+    final rows = await _executor
+        .runSelect(sql, [minLat, maxLat, minLon, maxLon, limit]);
+    return rows.map(RawStopRecord.fromMap).toList();
+  }
+
   /// Looks up a single station or platform stop by ID.
   Future<RawStopRecord?> getStopById(String stopId) async {
     await _ensureOpen();

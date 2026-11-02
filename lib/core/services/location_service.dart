@@ -31,7 +31,9 @@ class LocationServiceImpl implements LocationService {
       final granted =
           await _channel.invokeMethod<bool>('hasLocationPermission');
       return granted ?? false;
-    } on PlatformException {
+    } on Exception {
+      // PlatformException, or MissingPluginException where the native
+      // channel is not implemented yet (iOS).
       return false;
     }
   }
@@ -43,7 +45,9 @@ class LocationServiceImpl implements LocationService {
       final granted =
           await _channel.invokeMethod<bool>('requestLocationPermission');
       return granted ?? false;
-    } on PlatformException {
+    } on Exception {
+      // PlatformException, or MissingPluginException where the native
+      // channel is not implemented yet (iOS).
       return false;
     }
   }
@@ -63,7 +67,9 @@ class LocationServiceImpl implements LocationService {
         );
       }
       return null;
-    } on PlatformException {
+    } on Exception {
+      // PlatformException, or MissingPluginException where the native
+      // channel is not implemented yet (iOS).
       return null;
     }
   }

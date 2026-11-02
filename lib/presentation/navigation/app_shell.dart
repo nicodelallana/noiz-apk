@@ -10,7 +10,6 @@ import 'package:bizkaia_transit/core/theme/barik_icons.dart';
 import 'package:bizkaia_transit/domain/models/live_trip_models.dart';
 import 'package:bizkaia_transit/presentation/navigation/transport_mode_fab.dart';
 import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
-import 'package:bizkaia_transit/presentation/screens/simulator/live_activity_simulator_screen.dart';
 
 /// Main application shell with bottom navigation and central transport FAB.
 ///
@@ -38,7 +37,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     HapticFeedback.selectionClick();
     final path = switch (index) {
       0 => '/',
-      1 => '/saved-trips',
+      1 => '/map',
       2 => '/alerts',
       3 => '/settings',
       _ => '/',
@@ -88,7 +87,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              // Left side: Inicio + Viajes
+              // Left side: Inicio + Mapa
               _NavBarItem(
                 icon: Icons.explore_outlined,
                 selectedIcon: Icons.explore_rounded,
@@ -97,9 +96,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                 onTap: () => _onTabSelected(0),
               ),
               _NavBarItem(
-                icon: Icons.bookmark_border_rounded,
-                selectedIcon: Icons.bookmark_rounded,
-                label: 'Viajes',
+                icon: Icons.map_outlined,
+                selectedIcon: Icons.map_rounded,
+                label: 'Mapa',
                 isSelected: widget.currentIndex == 1,
                 onTap: () => _onTabSelected(1),
               ),
@@ -224,13 +223,7 @@ class _ActiveTripMiniBanner extends ConsumerWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const LiveActivitySimulatorScreen(),
-            ),
-          );
-        },
+        onTap: () => context.go('/'),
         borderRadius: BorderRadius.circular(18),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -282,7 +275,8 @@ class _ActiveTripMiniBanner extends ConsumerWidget {
                     Text(
                       trip.status == LiveTripStatus.ended
                           ? 'Viaje finalizado'
-                          : '${trip.minutesRemaining} min restantes · En directo',
+                          : '${trip.minutesRemaining} min · '
+                              '${trip.isRealtime ? 'En directo' : 'Según horario'}',
                       style: TextStyle(
                         color: trip.status == LiveTripStatus.ended
                             ? AppColors.realtimeGreen

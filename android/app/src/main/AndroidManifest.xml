@@ -72,7 +72,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Live transit journey tracking and arrival updates" />
+                android:value="Live public transit departure timer on lock screen requested by user" />
         </service>
 
     </application>

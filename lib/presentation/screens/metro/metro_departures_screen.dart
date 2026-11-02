@@ -2,16 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/services/location_service.dart';
+import 'package:flutter/foundation.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../core/utils/geo.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/barik_icons.dart';
 import '../../../domain/models/saved_trip_models.dart';
-import '../../../domain/models/transit_models.dart';
 import '../../navigation/transport_selector_sheet.dart';
 import '../../providers/transit_providers.dart';
-import '../../widgets/animations/arrival_pulse_indicator.dart';
 import '../../widgets/animations/empty_transit_view.dart';
 import '../../widgets/departure_hero_card.dart';
+import '../../widgets/departure_row.dart';
 import '../../widgets/map/transit_map_view.dart';
 import '../nearby/nearby_transit_screen.dart';
 import '../planner/route_planner_screen.dart';
@@ -47,30 +49,27 @@ class _MetroDeparturesScreenState
   }
 
   Future<void> _requestLocationAndDetectNearby() async {
-    final locService = ref.read(locationServiceProvider);
-    final granted = await locService.requestPermission();
-    if (granted && mounted) {
-      final loc = await locService.getCurrentLocation();
-      if (loc != null && mounted) {
-        ref.read(userLocationProvider.notifier).state = loc;
-        // Find nearest stop for active operator
-        final stops = await ref.read(stopsForActiveOperatorProvider.future);
-        if (stops.isNotEmpty && mounted) {
-          final nearest = stops.reduce((a, b) {
-            final aLat = a.latitude ?? 0.0;
-            final aLon = a.longitude ?? 0.0;
-            final bLat = b.latitude ?? 0.0;
-            final bLon = b.longitude ?? 0.0;
-            final da = (aLat - loc.latitude) * (aLat - loc.latitude) +
-                (aLon - loc.longitude) * (aLon - loc.longitude);
-            final db = (bLat - loc.latitude) * (bLat - loc.latitude) +
-                (bLon - loc.longitude) * (bLon - loc.longitude);
-            return da < db ? a : b;
-          });
-          ref.read(selectedTransitStopProvider.notifier).state = nearest;
-        }
-      }
-    }
+    final loc = await ref.read(resolvedUserLocationProvider.future);
+    // Only jump to the nearest stop on a real GPS fix, not on the fallback.
+    if (!mounted || ref.read(userLocationProvider) == null) return;
+    final stops = await ref.read(stopsForActiveOperatorProvider.future);
+    if (stops.isEmpty || !mounted) return;
+    final nearest = stops.reduce((a, b) {
+      final da = haversineKm(
+        loc.latitude,
+        loc.longitude,
+        a.latitude ?? 0,
+        a.longitude ?? 0,
+      );
+      final db = haversineKm(
+        loc.latitude,
+        loc.longitude,
+        b.latitude ?? 0,
+        b.longitude ?? 0,
+      );
+      return da < db ? a : b;
+    });
+    ref.read(selectedTransitStopProvider.notifier).state = nearest;
   }
 
   @override
@@ -174,6 +173,8 @@ class _MetroDeparturesScreenState
                       builder: (_) => const NearbyTransitScreen(),
                     ),
                   );
+                case 'saved':
+                  context.go('/saved-trips');
                 case 'simulator':
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -217,15 +218,14 @@ class _MetroDeparturesScreenState
                   ],
                 ),
               ),
-              const PopupMenuDivider(height: 1),
               const PopupMenuItem(
-                value: 'simulator',
+                value: 'saved',
                 child: Row(
                   children: [
-                    Icon(BarikIcons.broadcast, size: 20, color: AppColors.delayedAmber),
+                    Icon(Icons.bookmark_rounded, size: 20, color: AppColors.darkTextPrimary),
                     SizedBox(width: 12),
                     Text(
-                      'Simulador Live Activity',
+                      'Viajes guardados',
                       style: TextStyle(
                         color: AppColors.darkTextPrimary,
                         fontWeight: FontWeight.w600,
@@ -235,6 +235,27 @@ class _MetroDeparturesScreenState
                   ],
                 ),
               ),
+              // Developer tool: never shipped in release builds.
+              if (kDebugMode) ...[
+                const PopupMenuDivider(height: 1),
+                const PopupMenuItem(
+                  value: 'simulator',
+                  child: Row(
+                    children: [
+                      Icon(BarikIcons.broadcast, size: 20, color: AppColors.delayedAmber),
+                      SizedBox(width: 12),
+                      Text(
+                        'Simulador Live Activity (debug)',
+                        style: TextStyle(
+                          color: AppColors.darkTextPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(width: 6),
@@ -319,49 +340,29 @@ class _TransitScreenContent extends ConsumerWidget {
           ),
         ),
 
-        // ── Active Direction Filter Banner ──
+        // ── Active Direction Filter: subtle, dismissible ──
         if (destinationStop != null)
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: primaryColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: primaryColor.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.filter_list_rounded, size: 14, color: primaryColor),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Mostrando salidas de ${activeStop?.name ?? "origen"} hacia ${destinationStop.name}',
-                        style: TextStyle(
-                          color: primaryColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        ref.read(selectedDestinationStopProvider.notifier).state = null;
-                      },
-                      child: const Text(
-                        'Ver todas',
-                        style: TextStyle(
-                          color: AppColors.darkTextPrimary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-                  ],
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: InputChip(
+                  label: Text('Hacia ${destinationStop.name}'),
+                  labelStyle: TextStyle(
+                    color: primaryColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                  backgroundColor: primaryColor.withValues(alpha: 0.10),
+                  side: BorderSide(color: primaryColor.withValues(alpha: 0.3)),
+                  deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                  deleteIconColor: primaryColor,
+                  deleteButtonTooltipMessage: 'Quitar destino',
+                  onDeleted: () {
+                    HapticFeedback.lightImpact();
+                    ref.read(selectedDestinationStopProvider.notifier).state = null;
+                  },
                 ),
               ),
             ),
@@ -815,183 +816,37 @@ class _MultiOperatorDeparturesSliverList extends ConsumerWidget {
           );
         }
 
-        return SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (ctx, index) {
-                final departure = departures[index];
-                if (index == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: DepartureHeroCard(
-                      departure: departure,
-                      operator: activeOperator,
-                      originName: activeStop?.name ?? departure.stationName,
-                    ),
-                  );
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _MultiOperatorDepartureCard(
-                    departure: departure,
+        final rest = departures.skip(1).toList();
+        return SliverMainAxisGroup(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              sliver: SliverToBoxAdapter(
+                // The hero card animates; isolate its repaints from the list.
+                child: RepaintBoundary(
+                  child: DepartureHeroCard(
+                    departure: departures.first,
                     operator: activeOperator,
+                    originName: activeStop?.name ?? departures.first.stationName,
+                    followingDeparture: rest.isEmpty ? null : rest.first,
                   ),
-                );
-              },
-              childCount: departures.length,
+                ),
+              ),
             ),
-          ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverFixedExtentList.builder(
+                itemExtent: DepartureRow.extentOf(context),
+                itemCount: rest.length,
+                itemBuilder: (ctx, index) => DepartureRow(
+                  departure: rest[index],
+                  operator: activeOperator,
+                ),
+              ),
+            ),
+          ],
         );
       },
-    );
-  }
-}
-
-/// Departure card in Midnight dark theme.
-class _MultiOperatorDepartureCard extends StatelessWidget {
-  const _MultiOperatorDepartureCard({
-    required this.departure,
-    required this.operator,
-  });
-
-  final Departure departure;
-  final TransitOperator operator;
-
-  @override
-  Widget build(BuildContext context) {
-    final opColor = Color(operator.colorHex);
-    final isImminent = departure.minutesRemaining <= 3;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isImminent
-              ? AppColors.realtimeGreen.withValues(alpha: 0.45)
-              : AppColors.darkBorder,
-          width: isImminent ? 1.2 : 1.0,
-        ),
-      ),
-      child: Row(
-        children: [
-          // Line Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: opColor,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              departure.lineCode.isNotEmpty ? departure.lineCode : departure.line.id,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-                letterSpacing: -0.2,
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-
-          // Destination and Time
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  departure.headsign,
-                  style: const TextStyle(
-                    color: AppColors.darkTextPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    letterSpacing: -0.3,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.schedule_rounded,
-                      size: 13,
-                      color: AppColors.darkTextSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Salida programada: ${departure.scheduledTimeFormatted}',
-                      style: const TextStyle(
-                        color: AppColors.darkTextSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Minutes Remaining + Real-time indicator
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  if (isImminent) ...[
-                    const ArrivalPulseIndicator(size: 20),
-                    const SizedBox(width: 4),
-                  ],
-                  Text(
-                    '${departure.minutesRemaining} min',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      color: isImminent
-                          ? AppColors.realtimeGreen
-                          : AppColors.darkTextPrimary,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 3),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: departure.isRealtime
-                      ? AppColors.realtimeGreen.withValues(alpha: 0.12)
-                      : AppColors.darkSurfaceElevated,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: departure.isRealtime
-                        ? AppColors.realtimeGreen.withValues(alpha: 0.3)
-                        : Colors.transparent,
-                    width: 0.8,
-                  ),
-                ),
-                child: Text(
-                  departure.isRealtime ? 'En directo' : 'Según horario',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: departure.isRealtime
-                        ? AppColors.realtimeGreen
-                        : AppColors.darkTextSecondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

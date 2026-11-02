@@ -9,17 +9,28 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Build
+import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.bizkaia.transit.MainActivity
 import com.bizkaia.transit.R
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
- * Android Foreground Service for lock-screen live transit journey tracking.
+ * Foreground service behind the lock-screen "next departure" notification.
  *
- * Implements Android 14+ foreground service standards (with specialUse type),
- * public lock-screen visibility, high priority for lockscreen appearance, dynamic progress tracking,
- * and chronometer countdown.
+ * Android 14+ `specialUse` foreground service, public lock-screen visibility.
+ * Two layouts:
+ *  - Waiting at the stop (no progress yet): "Metro Bilbao: L1 Plentzia",
+ *    "Próxima salida en 3 min (14:32) • Siguiente: 8 min", "Moyua • Andén 1".
+ *  - On board (progress > 0, e.g. from the route planner): next stop and
+ *    stops remaining.
+ * The minutes are recomputed every 30 s and on "Actualizar", so the text
+ * never goes stale even if the app is killed.
  */
 class TransitLiveService : Service() {
 
@@ -30,6 +41,7 @@ class TransitLiveService : Service() {
 
         const val ACTION_START = "com.bizkaia.transit.action.START_LIVE_TRIP"
         const val ACTION_UPDATE = "com.bizkaia.transit.action.UPDATE_LIVE_TRIP"
+        const val ACTION_REFRESH = "com.bizkaia.transit.action.REFRESH_LIVE_TRIP"
         const val ACTION_STOP = "com.bizkaia.transit.action.STOP_LIVE_TRIP"
 
         const val EXTRA_LINE_NAME = "lineName"
@@ -44,6 +56,11 @@ class TransitLiveService : Service() {
         const val EXTRA_IS_REALTIME = "isRealtime"
         const val EXTRA_DELAY_SECONDS = "delaySeconds"
         const val EXTRA_INSTRUCTION = "instruction"
+        const val EXTRA_OPERATOR_NAME = "operatorName"
+        const val EXTRA_PLATFORM = "platform"
+        const val EXTRA_FOLLOWING_MS = "followingDepartureMs"
+
+        private const val REFRESH_INTERVAL_MS = 30_000L
 
         fun startOrUpdate(
             context: Context,
@@ -58,7 +75,10 @@ class TransitLiveService : Service() {
             status: String,
             isRealtime: Boolean,
             delaySeconds: Int,
-            instruction: String?
+            instruction: String?,
+            operatorName: String? = null,
+            platform: String? = null,
+            followingDepartureMs: Long = 0L
         ) {
             val intent = Intent(context, TransitLiveService::class.java).apply {
                 action = ACTION_UPDATE
@@ -74,6 +94,9 @@ class TransitLiveService : Service() {
                 putExtra(EXTRA_IS_REALTIME, isRealtime)
                 putExtra(EXTRA_DELAY_SECONDS, delaySeconds)
                 putExtra(EXTRA_INSTRUCTION, instruction)
+                putExtra(EXTRA_OPERATOR_NAME, operatorName)
+                putExtra(EXTRA_PLATFORM, platform)
+                putExtra(EXTRA_FOLLOWING_MS, followingDepartureMs)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -90,6 +113,15 @@ class TransitLiveService : Service() {
         }
     }
 
+    private val handler = Handler(Looper.getMainLooper())
+    private var lastExtras: Bundle? = null
+    private val periodicRefresh = object : Runnable {
+        override fun run() {
+            render()
+            handler.postDelayed(this, REFRESH_INTERVAL_MS)
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -97,52 +129,46 @@ class TransitLiveService : Service() {
         createNotificationChannel()
     }
 
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        super.onDestroy()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null || intent.action == ACTION_STOP) {
+            handler.removeCallbacksAndMessages(null)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
 
-        val lineName = intent.getStringExtra(EXTRA_LINE_NAME) ?: "Línea"
-        val lineColorHex = intent.getStringExtra(EXTRA_LINE_COLOR) ?: "#E2001A"
-        val destination = intent.getStringExtra(EXTRA_DESTINATION) ?: "Destino"
-        val currentStop = intent.getStringExtra(EXTRA_CURRENT_STOP) ?: ""
-        val nextStop = intent.getStringExtra(EXTRA_NEXT_STOP) ?: ""
-        val stopsRemaining = intent.getIntExtra(EXTRA_STOPS_REMAINING, 0)
-        val progress = intent.getDoubleExtra(EXTRA_PROGRESS, 0.0)
-        val arrivalTimeMs = intent.getLongExtra(EXTRA_ARRIVAL_TIME_MS, System.currentTimeMillis() + 600000L)
-        val status = intent.getStringExtra(EXTRA_STATUS) ?: "tracking"
-        val isRealtime = intent.getBooleanExtra(EXTRA_IS_REALTIME, false)
-        val delaySeconds = intent.getIntExtra(EXTRA_DELAY_SECONDS, 0)
-        val instruction = intent.getStringExtra(EXTRA_INSTRUCTION)
+        if (intent.action != ACTION_REFRESH) {
+            lastExtras = intent.extras
+        }
+        if (lastExtras == null) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
-        val notification = buildNotification(
-            lineName = lineName,
-            lineColorHex = lineColorHex,
-            destination = destination,
-            currentStop = currentStop,
-            nextStop = nextStop,
-            stopsRemaining = stopsRemaining,
-            progress = progress,
-            arrivalTimeMs = arrivalTimeMs,
-            status = status,
-            isRealtime = isRealtime,
-            delaySeconds = delaySeconds,
-            instruction = instruction
-        )
+        render()
+        handler.removeCallbacks(periodicRefresh)
+        handler.postDelayed(periodicRefresh, REFRESH_INTERVAL_MS)
 
-        startForeground(NOTIFICATION_ID, notification)
-
-        if (status == "ended") {
-            // Stop service gracefully after showing arrival
-            android.os.Handler(mainLooper).postDelayed({
+        if (lastExtras?.getString(EXTRA_STATUS) == "ended") {
+            handler.removeCallbacks(periodicRefresh)
+            handler.postDelayed({
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }, 8000L)
         }
 
-        return START_STICKY
+        // Not sticky: after a process kill there is no trip data to restore.
+        return START_NOT_STICKY
+    }
+
+    private fun render() {
+        val extras = lastExtras ?: return
+        startForeground(NOTIFICATION_ID, buildNotification(extras))
     }
 
     private fun createNotificationChannel() {
@@ -152,9 +178,10 @@ class TransitLiveService : Service() {
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Muestra el progreso de tu viaje en tiempo real en la pantalla de bloqueo"
+                description = "Muestra en la pantalla de bloqueo cuánto falta para tu próxima salida"
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 enableVibration(false)
+                setSound(null, null)
                 setShowBadge(true)
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -162,87 +189,113 @@ class TransitLiveService : Service() {
         }
     }
 
-    private fun buildNotification(
-        lineName: String,
-        lineColorHex: String,
-        destination: String,
-        currentStop: String,
-        nextStop: String,
-        stopsRemaining: Int,
-        progress: Double,
-        arrivalTimeMs: Long,
-        status: String,
-        isRealtime: Boolean,
-        delaySeconds: Int,
-        instruction: String?
-    ): Notification {
-        val tapIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val pendingTapIntent = PendingIntent.getActivity(
-            this,
-            0,
-            tapIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+    private fun minutesUntil(epochMs: Long): Long =
+        ((epochMs - System.currentTimeMillis()) / 60_000L).coerceAtLeast(0L)
 
-        val stopIntent = Intent(this, TransitLiveService::class.java).apply {
-            action = ACTION_STOP
-        }
-        val pendingStopIntent = PendingIntent.getService(
-            this,
-            1,
-            stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    private fun buildNotification(extras: Bundle): Notification {
+        val lineName = extras.getString(EXTRA_LINE_NAME) ?: "Línea"
+        val lineColorHex = extras.getString(EXTRA_LINE_COLOR) ?: "#E2001A"
+        val destination = extras.getString(EXTRA_DESTINATION) ?: "Destino"
+        val currentStop = extras.getString(EXTRA_CURRENT_STOP).orEmpty()
+        val nextStop = extras.getString(EXTRA_NEXT_STOP).orEmpty()
+        val stopsRemaining = extras.getInt(EXTRA_STOPS_REMAINING, 0)
+        val progress = extras.getDouble(EXTRA_PROGRESS, 0.0)
+        val departureMs = extras.getLong(
+            EXTRA_ARRIVAL_TIME_MS,
+            System.currentTimeMillis() + 600_000L
         )
+        val status = extras.getString(EXTRA_STATUS) ?: "scheduled"
+        val isRealtime = extras.getBoolean(EXTRA_IS_REALTIME, false)
+        val delaySeconds = extras.getInt(EXTRA_DELAY_SECONDS, 0)
+        val instruction = extras.getString(EXTRA_INSTRUCTION)
+        val operatorName = extras.getString(EXTRA_OPERATOR_NAME)
+        val platform = extras.getString(EXTRA_PLATFORM)
+        val followingMs = extras.getLong(EXTRA_FOLLOWING_MS, 0L)
 
         val parsedColor = try {
             Color.parseColor(lineColorHex)
-        } catch (_: Exception) {
+        } catch (_: IllegalArgumentException) {
             Color.parseColor("#E2001A")
         }
 
-        val statusLabel = when {
-            status == "arriving" -> "Llegando a parada"
-            status == "at_stop" -> "En parada"
-            status == "ended" -> "Has llegado a tu destino"
-            delaySeconds > 60 -> "+${delaySeconds / 60} min retraso"
-            isRealtime -> "En directo"
-            else -> "Según horario"
+        val isWaiting = progress <= 0.0 && status != "ended"
+        val clock = SimpleDateFormat("HH:mm", Locale.forLanguageTag("es-ES"))
+
+        val title = when {
+            status == "ended" -> "Has llegado a $destination"
+            operatorName != null -> "$operatorName: $lineName $destination"
+            else -> "$lineName $destination"
         }
 
-        val title = "$lineName hacia $destination · $statusLabel"
         val contentText = when {
-            status == "ended" -> "Viaje finalizado en $destination"
+            status == "ended" -> "Viaje finalizado"
+            isWaiting -> {
+                val mins = minutesUntil(departureMs)
+                val main = if (mins == 0L) {
+                    "Sale ahora (${clock.format(Date(departureMs))})"
+                } else {
+                    "Próxima salida en $mins min (${clock.format(Date(departureMs))})"
+                }
+                val delay = if (isRealtime && delaySeconds >= 60) " · +${delaySeconds / 60} min" else ""
+                val following = if (followingMs > System.currentTimeMillis()) {
+                    " • Siguiente: ${minutesUntil(followingMs)} min"
+                } else {
+                    ""
+                }
+                main + delay + following
+            }
             !instruction.isNullOrBlank() -> instruction
-            nextStop.isNotBlank() -> "Próxima parada: $nextStop ($stopsRemaining restantes)"
-            else -> "$stopsRemaining paradas para tu destino"
+            nextStop.isNotBlank() -> "Próxima parada: $nextStop · $stopsRemaining restantes"
+            else -> "$stopsRemaining paradas hasta tu destino"
         }
 
-        val progressPercent = (progress.coerceIn(0.0, 1.0) * 100).toInt()
+        val subText = listOfNotNull(
+            currentStop.takeIf { it.isNotBlank() },
+            platform?.takeIf { it.isNotBlank() }?.let { "Andén $it" },
+            if (!isRealtime && status != "ended") "Según horario" else null
+        ).joinToString(" • ")
+
+        val tapIntent = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val refreshIntent = PendingIntent.getService(
+            this,
+            2,
+            Intent(this, TransitLiveService::class.java).apply { action = ACTION_REFRESH },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val stopIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, TransitLiveService::class.java).apply { action = ACTION_STOP },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(contentText)
-            .setSubText("Noiz Live")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
+            .setSubText(subText.ifBlank { null })
             .setColor(parsedColor)
-            .setColorized(true)
-            .setContentIntent(pendingTapIntent)
+            .setContentIntent(tapIntent)
             .setOngoing(status != "ended")
             .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .setProgress(100, progressPercent, false)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Finalizar", pendingStopIntent)
+            .addAction(android.R.drawable.ic_popup_sync, "Actualizar", refreshIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Finalizar", stopIntent)
 
-        // Native chronometer countdown to target arrival time
-        if (status != "ended" && arrivalTimeMs > System.currentTimeMillis()) {
-            builder.setUsesChronometer(true)
-            builder.setChronometerCountDown(true)
-            builder.setWhen(arrivalTimeMs)
+        if (!isWaiting && status != "ended") {
+            builder.setProgress(100, (progress.coerceIn(0.0, 1.0) * 100).toInt(), false)
         }
 
         return builder.build()
