@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/theme/app_theme.dart';
-import 'transport_mode_fab.dart';
+import 'package:bizkaia_transit/core/services/live_trip_service.dart';
+import 'package:bizkaia_transit/core/theme/app_colors.dart';
+import 'package:bizkaia_transit/core/theme/app_theme.dart';
+import 'package:bizkaia_transit/core/theme/barik_icons.dart';
+import 'package:bizkaia_transit/domain/models/live_trip_models.dart';
+import 'package:bizkaia_transit/presentation/navigation/transport_mode_fab.dart';
+import 'package:bizkaia_transit/presentation/screens/simulator/live_activity_simulator_screen.dart';
 
 /// Main application shell with bottom navigation and central transport FAB.
 ///
@@ -43,13 +48,25 @@ class _AppShellState extends ConsumerState<AppShell> {
     final transportMode = ref.watch(transportModeProvider);
     final isBus = transportMode == TransportMode.bus;
     final activeTheme = AppTheme.themeFor(isBus: isBus);
+    final activeTrip = ref.watch(activeLiveTripProvider);
 
     return AnimatedTheme(
       data: activeTheme,
       duration: const Duration(milliseconds: 350),
       curve: Curves.easeInOutCubic,
       child: Scaffold(
-        body: widget.child,
+        body: Stack(
+          children: [
+            Positioned.fill(child: widget.child),
+            if (activeTrip != null)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 84,
+                child: _ActiveTripMiniBanner(trip: activeTrip),
+              ),
+          ],
+        ),
         extendBody: true,
 
         // ── Central Transport Mode FAB ─────────────────────────────────────
@@ -179,6 +196,110 @@ class _NavBarItem extends StatelessWidget {
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Persistent in-app banner displayed whenever a Live Activity trip is tracking.
+class _ActiveTripMiniBanner extends ConsumerWidget {
+  const _ActiveTripMiniBanner({required this.trip});
+
+  final LiveTripState trip;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final parsedColor = Color(
+      int.tryParse(trip.lineColor.replaceAll('#', '0xFF')) ?? 0xFFE2001A,
+    );
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const LiveActivitySimulatorScreen(),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.darkSurface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: parsedColor.withValues(alpha: 0.6)),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black45,
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: parsedColor,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  trip.lineName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Hacia ${trip.destination}',
+                      style: const TextStyle(
+                        color: AppColors.darkTextPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      trip.status == LiveTripStatus.ended
+                          ? 'Viaje finalizado'
+                          : '${trip.minutesRemaining} min restantes · En directo',
+                      style: TextStyle(
+                        color: trip.status == LiveTripStatus.ended
+                            ? AppColors.realtimeGreen
+                            : AppColors.darkTextSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(
+                  BarikIcons.stopCircle,
+                  color: AppColors.disruptedRed,
+                  size: 20,
+                ),
+                tooltip: 'Detener seguimiento',
+                onPressed: () {
+                  ref.read(activeLiveTripProvider.notifier).endTrip();
+                },
               ),
             ],
           ),

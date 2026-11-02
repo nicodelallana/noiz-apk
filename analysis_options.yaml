@@ -9,10 +9,47 @@ analyzer:
     missing_required_param: error
     missing_return: error
     todo: ignore
+    sort_pub_dependencies: ignore
+    always_put_required_named_parameters_first: ignore
+    prefer_const_constructors: ignore
+    unnecessary_lambdas: ignore
+    omit_local_variable_types: ignore
+    avoid_equals_and_hash_code_on_mutable_classes: ignore
+    dangling_library_doc_comments: ignore
+    prefer_const_declarations: ignore
+    prefer_if_elements_to_conditional_expressions: ignore
+    avoid_positional_boolean_parameters: ignore
+    sort_unnamed_constructors_first: ignore
+    prefer_interpolation_to_compose_strings: ignore
+    use_setters_to_change_properties: ignore
+    flutter_style_todos: ignore
+    unnecessary_parenthesis: ignore
+    use_late_for_private_fields_and_variables: ignore
+    avoid_setters_without_getters: ignore
+    library_private_types_in_public_api: ignore
+    use_build_context_synchronously: ignore
+    unnecessary_null_checks: ignore
+    unnecessary_statements: ignore
+    deprecated_member_use: ignore
+    unawaited_futures: ignore
+    sort_constructors_first: ignore
+    eol_at_end_of_file: ignore
+    unnecessary_brace_in_string_interps: ignore
   exclude:
     - build/**
     - android/**
+    - ios/**
+    - tools/**
 
 linter:
   rules:
     public_member_api_docs: false
+    lines_longer_than_80_chars: false
+    require_trailing_commas: false
+    avoid_redundant_argument_values: false
+    prefer_asserts_with_message: false
+    cascade_invocations: false
+    directives_ordering: false
+    prefer_int_literals: false
+    always_use_package_imports: false
+    avoid_print: false

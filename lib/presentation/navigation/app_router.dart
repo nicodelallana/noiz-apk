@@ -1,13 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../presentation/providers/auth_providers.dart';
-import '../navigation/app_shell.dart';
-import '../screens/alerts/alerts_placeholder_screen.dart';
-import '../screens/auth/profile_settings_screen.dart';
-import '../screens/metro/metro_departures_screen.dart';
-import '../screens/onboarding/onboarding_screen.dart';
-import '../screens/saved_trips/saved_trips_screen.dart';
+import 'package:bizkaia_transit/presentation/navigation/app_shell.dart';
+import 'package:bizkaia_transit/presentation/providers/auth_providers.dart';
+import 'package:bizkaia_transit/presentation/screens/alerts/service_alerts_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/auth/profile_settings_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/metro/metro_departures_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/nearby/nearby_transit_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/onboarding/onboarding_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/planner/route_planner_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/saved_trips/saved_trips_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/simulator/live_activity_simulator_screen.dart';
 
 /// Application router using GoRouter with auth-based redirects.
 ///
@@ -82,7 +85,25 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/alerts',
             pageBuilder: (context, state) => const NoTransitionPage(
-              child: AlertsPlaceholderScreen(),
+              child: ServiceAlertsScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/nearby',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: NearbyTransitScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/routes',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: RoutePlannerScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/simulator',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: LiveActivitySimulatorScreen(),
             ),
           ),
           GoRoute(

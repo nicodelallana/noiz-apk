@@ -3,16 +3,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/barik_icons.dart';
+import '../../../domain/models/saved_trip_models.dart';
 import '../../../domain/models/transit_models.dart';
 import '../../navigation/transport_mode_fab.dart';
 import '../../providers/bus_providers.dart';
 import '../../providers/metro_providers.dart';
+import '../../providers/transit_providers.dart';
 import '../../widgets/animations/arrival_pulse_indicator.dart';
 import '../../widgets/animations/empty_transit_view.dart';
+import '../../widgets/departure_hero_card.dart';
 import '../../widgets/map/transit_map_view.dart';
 import '../auth/profile_settings_screen.dart';
+import '../nearby/nearby_transit_screen.dart';
+import '../planner/route_planner_screen.dart';
 import '../saved_trips/save_trip_dialog.dart';
 import '../saved_trips/saved_trips_screen.dart';
+import '../simulator/live_activity_simulator_screen.dart';
 
 /// Next departures screen for Bizkaia Transit (Noiz).
 ///
@@ -81,6 +88,39 @@ class MetroDeparturesScreen extends ConsumerWidget {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(BarikIcons.broadcast),
+            tooltip: 'Simulador Live Activity',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const LiveActivitySimulatorScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(BarikIcons.radar),
+            tooltip: 'Cerca de ti',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NearbyTransitScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(BarikIcons.path),
+            tooltip: 'Rutas paso a paso',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const RoutePlannerScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.bookmarks_rounded),
             tooltip: 'Mis viajes guardados',
@@ -209,6 +249,11 @@ class _TransitScreenContent extends ConsumerWidget {
 
     return CustomScrollView(
       slivers: [
+        // ── 0. Territory & Multi-Operator Selector Bar ───────────────────
+        const SliverToBoxAdapter(
+          child: _TerritoryAndOperatorChipsHeader(),
+        ),
+
         // ── 1. MapLibre GL Vector Map View ──────────────────────────────────
         SliverToBoxAdapter(
           child: TransitMapView(
@@ -297,6 +342,107 @@ class _TransitScreenContent extends ConsumerWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => const _BusStopSearchModal(),
+    );
+  }
+}
+
+/// Territory and Operator selector bar covering all of Euskadi.
+class _TerritoryAndOperatorChipsHeader extends ConsumerWidget {
+  const _TerritoryAndOperatorChipsHeader();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final territory = ref.watch(selectedTerritoryProvider);
+    final activeOperator = ref.watch(selectedOperatorProvider);
+    final operators = ref.watch(operatorListProvider);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Territory Chips Row
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: TransitTerritory.values.map((t) {
+                final isSel = t == territory;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    selected: isSel,
+                    label: Text(t.name),
+                    labelStyle: TextStyle(
+                      color: isSel ? Colors.white : AppColors.darkTextSecondary,
+                      fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                    backgroundColor: AppColors.darkSurfaceElevated,
+                    selectedColor: Color(activeOperator.colorHex),
+                    side: BorderSide(
+                      color: isSel
+                          ? Color(activeOperator.colorHex)
+                          : AppColors.darkBorder,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    onSelected: (_) {
+                      ref.read(selectedTerritoryProvider.notifier).state = t;
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Operator Chips Row with Brand Colors
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: operators.map((op) {
+                final isSel = op == activeOperator;
+                final opColor = Color(op.colorHex);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ActionChip(
+                    label: Text(op.name),
+                    avatar: CircleAvatar(
+                      backgroundColor: opColor,
+                      radius: 5,
+                    ),
+                    labelStyle: TextStyle(
+                      color: isSel ? Colors.white : AppColors.darkTextPrimary,
+                      fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                    backgroundColor:
+                        isSel ? opColor : AppColors.darkSurfaceElevated,
+                    side: BorderSide(
+                      color: isSel ? opColor : AppColors.darkBorder,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    onPressed: () {
+                      ref.read(selectedOperatorProvider.notifier).state = op;
+                      if (op.mode == TransitModeType.bus) {
+                        ref.read(transportModeProvider.notifier).state =
+                            TransportMode.bus;
+                      } else if (op.mode == TransitModeType.metro ||
+                          op.mode == TransitModeType.train) {
+                        ref.read(transportModeProvider.notifier).state =
+                            TransportMode.metro;
+                      }
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -665,6 +811,17 @@ class _MetroDeparturesSliverList extends ConsumerWidget {
             delegate: SliverChildBuilderDelegate(
               (ctx, index) {
                 final departure = departures[index];
+                final station = ref.watch(selectedMetroStationProvider);
+                if (index == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: DepartureHeroCard(
+                      departure: departure,
+                      operator: TransitOperator.metro,
+                      originName: station?.name ?? 'San Mamés',
+                    ),
+                  );
+                }
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _MetroDepartureCard(departure: departure),
@@ -835,6 +992,34 @@ class _BusDeparturesSliverList extends ConsumerWidget {
             delegate: SliverChildBuilderDelegate(
               (ctx, index) {
                 final departure = departures[index];
+                final busStop = ref.watch(selectedBusStopProvider);
+                if (index == 0) {
+                  final now = DateTime.now();
+                  final departureModel = Departure(
+                    tripId: departure.routeNumber,
+                    stationId: busStop.id,
+                    stationName: busStop.name,
+                    headsign: departure.destination,
+                    line: MetroLine.l1,
+                    lineCode: departure.routeNumber,
+                    scheduledTime:
+                        now.add(Duration(minutes: departure.minutesRemaining)),
+                    scheduledTimeFormatted: departure.scheduledTimeFormatted,
+                    minutesRemaining: departure.minutesRemaining,
+                    isRealtime: departure.isRealtime,
+                    delaySeconds: 0,
+                    status: departure.isRealtime ? 'tracking' : 'scheduled',
+                  );
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: DepartureHeroCard(
+                      departure: departureModel,
+                      operator: TransitOperator.bizkaibus,
+                      originName: busStop.name,
+                    ),
+                  );
+                }
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _BusDepartureCard(departure: departure),
