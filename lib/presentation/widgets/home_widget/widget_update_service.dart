@@ -24,6 +24,7 @@ class WidgetUpdateService {
   /// Precomputes upcoming 12-hour departures for all trips with widget_enabled = true
   /// and notifies the native widget provider to refresh.
   Future<void> update() async {
+    if (kIsWeb) return;
     try {
       final trips = await _savedTripsRepository.getSavedTrips();
       final enabledTrips = trips.where((t) => t.widgetEnabled).toList();

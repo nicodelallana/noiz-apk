@@ -80,12 +80,16 @@ class TransitRepositoryImpl implements TransitRepository {
       );
     }
 
+    // The query includes the current minute (minTime is HH:MM:00), so compare
+    // at minute resolution: 23:05 at 23:05:30 leaves now, not tomorrow.
+    final thisMinute =
+        DateTime(time.year, time.month, time.day, time.hour, time.minute);
     return rawDepartures.map((raw) {
       final parts = raw.departureTime.split(':');
       final hour = int.tryParse(parts[0]) ?? time.hour;
       final minute = int.tryParse(parts[1]) ?? time.minute;
       var sched = DateTime(time.year, time.month, time.day, hour % 24, minute);
-      if (sched.isBefore(time)) {
+      if (sched.isBefore(thisMinute)) {
         sched = sched.add(const Duration(days: 1));
       }
       final remaining = sched.difference(time).inMinutes;

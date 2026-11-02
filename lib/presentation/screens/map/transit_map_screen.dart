@@ -272,6 +272,8 @@ class _StopSheet extends ConsumerWidget {
   static Future<void> show(BuildContext context, Stop stop) {
     return showModalBottomSheet<void>(
       context: context,
+      // Above the shell, so the tab bar and centre FAB don't cover the list.
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
@@ -43,7 +44,8 @@ class _BizkaiaTransitAppState extends ConsumerState<BizkaiaTransitApp> {
   @override
   void initState() {
     super.initState();
-    _initHomeWidgetInteractions();
+    // Home-screen widgets only exist on Android/iOS.
+    if (!kIsWeb) _initHomeWidgetInteractions();
 
     _lifecycleListener = AppLifecycleListener(
       onPause: () {

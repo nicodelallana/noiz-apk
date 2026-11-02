@@ -16,6 +16,15 @@ Cambios hechos sobre `AI_TRANSIT_REDESIGN_AND_DATA_SPEC.md`, parte I y lo de And
 
 `flutter analyze`: 0 avisos. `flutter test`: 32/32. Hay un test actualizado: la pestaña se llama ahora "Mapa", como pide el spec.
 
+## Versión web (vista previa)
+
+La app ya compila para navegador: `flutter build web --release` con los mismos `--dart-define` de `env/dev.json`.
+
+- **Base de datos.** En web, `transit.sqlite` se carga en memoria con SQLite en WebAssembly (`lib/data/local/connection/open_web.dart`). `web/sqlite3.wasm` tiene que ser de la misma versión que el paquete `sqlite3` (ahora la 2.9.4). Los viajes guardados se pierden al cerrar la pestaña.
+- **Ubicación.** Se pide con la geolocalización del navegador; si se deniega, se usa Moyúa.
+- **Lo que no existe en web.** La notificación de bloqueo y el widget de inicio no existen en el navegador. Google Sign-In solo se inicializa al usarlo: en web necesita un client ID que todavía no está creado.
+- **Fallos corregidos de paso (también afectan a Android).** Una salida del minuto en curso aparecía como "1439 min". La hoja de parada del mapa quedaba tapada por la barra inferior.
+
 ## Honestidad de datos (importante)
 
 - **Horarios sintéticos.** `tools/build_gtfs/build_transit_db.py` no descarga GTFS: las paradas están puestas a mano y los horarios los genera el propio script ("Synthesizing realistic schedules"). Antes de publicar hay que cargar los GTFS reales.

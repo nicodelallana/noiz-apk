@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,11 +15,15 @@ class AuthRepositoryImpl implements AuthRepository {
     SupabaseClient? supabaseClient,
     GoogleSignIn? googleSignIn,
   })  : _supabase = supabaseClient ?? _tryGetSupabaseClient(),
-        _googleSignIn =
-            googleSignIn ?? GoogleSignIn(scopes: ['email', 'profile']);
+        _injectedGoogleSignIn = googleSignIn;
 
   final SupabaseClient? _supabase;
-  final GoogleSignIn _googleSignIn;
+  final GoogleSignIn? _injectedGoogleSignIn;
+
+  // Created on first use: on the web the constructor initialises Google
+  // Identity Services straight away, which throws without a web client ID.
+  late final GoogleSignIn _googleSignIn =
+      _injectedGoogleSignIn ?? GoogleSignIn(scopes: ['email', 'profile']);
 
   static SupabaseClient? _tryGetSupabaseClient() {
     try {
@@ -166,7 +171,9 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> signOut() async {
     final client = _supabase;
     await Future.wait([
-      _googleSignIn.signOut(),
+      // On the web the session is Supabase's; don't create the Google client
+      // (and trigger its initialisation) just to sign out.
+      if (!kIsWeb || _injectedGoogleSignIn != null) _googleSignIn.signOut(),
       if (client != null) client.auth.signOut(),
     ]);
   }
