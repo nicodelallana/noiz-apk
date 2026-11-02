@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../domain/models/auth_models.dart';
 import '../../providers/auth_providers.dart';
+import '../../widgets/glass/content.dart';
 import '../legal/licenses_screen.dart';
 import 'auth_screen.dart';
+
+final _text = AppTypography.textTheme();
 
 /// User profile and account management screen with mandatory account deletion compliance.
 class ProfileSettingsScreen extends ConsumerWidget {
@@ -16,35 +21,69 @@ class ProfileSettingsScreen extends ConsumerWidget {
     final profileAsync = ref.watch(currentUserProfileProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mi Cuenta'),
-      ),
-      body: profileAsync.when(
-        loading: () =>
-            const Center(child: CircularProgressIndicator.adaptive()),
-        error: (e, _) => Center(child: Text('Error al cargar perfil: $e')),
-        data: (profile) {
-          if (profile == null) {
-            // Guest mode: the whole app works without an account.
-            return ListView(
-              padding: const EdgeInsets.only(bottom: 110),
-              children: [
-                _UnauthenticatedView(
-                  onLoginPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const AuthScreen(),
-                      ),
-                    );
-                  },
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: profileAsync.when(
+          loading: () => const Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _LargeTitle('Cuenta'),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 120),
+                  child: Center(child: CircularProgressIndicator.adaptive()),
                 ),
-                const _LegalSection(),
-              ],
-            );
-          }
+              ),
+            ],
+          ),
+          error: (e, _) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _LargeTitle('Cuenta'),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
+                  child: Center(
+                    child: Text(
+                      'Error al cargar perfil: $e',
+                      textAlign: TextAlign.center,
+                      style: _text.bodyMedium!.copyWith(
+                        color: AppColors.darkTextSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          data: (profile) {
+            if (profile == null) {
+              // Guest mode: the whole app works without an account.
+              return ListView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                padding: const EdgeInsets.only(bottom: 120),
+                children: [
+                  const _LargeTitle('Cuenta'),
+                  _UnauthenticatedView(
+                    onLoginPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AuthScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const _LegalSection(),
+                ],
+              );
+            }
 
-          return _ProfileContent(profile: profile);
-        },
+            return _ProfileContent(profile: profile);
+          },
+        ),
       ),
     );
   }
@@ -57,91 +96,106 @@ class _ProfileContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final initial = profile.displayName.isNotEmpty
+        ? profile.displayName[0].toUpperCase()
+        : '?';
 
     return ListView(
-      padding: const EdgeInsets.all(16.0),
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      padding: const EdgeInsets.only(bottom: 120),
       children: [
-        // 1. User Header Card
-        Card(
-          elevation: 0,
-          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 32,
-                  backgroundImage: profile.avatarUrl != null
-                      ? NetworkImage(profile.avatarUrl!)
-                      : null,
-                  child: profile.avatarUrl == null
-                      ? Text(
-                          profile.displayName.isNotEmpty
-                              ? profile.displayName[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        profile.displayName,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (profile.email != null) ...[
-                        const SizedBox(height: 4),
+        const _LargeTitle('Cuenta'),
+
+        // 1. User header
+        _InsetGroup(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: AppColors.darkSurfaceElevated,
+                    foregroundColor: AppColors.darkTextPrimary,
+                    backgroundImage: profile.avatarUrl != null
+                        ? NetworkImage(profile.avatarUrl!)
+                        : null,
+                    child: profile.avatarUrl == null
+                        ? Text(
+                            initial,
+                            style: _text.titleLarge!.copyWith(
+                              color: AppColors.darkTextPrimary,
+                            ),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          profile.email!,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.outline,
+                          profile.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _text.titleLarge!.copyWith(
+                            color: AppColors.darkTextPrimary,
                           ),
                         ),
+                        if (profile.email != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            profile.email!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: _text.bodyMedium!.copyWith(
+                              color: AppColors.darkTextSecondary,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ),
 
-        const SizedBox(height: 24),
-
-        // 2. Account Actions
-        ListTile(
-          leading: const Icon(Icons.logout),
-          title: const Text('Cerrar sesión'),
-          onTap: () async {
-            await ref.read(authControllerProvider.notifier).signOut();
-          },
+        // 2. Account actions
+        _InsetGroup(
+          children: [
+            _SettingsRow(
+              icon: Icons.logout_rounded,
+              tileColor: const Color(0xFF636366),
+              title: 'Cerrar sesión',
+              showChevron: false,
+              onTap: () async {
+                await ref.read(authControllerProvider.notifier).signOut();
+              },
+            ),
+          ],
         ),
 
-        const Divider(height: 32),
-
-        // 3. Danger Zone: Mandatory Account Deletion (Apple 5.1.1(v) & Google Play)
-        ListTile(
-          leading: const Icon(Icons.delete_forever, color: Colors.red),
-          title: const Text(
-            'Eliminar cuenta y datos',
-            style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
-          ),
-          subtitle: const Text(
-            'Borra permanentemente tu perfil, trayectos guardados y ajustes.',
-          ),
-          onTap: () => _confirmAccountDeletion(context, ref),
+        // 3. Danger zone: mandatory account deletion (Apple 5.1.1(v) & Google Play)
+        _InsetGroup(
+          footer:
+              'Borra permanentemente tu perfil, trayectos guardados y ajustes.',
+          children: [
+            _SettingsRow(
+              icon: Icons.delete_forever_rounded,
+              tileColor: AppColors.disruptedRed,
+              title: 'Eliminar cuenta y datos',
+              titleColor: AppColors.disruptedRed,
+              showChevron: false,
+              onTap: () => _confirmAccountDeletion(context, ref),
+            ),
+          ],
         ),
 
-        const Divider(height: 32),
         const _LegalSection(),
-        const SizedBox(height: 110),
       ],
     );
   }
@@ -151,6 +205,10 @@ class _ProfileContent extends ConsumerWidget {
       context: context,
       builder: (dialogCtx) {
         return AlertDialog(
+          backgroundColor: AppColors.darkSurfaceElevated,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(28),
+          ),
           title: const Text('¿Eliminar tu cuenta?'),
           content: const Text(
             'Esta acción es definitiva e irreversible. Todos tus datos personales, '
@@ -159,10 +217,16 @@ class _ProfileContent extends ConsumerWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('Cancelar'),
+              child: const Text(
+                'Cancelar',
+                style: TextStyle(color: AppColors.accent),
+              ),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.disruptedRed,
+                shape: const StadiumBorder(),
+              ),
               onPressed: () async {
                 Navigator.of(dialogCtx).pop();
                 try {
@@ -198,22 +262,24 @@ class _LegalSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.gavel_rounded),
-            title: const Text('Fuentes de datos y licencias'),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => context.push('/settings/licenses'),
-          ),
-          const SizedBox(height: 8),
-          const DisclaimerCard(),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InsetGroup(
+          children: [
+            _SettingsRow(
+              icon: Icons.gavel_rounded,
+              tileColor: const Color(0xFF5E5CE6),
+              title: 'Fuentes de datos y licencias',
+              onTap: () => context.push('/settings/licenses'),
+            ),
+          ],
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
+          child: DisclaimerCard(),
+        ),
+      ],
     );
   }
 }
@@ -225,32 +291,217 @@ class _UnauthenticatedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(32, 40, 32, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.account_circle_outlined,
-                size: 72, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text(
-              'No has iniciado sesión',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    return _InsetGroup(
+      footer: 'Toda la app funciona sin cuenta.',
+      children: [
+        Semantics(
+          button: true,
+          label: 'Iniciar sesión. No has iniciado sesión.',
+          excludeSemantics: true,
+          onTap: onLoginPressed,
+          child: InkWell(
+            onTap: onLoginPressed,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: const ShapeDecoration(
+                      shape: CircleBorder(),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xFF8E8E93), Color(0xFF636366)],
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.person_rounded,
+                      size: 34,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Iniciar sesión',
+                          style: _text.titleMedium!.copyWith(
+                            color: AppColors.accent,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'No has iniciado sesión. Entra con Google o Apple '
+                          'para sincronizar tus viajes.',
+                          style: _text.bodySmall!.copyWith(
+                            color: AppColors.darkTextSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const _Chevron(),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Inicia sesión con tu cuenta de Google o Apple para sincronizar tus viajes.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: onLoginPressed,
-              child: const Text('Iniciar sesión'),
-            ),
-          ],
+          ),
         ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// iOS inset-grouped list pieces
+// ---------------------------------------------------------------------------
+
+/// iOS large title, left aligned.
+class _LargeTitle extends StatelessWidget {
+  const _LargeTitle(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+      child: Semantics(
+        header: true,
+        child: Text(
+          title,
+          style: _text.displayMedium!.copyWith(
+            color: AppColors.darkTextPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A solid card holding rows separated by inset hairlines, with an optional
+/// footnote underneath.
+class _InsetGroup extends StatelessWidget {
+  const _InsetGroup({required this.children, this.footer});
+
+  final List<Widget> children;
+  final String? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SurfaceCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < children.length; i++) ...[
+                  if (i > 0)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 60),
+                      child: Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: AppColors.darkBorder,
+                      ),
+                    ),
+                  children[i],
+                ],
+              ],
+            ),
+          ),
+          if (footer != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(
+                footer!,
+                style: _text.bodySmall!.copyWith(
+                  color: AppColors.darkTextSecondary,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 52 px row: coloured icon tile, title, chevron.
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({
+    required this.icon,
+    required this.tileColor,
+    required this.title,
+    required this.onTap,
+    this.titleColor = AppColors.darkTextPrimary,
+    this.showChevron = true,
+  });
+
+  final IconData icon;
+  final Color tileColor;
+  final String title;
+  final Color titleColor;
+  final bool showChevron;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 52),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: ShapeDecoration(
+                    color: tileColor,
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Icon(icon, size: 18, color: Colors.white),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: _text.bodyLarge!.copyWith(color: titleColor),
+                  ),
+                ),
+                if (showChevron) const _Chevron(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Chevron extends StatelessWidget {
+  const _Chevron();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ExcludeSemantics(
+      child: Icon(
+        Icons.chevron_right_rounded,
+        size: 22,
+        color: AppColors.darkTextTertiary,
       ),
     );
   }

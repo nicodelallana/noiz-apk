@@ -1,20 +1,24 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' hide UserLocation;
 
+import 'package:bizkaia_transit/core/services/live_trip_service.dart';
 import 'package:bizkaia_transit/core/services/location_service.dart';
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
+import 'package:bizkaia_transit/core/theme/app_typography.dart';
 import 'package:bizkaia_transit/core/utils/geo.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
 import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
 import 'package:bizkaia_transit/presentation/screens/stop/stop_departures_screen.dart';
-import 'package:bizkaia_transit/presentation/widgets/departure_row.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
 
 /// Full-screen map tab: centres on the user, shows every stop around them
 /// (all operators) and reloads stops for whatever area the camera rests on.
@@ -27,16 +31,32 @@ class TransitMapScreen extends ConsumerStatefulWidget {
 }
 
 class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
-  static const _styleUrl = 'https://tiles.openfreemap.org/styles/liberty';
+  /// OpenFreeMap's dark basemap: near-black like the app canvas, so the
+  /// operator-coloured stops are what stands out.
+  static const _styleUrl = 'https://tiles.openfreemap.org/styles/dark';
   static const _walkingZoom = 15.5;
   static const _initialRadiusKm = 0.6;
   static const _sourceId = 'stops';
   static const _layerId = 'stops-circles';
+  static const _haloLayerId = 'stops-selected-halo';
+
+  /// Clearance for the floating controls: the shell's tab bar ends at
+  /// safe area + 74; while a departure is followed its banner sits above it.
+  static const _controlsClearance = 90.0;
+  static const _controlsClearanceFollowing = 162.0;
+
+  /// Data-driven test for the stop whose sheet is open.
+  static const _isSelected = [
+    Expressions.equal,
+    [Expressions.get, 'selected'],
+    true,
+  ];
 
   MapLibreMapController? _controller;
   bool _styleReady = false;
   Timer? _debounce;
   Map<String, Stop> _visibleStops = const {};
+  String? _selectedStopId;
 
   @override
   void dispose() {
@@ -57,6 +77,34 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
     if (controller == null) return;
 
     await controller.addGeoJsonSource(_sourceId, _featureCollection(const []));
+    // Soft glow under the selected stop; drawn first so the dots sit on top,
+    // and not tappable so taps keep landing on the dots layer.
+    await controller.addCircleLayer(
+      _sourceId,
+      _haloLayerId,
+      const CircleLayerProperties(
+        circleColor: [Expressions.get, 'color'],
+        circleOpacity: 0.32,
+        circleBlur: 0.45,
+        circleRadius: [
+          Expressions.interpolate,
+          ['linear'],
+          [Expressions.zoom],
+          11,
+          12,
+          14,
+          16,
+          16,
+          20,
+          18,
+          24,
+        ],
+      ),
+      filter: _isSelected,
+      enableInteraction: false,
+    );
+    // Operator-coloured dots with a dark rim; the selected one grows, takes
+    // a white rim and draws above its neighbours.
     await controller.addCircleLayer(
       _sourceId,
       _layerId,
@@ -66,13 +114,23 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
           Expressions.interpolate,
           ['linear'],
           [Expressions.zoom],
-          12,
-          4,
+          11,
+          [Expressions.caseExpression, _isSelected, 6, 2.5],
+          14,
+          [Expressions.caseExpression, _isSelected, 8, 4],
           16,
-          8,
+          [Expressions.caseExpression, _isSelected, 10, 6],
+          18,
+          [Expressions.caseExpression, _isSelected, 12, 8],
         ],
-        circleStrokeColor: '#FFFFFF',
-        circleStrokeWidth: 2,
+        circleStrokeColor: [
+          Expressions.caseExpression,
+          _isSelected,
+          '#FFFFFF',
+          '#06080C',
+        ],
+        circleStrokeWidth: [Expressions.caseExpression, _isSelected, 3, 2],
+        circleSortKey: [Expressions.caseExpression, _isSelected, 1, 0],
       ),
     );
     _styleReady = true;
@@ -108,6 +166,15 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
     await _controller?.setGeoJsonSource(_sourceId, _featureCollection(stops));
   }
 
+  /// Marks [stopId] as selected (or clears it) by re-sending the source with
+  /// the `selected` flag the layers style on.
+  Future<void> _setSelected(String? stopId) async {
+    if (_selectedStopId == stopId) return;
+    _selectedStopId = stopId;
+    if (!_styleReady) return;
+    await _showStops(_visibleStops.values.toList());
+  }
+
   Map<String, dynamic> _featureCollection(List<Stop> stops) => {
         'type': 'FeatureCollection',
         'features': [
@@ -119,6 +186,7 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
                 'properties': {
                   'stopId': s.id,
                   'color': _hex(TransitOperator.fromId(s.operatorId).colorHex),
+                  'selected': s.id == _selectedStopId,
                 },
                 'geometry': {
                   'type': 'Point',
@@ -161,17 +229,26 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
             .firstOrNull;
     if (stop == null) return;
     HapticFeedback.selectionClick();
-    _StopSheet.show(context, stop);
+    _openStop(stop);
+  }
+
+  Future<void> _openStop(Stop stop) async {
+    unawaited(_setSelected(stop.id));
+    await _StopSheet.show(context, stop);
+    if (mounted) unawaited(_setSelected(null));
   }
 
   Future<void> _recenter(UserLocation here) async {
-    HapticFeedback.selectionClick();
-    await _controller?.animateCamera(
-      CameraUpdate.newLatLngZoom(
-        LatLng(here.latitude, here.longitude),
-        _walkingZoom,
-      ),
+    // The glass button already gives the haptic tick.
+    final update = CameraUpdate.newLatLngZoom(
+      LatLng(here.latitude, here.longitude),
+      _walkingZoom,
     );
+    if (Motion.reduced(context)) {
+      await _controller?.moveCamera(update);
+    } else {
+      await _controller?.animateCamera(update);
+    }
   }
 
   // ── UI ───────────────────────────────────────────────────────────────────
@@ -182,11 +259,17 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
     // A real GPS fix (not the Moyúa fallback) is the only case where the
     // blue "you are here" dot is truthful.
     final hasRealFix = ref.watch(userLocationProvider) != null;
+    final following = ref.watch(activeLiveTripProvider) != null;
+    final padding = MediaQuery.paddingOf(context);
+    final controlsBottom = padding.bottom +
+        (following ? _controlsClearanceFollowing : _controlsClearance);
+    final reduced = Motion.reduced(context);
+    final move = reduced ? Duration.zero : Motion.smooth.duration;
 
     return Scaffold(
-      backgroundColor: AppColors.darkBackground,
+      backgroundColor: Colors.transparent,
       body: location.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: _Spinner()),
         error: (_, __) => const SizedBox.shrink(),
         data: (here) => Stack(
           children: [
@@ -201,28 +284,38 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
               onMapCreated: _onMapCreated,
               onStyleLoadedCallback: _onStyleLoaded,
               onCameraIdle: _onCameraIdle,
+              // Native: bottom-left, level with the recenter button and clear
+              // of the tab bar. The web ignores margins (see _MapAttribution).
               attributionButtonPosition: AttributionButtonPosition.bottomLeft,
-              attributionButtonMargins: const math.Point(12, 100),
+              attributionButtonMargins: math.Point(16, controlsBottom),
             ),
             if (!hasRealFix)
               Positioned(
-                top: MediaQuery.paddingOf(context).top + 12,
+                top: padding.top + 12,
                 left: 16,
                 right: 16,
-                child: const _InfoPill(
-                  text: 'Sin ubicación: mostrando el centro de Bilbao',
+                child: const Center(child: _NoFixPill()),
+              ),
+            if (kIsWeb)
+              AnimatedPositioned(
+                duration: move,
+                curve: Motion.smooth.curve,
+                left: 16,
+                right: 84,
+                bottom: controlsBottom,
+                child: const Align(
+                  alignment: Alignment.bottomLeft,
+                  child: _MapAttribution(),
                 ),
               ),
-            Positioned(
+            AnimatedPositioned(
+              duration: move,
+              curve: Motion.smooth.curve,
               right: 16,
-              bottom: 108,
-              child: FloatingActionButton.small(
-                heroTag: 'map_recenter',
-                tooltip: 'Centrar en mi posición',
-                backgroundColor: AppColors.darkSurfaceElevated,
-                foregroundColor: AppColors.darkTextPrimary,
+              bottom: controlsBottom,
+              child: _RecenterButton(
+                located: hasRealFix,
                 onPressed: () => _recenter(here),
-                child: const Icon(Icons.my_location_rounded, size: 20),
               ),
             ),
           ],
@@ -232,28 +325,91 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
   }
 }
 
-class _InfoPill extends StatelessWidget {
-  const _InfoPill({required this.text});
-
-  final String text;
+class _Spinner extends StatelessWidget {
+  const _Spinner();
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.darkSurface.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.darkBorder),
-        ),
-        child: Text(
-          text,
-          style: const TextStyle(
-            color: AppColors.darkTextPrimary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
+    return const SizedBox.square(
+      dimension: 24,
+      child: CircularProgressIndicator(
+        strokeWidth: 2.5,
+        color: AppColors.darkTextSecondary,
+      ),
+    );
+  }
+}
+
+/// Glass capsule over the map while there's no GPS fix.
+class _NoFixPill extends StatelessWidget {
+  const _NoFixPill();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTypography.textTheme();
+    return GlassSurface(
+      kind: GlassKind.overMap,
+      radius: 999,
+      padding: const EdgeInsets.fromLTRB(14, 9, 16, 9),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.delayedAmber,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.delayedAmber.withValues(alpha: 0.6),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              'Sin ubicación: mostrando el centro de Bilbao',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: t.labelMedium!.copyWith(
+                color: AppColors.darkTextPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Round glass button that flies the camera back to the user.
+class _RecenterButton extends StatelessWidget {
+  const _RecenterButton({required this.located, required this.onPressed});
+
+  final bool located;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Centrar en mi posición',
+      excludeFromSemantics: true,
+      child: GlassButton(
+        kind: GlassKind.overMap,
+        padding: EdgeInsets.zero,
+        semanticLabel: 'Centrar en mi posición',
+        onPressed: onPressed,
+        child: SizedBox.square(
+          dimension: 50,
+          child: Icon(
+            located ? Icons.near_me_rounded : Icons.near_me_outlined,
+            size: 22,
+            color: located ? AppColors.accent : AppColors.darkTextPrimary,
           ),
         ),
       ),
@@ -261,8 +417,35 @@ class _InfoPill extends StatelessWidget {
   }
 }
 
-/// Draggable sheet with a stop's next departures and one-tap origin /
-/// destination selection.
+/// On the web the map's own attribution control ignores margins and ends up
+/// under the tab bar, so the credit is repeated here, above it.
+class _MapAttribution extends StatelessWidget {
+  const _MapAttribution();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const ShapeDecoration(
+        color: Color(0xB306080C),
+        shape: StadiumBorder(),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        child: Text(
+          '© OpenStreetMap · OpenMapTiles · OpenFreeMap',
+          maxLines: 2,
+          style: AppTypography.textTheme().labelSmall!.copyWith(
+                color: AppColors.darkTextSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Draggable glass sheet with a stop's next departures and one-tap origin /
+/// destination selection. It floats 8 px off the screen edges, iOS-style.
 class _StopSheet extends ConsumerWidget {
   const _StopSheet({required this.stop, required this.scrollController});
 
@@ -272,19 +455,28 @@ class _StopSheet extends ConsumerWidget {
   static Future<void> show(BuildContext context, Stop stop) {
     return showModalBottomSheet<void>(
       context: context,
-      // Above the shell, so the tab bar and centre FAB don't cover the list.
+      // Above the shell, so the tab bar and the mode button don't cover the
+      // list.
       useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.45,
-        minChildSize: 0.25,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (_, controller) =>
-            _StopSheet(stop: stop, scrollController: controller),
-      ),
+      elevation: 0,
+      // A light dim keeps the selected stop's halo visible above the sheet.
+      barrierColor: Colors.black.withValues(alpha: 0.24),
+      builder: (sheetContext) {
+        final inset = math.max(8.0, MediaQuery.paddingOf(sheetContext).bottom);
+        return DraggableScrollableSheet(
+          initialChildSize: 0.45,
+          minChildSize: 0.25,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (_, controller) => Padding(
+            padding: EdgeInsets.fromLTRB(8, 0, 8, inset),
+            child: _StopSheet(stop: stop, scrollController: controller),
+          ),
+        );
+      },
     );
   }
 
@@ -294,94 +486,74 @@ class _StopSheet extends ConsumerWidget {
     final opColor = Color(operator.colorHex);
     final departures = ref.watch(departuresForStopProvider(stop));
     final destinationAllowed = canBeDestination(ref, stop);
+    final t = AppTypography.textTheme();
 
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+    return GlassSurface(
+      // The web can't blur the map under the sheet; this kind falls back to
+      // a denser tint there.
+      kind: GlassKind.overMap,
+      radius: 32,
       child: CustomScrollView(
         controller: scrollController,
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.darkBorderStrong,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  const Center(child: _Grabber()),
+                  const SizedBox(height: 14),
                   Row(
                     children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: opColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
+                      _OperatorDot(color: opColor),
                       const SizedBox(width: 8),
-                      Text(
-                        operator.name,
-                        style: TextStyle(
-                          color: opColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
+                      Flexible(
+                        child: Text(
+                          operator.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.titleSmall!.copyWith(
+                            color: AppColors.darkTextSecondary,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    stop.name,
-                    style: const TextStyle(
-                      color: AppColors.darkTextPrimary,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 22,
-                      letterSpacing: -0.6,
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      stop.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.titleLarge!.copyWith(
+                        color: AppColors.darkTextPrimary,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
                       Expanded(
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: opColor,
-                            minimumSize: const Size.fromHeight(44),
-                          ),
+                        child: _SheetAction(
+                          label: 'Salir de aquí',
+                          icon: Icons.trip_origin_rounded,
+                          tint: AppColors.accent,
                           onPressed: () {
-                            HapticFeedback.selectionClick();
                             selectStopAsOrigin(ref, stop);
                             Navigator.of(context).pop();
                             context.go('/');
                           },
-                          child: const Text('Salir de aquí'),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(44),
-                            foregroundColor: AppColors.darkTextPrimary,
-                            side: const BorderSide(
-                              color: AppColors.darkBorderStrong,
-                            ),
-                          ),
+                        child: _SheetAction(
+                          label: 'Ir hasta aquí',
+                          icon: Icons.place_rounded,
                           onPressed: destinationAllowed
                               ? () {
-                                  HapticFeedback.selectionClick();
                                   ref
                                       .read(
                                         selectedDestinationStopProvider
@@ -392,44 +564,54 @@ class _StopSheet extends ConsumerWidget {
                                   context.go('/');
                                 }
                               : null,
-                          child: const Text('Ir hasta aquí'),
                         ),
                       ),
                     ],
                   ),
                   if (!destinationAllowed)
                     Padding(
-                      padding: const EdgeInsets.only(top: 6),
+                      padding: const EdgeInsets.only(top: 8),
                       child: Text(
                         'Para usarla como destino, elige antes un origen de '
                         '${operator.name}.',
-                        style: const TextStyle(
+                        style: t.bodySmall!.copyWith(
                           color: AppColors.darkTextSecondary,
-                          fontSize: 12,
                         ),
                       ),
                     ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 22),
                   Row(
                     children: [
-                      const Text(
-                        'Próximas salidas',
-                        style: TextStyle(
-                          color: AppColors.darkTextSecondary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
+                      Expanded(
+                        child: Text(
+                          'Próximas salidas',
+                          style: t.titleMedium!.copyWith(
+                            color: AppColors.darkTextPrimary,
+                          ),
                         ),
                       ),
-                      const Spacer(),
                       TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.accent,
+                          textStyle: t.labelLarge,
+                          padding: const EdgeInsets.only(left: 10, right: 4),
+                          minimumSize: const Size(44, 40),
+                        ),
                         onPressed: () {
                           Navigator.of(context).pop();
                           StopDeparturesScreen.open(context, stop);
                         },
-                        child: const Text('Ver todas'),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Ver todas'),
+                            Icon(Icons.chevron_right_rounded, size: 20),
+                          ],
+                        ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 6),
                 ],
               ),
             ),
@@ -438,49 +620,138 @@ class _StopSheet extends ConsumerWidget {
             loading: () => const [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: CircularProgressIndicator()),
+                  padding: EdgeInsets.all(28),
+                  child: Center(child: _Spinner()),
                 ),
               ),
             ],
             error: (_, __) => const [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text(
-                    'No se han podido cargar las salidas.',
-                    style: TextStyle(color: AppColors.darkTextSecondary),
-                  ),
-                ),
-              ),
+              _SheetMessage('No se han podido cargar las salidas.'),
             ],
             data: (list) => list.isEmpty
-                ? const [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text(
-                          'Sin salidas programadas.',
-                          style: TextStyle(color: AppColors.darkTextSecondary),
-                        ),
-                      ),
-                    ),
-                  ]
+                ? const [_SheetMessage('Sin salidas programadas.')]
                 : [
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                      sliver: SliverFixedExtentList.builder(
-                        itemExtent: DepartureRow.extentOf(context),
-                        itemCount: math.min(list.length, 6),
-                        itemBuilder: (_, i) => DepartureRow(
-                          departure: list[i],
-                          operator: operator,
-                        ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      // Concentric with the sheet: 32 − 12.
+                      sliver: StopDeparturesCard(
+                        departures: list.take(6).toList(),
+                        operator: operator,
+                        radius: 20,
                       ),
                     ),
                   ],
           ),
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
         ],
+      ),
+    );
+  }
+}
+
+class _Grabber extends StatelessWidget {
+  const _Grabber();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 5,
+      decoration: const ShapeDecoration(
+        color: AppColors.darkTextTertiary,
+        shape: StadiumBorder(),
+      ),
+    );
+  }
+}
+
+/// The operator's colour as a small glowing dot — the same mark as on the
+/// map.
+class _OperatorDot extends StatelessWidget {
+  const _OperatorDot({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+        boxShadow: [
+          BoxShadow(color: color.withValues(alpha: 0.55), blurRadius: 8),
+        ],
+      ),
+    );
+  }
+}
+
+/// Full-width glass action in the stop sheet; [tint] makes it the primary.
+class _SheetAction extends StatelessWidget {
+  const _SheetAction({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.tint,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final Color? tint;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    final color = tint != null
+        ? Colors.white
+        : (enabled ? AppColors.darkTextPrimary : AppColors.darkTextTertiary);
+    return GlassButton(
+      kind: GlassKind.overMap,
+      // Sits on the glass sheet: one backdrop pass is enough.
+      blur: false,
+      tint: tint,
+      onPressed: onPressed,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.textTheme().labelLarge!.copyWith(
+                    color: color,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SheetMessage extends StatelessWidget {
+  const _SheetMessage(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+        child: Text(
+          text,
+          style: AppTypography.textTheme().bodyMedium!.copyWith(
+                color: AppColors.darkTextSecondary,
+              ),
+        ),
       ),
     );
   }

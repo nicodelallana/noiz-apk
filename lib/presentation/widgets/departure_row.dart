@@ -1,23 +1,31 @@
 import 'package:flutter/material.dart';
 
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
+import 'package:bizkaia_transit/core/theme/app_typography.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/content.dart';
 
-/// One upcoming departure: line badge, destination and a countdown readable
-/// at arm's length. The countdown is green when on time, amber when delayed
-/// and neutral when it is only the theoretical timetable.
+/// One upcoming departure: line badge, destination, the clock time with its
+/// status in words, and a countdown readable at arm's length. The countdown
+/// is green on time, amber when delayed and neutral for the timetable.
 ///
-/// Fixed height so lists can use a prototype extent and skip layout passes.
+/// Fixed height so lists can use a fixed extent and skip layout passes.
 class DepartureRow extends StatelessWidget {
   const DepartureRow({
     super.key,
     required this.departure,
     required this.operator,
+    this.divider = false,
+    this.padding = EdgeInsets.zero,
   });
 
   final Departure departure;
   final TransitOperator operator;
+
+  /// Hairline above the row, for rows grouped inside one card.
+  final bool divider;
+  final EdgeInsetsGeometry padding;
 
   static const double _baseHeight = 68;
 
@@ -30,41 +38,40 @@ class DepartureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final lineColor = Color(departure.routeColorHex ?? operator.colorHex);
     final isDelayed = departure.isRealtime && departure.delaySeconds >= 60;
-    final minutes = departure.minutesRemaining;
-
     final countdownColor = !departure.isRealtime
         ? AppColors.darkTextPrimary
         : (isDelayed ? AppColors.delayedAmber : AppColors.realtimeGreen);
-    final caption = !departure.isRealtime
-        ? 'Horario ${departure.scheduledTimeFormatted}'
+    final status = !departure.isRealtime
+        ? 'Según horario'
         : isDelayed
-            ? '+${departure.delaySeconds ~/ 60} min · ${departure.scheduledTimeFormatted}'
-            : 'En hora · ${departure.scheduledTimeFormatted}';
+            ? '+${departure.delaySeconds ~/ 60} min'
+            : 'En directo';
+    final t = AppTypography.textTheme();
 
-    return SizedBox(
+    return Container(
       height: extentOf(context),
+      padding: padding,
+      decoration: divider
+          ? const BoxDecoration(
+              border: Border(
+                top: BorderSide(color: AppColors.darkBorder, width: 0.7),
+              ),
+            )
+          : null,
       child: Row(
         children: [
-          Container(
-            constraints: const BoxConstraints(minWidth: 44),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: lineColor,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              departure.lineCode.isNotEmpty
-                  ? departure.lineCode
-                  : departure.line.id,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
+          SizedBox(
+            width: 52,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: LineBadge(
+                label: departure.lineCode.isNotEmpty
+                    ? departure.lineCode
+                    : departure.line.id,
+                color: lineColor,
               ),
             ),
           ),
-          const SizedBox(width: 14),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -72,52 +79,32 @@ class DepartureRow extends StatelessWidget {
               children: [
                 Text(
                   departure.headsign,
-                  style: const TextStyle(
+                  style: t.titleMedium!.copyWith(
                     color: AppColors.darkTextPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    letterSpacing: -0.3,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  caption,
-                  style: TextStyle(
+                  '${departure.scheduledTimeFormatted} · $status',
+                  style: AppTypography.time.copyWith(
                     color: isDelayed
                         ? AppColors.delayedAmber
                         : AppColors.darkTextSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: minutes == 0 ? 'Ya' : '$minutes',
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -1,
-                  ),
-                ),
-                if (minutes > 0)
-                  const TextSpan(
-                    text: ' min',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-              ],
-            ),
-            style: TextStyle(
-              color: countdownColor,
-              fontFeatures: const [FontFeature.tabularFigures()],
+          CountdownText(
+            minutes: departure.minutesRemaining,
+            style: AppTypography.countdownSmall,
+            color: countdownColor,
+            unitStyle: t.bodySmall!.copyWith(
+              color: AppColors.darkTextSecondary,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],

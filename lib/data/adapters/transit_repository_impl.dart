@@ -102,8 +102,9 @@ class TransitRepositoryImpl implements TransitRepository {
         line: raw.inferredLine == 'L2' ? MetroLine.l2 : MetroLine.l1,
         lineCode: raw.inferredLine ?? 'L1',
         scheduledTime: sched,
+        // GTFS times run past 24:00 for after-midnight trips; show 00:10.
         scheduledTimeFormatted:
-            '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}',
+            '${(hour % 24).toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}',
         minutesRemaining: remaining > 0 ? remaining : 0,
         // No GTFS-RT feed is merged into departures yet, so every time shown
         // is the theoretical schedule. Flip these once trip updates are fused.

@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
+import 'package:bizkaia_transit/core/theme/app_typography.dart';
 import 'package:bizkaia_transit/presentation/screens/legal/legal_texts.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/aurora_background.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/content.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
+
+final _text = AppTypography.textTheme();
 
 /// Data sources, their licences and the independence disclaimer, reachable
 /// from Settings (`/settings/licenses`) without signing in.
@@ -11,28 +17,115 @@ class LicensesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.darkBackground,
-      appBar: AppBar(
-        leading: const BackButton(),
-        backgroundColor: AppColors.darkBackground,
-        title: const Text('Fuentes de datos y licencias'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        children: [
-          const DisclaimerCard(),
-          const SizedBox(height: 20),
-          for (final source in dataSources) _SourceTile(source: source),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () => showLicensePage(
-              context: context,
-              applicationName: 'Noiz',
-            ),
-            child: const Text('Licencias de software de terceros'),
+    return AuroraBackground(
+      animate: false,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          bottom: false,
+          child: Stack(
+            children: [
+              ListView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                // Top clears the floating back button; bottom the tab bar.
+                padding: const EdgeInsets.fromLTRB(16, 64, 16, 120),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        'Fuentes de datos y licencias',
+                        style: _text.displayMedium!.copyWith(
+                          color: AppColors.darkTextPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const DisclaimerCard(),
+                  const SectionHeader(
+                    'Fuentes',
+                    subtitle: 'Toca un enlace para copiarlo.',
+                    padding: EdgeInsets.fromLTRB(4, 28, 4, 10),
+                  ),
+                  SurfaceCard(
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < dataSources.length; i++) ...[
+                          if (i > 0)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 16),
+                              child: Divider(
+                                height: 1,
+                                thickness: 1,
+                                color: AppColors.darkBorder,
+                              ),
+                            ),
+                          _SourceTile(source: dataSources[i]),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  SurfaceCard(
+                    padding: EdgeInsets.zero,
+                    child: Semantics(
+                      button: true,
+                      child: InkWell(
+                        onTap: () => showLicensePage(
+                          context: context,
+                          applicationName: 'Noiz',
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 52),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Licencias de software de terceros',
+                                    style: _text.bodyLarge!.copyWith(
+                                      color: AppColors.darkTextPrimary,
+                                    ),
+                                  ),
+                                ),
+                                const ExcludeSemantics(
+                                  child: Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 22,
+                                    color: AppColors.darkTextTertiary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                top: 8,
+                left: 16,
+                child: GlassButton(
+                  semanticLabel: 'Atrás',
+                  padding: const EdgeInsets.all(9),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Icon(
+                    Icons.chevron_left_rounded,
+                    size: 26,
+                    color: AppColors.darkTextPrimary,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -44,20 +137,30 @@ class DisclaimerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.darkBorder),
-      ),
-      child: const Text(
-        LegalTexts.disclaimer,
-        style: TextStyle(
-          color: AppColors.darkTextSecondary,
-          fontSize: 12.5,
-          height: 1.4,
-        ),
+    return SurfaceCard(
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(
+              Icons.verified_user_outlined,
+              size: 18,
+              color: AppColors.darkTextSecondary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              LegalTexts.disclaimer,
+              style: _text.bodySmall!.copyWith(
+                color: AppColors.darkTextSecondary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -71,32 +174,34 @@ class _SourceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             source.name,
-            style: const TextStyle(
+            style: _text.titleSmall!.copyWith(
               color: AppColors.darkTextPrimary,
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 1),
           Text(
             source.provider,
-            style: const TextStyle(
+            style: _text.bodySmall!.copyWith(
               color: AppColors.darkTextSecondary,
-              fontSize: 13,
             ),
           ),
           const SizedBox(height: 4),
           Wrap(
-            spacing: 12,
+            spacing: 14,
             children: [
-              _CopyLink(label: source.url, value: source.url),
               _CopyLink(
+                icon: Icons.link_rounded,
+                label: source.url.replaceFirst(RegExp('^https?://'), ''),
+                value: source.url,
+              ),
+              _CopyLink(
+                icon: Icons.copyright_rounded,
                 label: 'Licencia: ${source.license}',
                 value: source.licenseUrl ?? source.license,
               ),
@@ -110,26 +215,51 @@ class _SourceTile extends StatelessWidget {
 
 /// The project has no url_launcher dependency, so links are copyable.
 class _CopyLink extends StatelessWidget {
-  const _CopyLink({required this.label, required this.value});
+  const _CopyLink({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
+  final IconData icon;
   final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () {
-        Clipboard.setData(ClipboardData(text: value));
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enlace copiado')),
-        );
-      },
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColors.opDbus,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
+    void copy() {
+      Clipboard.setData(ClipboardData(text: value));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enlace copiado')),
+      );
+    }
+
+    return Semantics(
+      button: true,
+      label: '$label. Copiar enlace',
+      excludeSemantics: true,
+      onTap: copy,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: copy,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: AppColors.accent),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  style: _text.labelMedium!.copyWith(
+                    color: AppColors.accent,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

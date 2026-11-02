@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -128,8 +129,31 @@ final stopsForActiveOperatorProvider = FutureProvider<List<Stop>>((ref) async {
 });
 
 /// Live departures for the actively selected stop, with optional destination filter
+/// Emits at every wall-clock minute, so countdowns stay true while a screen
+/// is open (departures are recomputed and the minutes roll down).
+final minuteTickProvider = StreamProvider<DateTime>((ref) {
+  final controller = StreamController<DateTime>();
+  Timer? timer;
+  void tick() {
+    final now = DateTime.now();
+    controller.add(now);
+    timer = Timer(
+      Duration(milliseconds: 60000 - now.second * 1000 - now.millisecond),
+      tick,
+    );
+  }
+
+  tick();
+  ref.onDispose(() {
+    timer?.cancel();
+    controller.close();
+  });
+  return controller.stream;
+});
+
 final departuresForActiveStopProvider =
     FutureProvider<List<Departure>>((ref) async {
+  ref.watch(minuteTickProvider);
   var stop = ref.watch(selectedTransitStopProvider);
   final destStop = ref.watch(selectedDestinationStopProvider);
   final repo = ref.watch(transitRepositoryProvider);
@@ -155,6 +179,7 @@ final departuresForActiveStopProvider =
 /// (map sheet, stop detail screen).
 final departuresForStopProvider =
     FutureProvider.autoDispose.family<List<Departure>, Stop>((ref, stop) {
+  ref.watch(minuteTickProvider);
   return ref.watch(transitRepositoryProvider).getDepartures(
         stopId: stop.id,
         operatorId: stop.operatorId,

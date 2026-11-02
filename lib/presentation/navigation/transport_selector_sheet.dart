@@ -1,316 +1,173 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
+import 'package:bizkaia_transit/core/theme/app_typography.dart';
 import 'package:bizkaia_transit/core/theme/barik_icons.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/content.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
 
-/// Modal Bottom Sheet that lets the user select transport operator
-/// filtered dynamically by the chosen territory/province (Bizkaia, Gipuzkoa, Araba).
+/// Glass sheet that lets the user pick the transport operator, filtered by
+/// territory (Bizkaia, Gipuzkoa, Araba).
 class TransportSelectorBottomSheet extends ConsumerWidget {
-  const TransportSelectorBottomSheet({super.key});
+  const TransportSelectorBottomSheet({super.key, this.overMap = false});
+
+  /// Opened over the map tab: on the web the map can't be blurred, so the
+  /// sheet uses the denser over-map glass.
+  final bool overMap;
 
   static Future<void> show(BuildContext context) {
     HapticFeedback.mediumImpact();
+    final location =
+        GoRouter.maybeOf(context)?.routerDelegate.currentConfiguration.uri;
+    final overMap = location?.path == '/map';
     return showModalBottomSheet<void>(
       context: context,
+      // Above the shell, so the sheet covers the floating tab bar.
+      useRootNavigator: true,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const TransportSelectorBottomSheet(),
+      elevation: 0,
+      builder: (_) => TransportSelectorBottomSheet(overMap: overMap),
     );
+  }
+
+  void _selectTerritory(
+    WidgetRef ref,
+    TransitTerritory territory,
+    TransitOperator activeOperator,
+  ) {
+    ref.read(selectedTerritoryProvider.notifier).state = territory;
+    // Auto-switch to the territory's first operator if the current one is
+    // from another territory.
+    if (activeOperator.territory != territory) {
+      ref.read(selectedOperatorProvider.notifier).state = switch (territory) {
+        TransitTerritory.gipuzkoa => TransitOperator.dbus,
+        TransitTerritory.araba => TransitOperator.tuvisa,
+        _ => TransitOperator.metro,
+      };
+    }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final territory = ref.watch(selectedTerritoryProvider);
     final activeOperator = ref.watch(selectedOperatorProvider);
-    final activeColor = Color(activeOperator.colorHex);
 
     // List operators for the chosen territory (default to Bizkaia if 'all')
     final effectiveTerritory =
         territory == TransitTerritory.all ? TransitTerritory.bizkaia : territory;
     final operators = TransitOperator.byTerritory(effectiveTerritory);
+    final t = AppTypography.textTheme();
+    final reduced = Motion.reduced(context);
+    final inset = math.max(8.0, MediaQuery.paddingOf(context).bottom);
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(
-          top: BorderSide(color: AppColors.darkBorderStrong, width: 1.5),
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-      child: SafeArea(
-        top: false,
+    return Padding(
+      // Floats off the screen edges, iOS-style.
+      padding: EdgeInsets.fromLTRB(8, 0, 8, inset),
+      child: GlassSurface(
+        kind: overMap ? GlassKind.overMap : GlassKind.regular,
+        radius: 32,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Handle bar
             Center(
               child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.darkBorderStrong,
-                  borderRadius: BorderRadius.circular(2),
+                width: 36,
+                height: 5,
+                decoration: const ShapeDecoration(
+                  color: AppColors.darkTextTertiary,
+                  shape: StadiumBorder(),
                 ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            'Elige tu transporte',
+                            style: t.titleLarge!.copyWith(
+                              color: AppColors.darkTextPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Operadores disponibles en ${effectiveTerritory.name}',
+                          style: t.bodySmall!.copyWith(
+                            color: AppColors.darkTextSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  _ActiveOperatorChip(operator: activeOperator),
+                ],
               ),
             ),
             const SizedBox(height: 16),
 
-            // Header Title
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Elige tu transporte',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.darkTextPrimary,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Operadores disponibles en ${effectiveTerritory.name}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.darkTextSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
+            _TerritorySegmentedControl(
+              selected: effectiveTerritory,
+              onChanged: (value) =>
+                  _selectTerritory(ref, value, activeOperator),
+            ),
+            const SizedBox(height: 14),
+
+            // Operator grid
+            AnimatedSize(
+              duration: reduced ? Duration.zero : Motion.smooth.duration,
+              curve: Motion.smooth.curve,
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.55,
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: activeColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: activeColor.withValues(alpha: 0.4)),
+                child: AnimatedSwitcher(
+                  duration: reduced
+                      ? Motion.reducedFade
+                      : const Duration(milliseconds: 220),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  layoutBuilder: (current, previous) => Stack(
+                    alignment: Alignment.topCenter,
+                    children: [...previous, if (current != null) current],
                   ),
-                  child: Text(
-                    activeOperator.name,
-                    style: TextStyle(
-                      color: activeColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                  child: SingleChildScrollView(
+                    key: ValueKey(effectiveTerritory),
+                    child: _OperatorGrid(
+                      operators: operators,
+                      active: activeOperator,
+                      onSelected: (op) {
+                        HapticFeedback.lightImpact();
+                        ref.read(selectedOperatorProvider.notifier).state = op;
+                        Navigator.of(context).pop();
+                      },
                     ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 18),
-
-            // Province / Territory Selector Tabs
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: AppColors.darkSurfaceElevated,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.darkBorder),
-              ),
-              child: Row(
-                children: [
-                  _TerritoryTab(
-                    title: 'Bizkaia',
-                    count: 7,
-                    isSelected: effectiveTerritory == TransitTerritory.bizkaia,
-                    onTap: () {
-                      ref.read(selectedTerritoryProvider.notifier).state =
-                          TransitTerritory.bizkaia;
-                      // Auto-switch to first operator in Bizkaia if current is from other territory
-                      if (activeOperator.territory != TransitTerritory.bizkaia) {
-                        ref.read(selectedOperatorProvider.notifier).state =
-                            TransitOperator.metro;
-                      }
-                    },
-                  ),
-                  _TerritoryTab(
-                    title: 'Gipuzkoa',
-                    count: 4,
-                    isSelected: effectiveTerritory == TransitTerritory.gipuzkoa,
-                    onTap: () {
-                      ref.read(selectedTerritoryProvider.notifier).state =
-                          TransitTerritory.gipuzkoa;
-                      if (activeOperator.territory != TransitTerritory.gipuzkoa) {
-                        ref.read(selectedOperatorProvider.notifier).state =
-                            TransitOperator.dbus;
-                      }
-                    },
-                  ),
-                  _TerritoryTab(
-                    title: 'Araba',
-                    count: 4,
-                    isSelected: effectiveTerritory == TransitTerritory.araba,
-                    onTap: () {
-                      ref.read(selectedTerritoryProvider.notifier).state =
-                          TransitTerritory.araba;
-                      if (activeOperator.territory != TransitTerritory.araba) {
-                        ref.read(selectedOperatorProvider.notifier).state =
-                            TransitOperator.tuvisa;
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-
-            // Operator List
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.48,
-              ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: operators.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final op = operators[index];
-                  final isSelected = op == activeOperator;
-                  final opColor = Color(op.colorHex);
-
-                  return InkWell(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      ref.read(selectedOperatorProvider.notifier).state = op;
-                      Navigator.of(context).pop();
-                    },
-                    borderRadius: BorderRadius.circular(18),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? opColor.withValues(alpha: 0.15)
-                            : AppColors.darkSurfaceElevated,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: isSelected ? opColor : AppColors.darkBorder,
-                          width: isSelected ? 1.5 : 1.0,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          // Icon Avatar
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: opColor,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Icon(
-                              _iconForMode(op.mode),
-                              color: Colors.white,
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-
-                          // Name and details
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  op.name,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w800
-                                        : FontWeight.w600,
-                                    color: AppColors.darkTextPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    Text(
-                                      op.mode.label,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.darkTextSecondary,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    if (op.hasRealtime)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.realtimeGreen
-                                              .withValues(alpha: 0.15),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: const Text(
-                                          'En directo',
-                                          style: TextStyle(
-                                            color: AppColors.realtimeGreen,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      )
-                                    else
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.darkBorderStrong,
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: const Text(
-                                          'Según horario',
-                                          style: TextStyle(
-                                            color: AppColors.darkTextSecondary,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Selection indicator
-                          if (isSelected)
-                            Container(
-                              width: 26,
-                              height: 26,
-                              decoration: BoxDecoration(
-                                color: opColor,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.check_rounded,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
               ),
             ),
           ],
@@ -318,70 +175,55 @@ class TransportSelectorBottomSheet extends ConsumerWidget {
       ),
     );
   }
-
-  IconData _iconForMode(TransitModeType mode) {
-    return switch (mode) {
-      TransitModeType.metro => BarikIcons.subway,
-      TransitModeType.train => BarikIcons.train,
-      TransitModeType.tram => BarikIcons.tram,
-      TransitModeType.bus => BarikIcons.bus,
-      TransitModeType.funicular => BarikIcons.cableCar,
-    };
-  }
 }
 
-class _TerritoryTab extends StatelessWidget {
-  const _TerritoryTab({
-    required this.title,
-    required this.count,
-    required this.isSelected,
-    required this.onTap,
-  });
+/// The operator in use: a dot in its colour and its name.
+class _ActiveOperatorChip extends StatelessWidget {
+  const _ActiveOperatorChip({required this.operator});
 
-  final String title;
-  final int count;
-  final bool isSelected;
-  final VoidCallback onTap;
+  final TransitOperator operator;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.darkSurface : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            border: isSelected
-                ? Border.all(color: AppColors.darkBorderStrong)
-                : null,
+    final color = Color(operator.colorHex);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 150),
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: Colors.white.withValues(alpha: 0.07),
+          shape: const StadiumBorder(
+            side: BorderSide(color: AppColors.darkBorder),
           ),
-          child: Column(
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(9, 6, 11, 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                  color: isSelected
-                      ? AppColors.darkTextPrimary
-                      : AppColors.darkTextSecondary,
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color,
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.6),
+                      blurRadius: 6,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                '$count transportes',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: isSelected
-                      ? AppColors.realtimeGreen
-                      : AppColors.darkTextSecondary.withValues(alpha: 0.7),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  operator.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.textTheme().labelMedium!.copyWith(
+                        color: AppColors.darkTextPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
               ),
             ],
@@ -389,5 +231,314 @@ class _TerritoryTab extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// iOS-style segmented control: a capsule track with a lighter "droplet"
+/// (the same one as the tab bar) that springs to the chosen territory. It
+/// sits on the glass sheet, so it paints no blur of its own.
+class _TerritorySegmentedControl extends StatelessWidget {
+  const _TerritorySegmentedControl({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  static const _territories = [
+    TransitTerritory.bizkaia,
+    TransitTerritory.gipuzkoa,
+    TransitTerritory.araba,
+  ];
+
+  final TransitTerritory selected;
+  final ValueChanged<TransitTerritory> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = Motion.reduced(context);
+    final m = Motion.snappy;
+    final index = _territories.indexOf(selected).clamp(0, 2);
+
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        shape: const StadiumBorder(
+          side: BorderSide(color: AppColors.darkBorder),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: AnimatedAlign(
+                alignment: Alignment(
+                  -1 + 2 * index / (_territories.length - 1),
+                  0,
+                ),
+                duration: reduced ? Duration.zero : m.duration,
+                curve: m.curve,
+                child: FractionallySizedBox(
+                  widthFactor: 1 / _territories.length,
+                  heightFactor: 1,
+                  child: DecoratedBox(
+                    decoration: ShapeDecoration(
+                      color: Colors.white.withValues(alpha: 0.13),
+                      shape: StadiumBorder(
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.10),
+                        ),
+                      ),
+                      shadows: const [
+                        BoxShadow(
+                          color: Color(0x33000000),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                for (final territory in _territories)
+                  Expanded(
+                    child: _Segment(
+                      territory: territory,
+                      selected: territory == selected,
+                      onTap: () => onChanged(territory),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Segment extends StatelessWidget {
+  const _Segment({
+    required this.territory,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final TransitTerritory territory;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTypography.textTheme();
+    final count = TransitOperator.byTerritory(territory).length;
+    final countLabel = '$count ${count == 1 ? 'transporte' : 'transportes'}';
+    final duration =
+        Motion.reduced(context) ? Motion.reducedFade : Motion.snappy.duration;
+    void select() {
+      HapticFeedback.selectionClick();
+      onTap();
+    }
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${territory.name}, $countLabel',
+      // The excluded subtree takes the detector's tap action with it.
+      onTap: select,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: select,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedDefaultTextStyle(
+                duration: duration,
+                style: t.labelLarge!.copyWith(
+                  color: selected
+                      ? AppColors.darkTextPrimary
+                      : AppColors.darkTextSecondary,
+                ),
+                child: Text(
+                  territory.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                countLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.labelMedium!.copyWith(
+                  color: selected
+                      ? AppColors.darkTextSecondary
+                      : AppColors.darkTextTertiary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Two-column grid of solid operator tiles; each row takes the height of
+/// its taller tile.
+class _OperatorGrid extends StatelessWidget {
+  const _OperatorGrid({
+    required this.operators,
+    required this.active,
+    required this.onSelected,
+  });
+
+  final List<TransitOperator> operators;
+  final TransitOperator active;
+  final ValueChanged<TransitOperator> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tile(TransitOperator op) => _OperatorTile(
+          operator: op,
+          selected: op == active,
+          onTap: () => onSelected(op),
+        );
+
+    return Column(
+      children: [
+        for (var i = 0; i < operators.length; i += 2)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 10),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: tile(operators[i])),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: i + 1 < operators.length
+                        ? tile(operators[i + 1])
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _OperatorTile extends StatelessWidget {
+  const _OperatorTile({
+    required this.operator,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final TransitOperator operator;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTypography.textTheme();
+    final color = Color(operator.colorHex);
+    final reduced = Motion.reduced(context);
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: SurfaceCard(
+        // Concentric with the sheet: 32 − 16.
+        radius: 16,
+        padding: const EdgeInsets.all(12),
+        accent: selected ? AppColors.accent : null,
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The operator's colour as a small glowing badge.
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: ShapeDecoration(
+                    color: color,
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    shadows: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.45),
+                        blurRadius: 12,
+                        spreadRadius: -3,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    _iconForMode(operator.mode),
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const Spacer(),
+                AnimatedScale(
+                  scale: selected ? 1 : 0,
+                  duration: reduced ? Duration.zero : Motion.bouncy.duration,
+                  curve: Motion.bouncy.curve,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: const BoxDecoration(
+                      color: AppColors.accent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 15,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              operator.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: t.titleSmall!.copyWith(color: AppColors.darkTextPrimary),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              operator.mode.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static IconData _iconForMode(TransitModeType mode) {
+    return switch (mode) {
+      TransitModeType.metro => BarikIcons.subway,
+      TransitModeType.train => BarikIcons.train,
+      TransitModeType.tram => BarikIcons.tram,
+      TransitModeType.bus => BarikIcons.bus,
+      TransitModeType.funicular => BarikIcons.cableCar,
+    };
   }
 }

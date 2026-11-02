@@ -4,7 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../providers/auth_providers.dart';
+import '../../widgets/glass/aurora_background.dart';
+import '../../widgets/glass/glass_surface.dart';
+
+final _text = AppTypography.textTheme();
 
 /// Authentication screen with native Google Sign-In and Sign in with Apple.
 class AuthScreen extends ConsumerWidget {
@@ -29,105 +35,115 @@ class AuthScreen extends ConsumerWidget {
 
     final isIOS = !kIsWeb && Platform.isIOS;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Iniciar sesión'),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return AuroraBackground(
+      animate: false,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          bottom: false,
+          child: Stack(
             children: [
-              const Spacer(flex: 1),
+              CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Padding(
+                      // Clear the back button on top and the floating tab
+                      // bar at the bottom.
+                      padding: const EdgeInsets.fromLTRB(24, 72, 24, 120),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Align(
+                            alignment: Alignment.centerLeft,
+                            child: AppMark(size: 72),
+                          ),
+                          const SizedBox(height: 22),
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              'Iniciar sesión',
+                              style: _text.displayMedium!.copyWith(
+                                color: AppColors.darkTextPrimary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Sincroniza tus viajes guardados y compártelos '
+                            'entre dispositivos.',
+                            style: _text.bodyLarge!.copyWith(
+                              color: AppColors.darkTextSecondary,
+                            ),
+                          ),
 
-              // Transit Icon & Header
-              Center(
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE30613),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFE30613).withValues(alpha: 0.3),
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
+                          const Spacer(),
+                          const SizedBox(height: 32),
+
+                          // Google Sign-In Button
+                          SignInButton(
+                            provider: SignInProvider.google,
+                            isLoading: isLoading,
+                            onPressed: () async {
+                              final success = await ref
+                                  .read(authControllerProvider.notifier)
+                                  .signInWithGoogle();
+                              if (success && context.mounted) {
+                                Navigator.of(context).pop();
+                              }
+                            },
+                          ),
+
+                          // Apple Sign-In Button (iOS or preview)
+                          if (isIOS) ...[
+                            const SizedBox(height: 12),
+                            SignInButton(
+                              provider: SignInProvider.apple,
+                              isLoading: isLoading,
+                              onPressed: () async {
+                                final success = await ref
+                                    .read(authControllerProvider.notifier)
+                                    .signInWithApple();
+                                if (success && context.mounted) {
+                                  Navigator.of(context).pop();
+                                }
+                              },
+                            ),
+                          ],
+
+                          const SizedBox(height: 20),
+
+                          // Privacy Notice
+                          Text(
+                            'Al continuar, aceptas la política de privacidad. '
+                            'Tus datos de transporte y trayectos se almacenan '
+                            'de forma segura.',
+                            style: _text.bodySmall!.copyWith(
+                              color: AppColors.darkTextSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
+                ],
+              ),
+              Positioned(
+                top: 8,
+                left: 16,
+                child: GlassButton(
+                  semanticLabel: 'Atrás',
+                  padding: const EdgeInsets.all(9),
+                  onPressed: () => Navigator.of(context).maybePop(),
                   child: const Icon(
-                    Icons.directions_transit_filled,
-                    color: Colors.white,
-                    size: 44,
+                    Icons.chevron_left_rounded,
+                    size: 26,
+                    color: AppColors.darkTextPrimary,
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-
-              Text(
-                'Noiz',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              Text(
-                'Inicia sesión para sincronizar tus viajes guardados y compartirlos entre dispositivos.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-
-              const Spacer(flex: 2),
-
-              // Google Sign-In Button
-              _GoogleSignInButton(
-                isLoading: isLoading,
-                onPressed: () async {
-                  final success = await ref
-                      .read(authControllerProvider.notifier)
-                      .signInWithGoogle();
-                  if (success && context.mounted) {
-                    Navigator.of(context).pop();
-                  }
-                },
-              ),
-
-              // Apple Sign-In Button (iOS or preview)
-              if (isIOS) ...[
-                const SizedBox(height: 12),
-                _AppleSignInButton(
-                  isLoading: isLoading,
-                  onPressed: () async {
-                    final success = await ref
-                        .read(authControllerProvider.notifier)
-                        .signInWithApple();
-                    if (success && context.mounted) {
-                      Navigator.of(context).pop();
-                    }
-                  },
-                ),
-              ],
-
-              const SizedBox(height: 24),
-
-              // Privacy Notice
-              Text(
-                'Al continuar, aceptas la política de privacidad. Tus datos de transporte y trayectos se almacenan de forma segura.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                  fontSize: 11,
-                ),
-              ),
-
-              const Spacer(flex: 1),
             ],
           ),
         ),
@@ -136,83 +152,120 @@ class AuthScreen extends ConsumerWidget {
   }
 }
 
-class _GoogleSignInButton extends StatelessWidget {
-  const _GoogleSignInButton({
-    required this.isLoading,
-    required this.onPressed,
-  });
+/// The app's mark: a superellipse tile in the accent blue.
+class AppMark extends StatelessWidget {
+  const AppMark({super.key, this.size = 72});
 
-  final bool isLoading;
-  final VoidCallback onPressed;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton.tonal(
-      onPressed: isLoading ? null : onPressed,
-      style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: isLoading
-          ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator.adaptive(strokeWidth: 2),
-            )
-          : const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.g_mobiledata, size: 28),
-                SizedBox(width: 8),
-                Text(
-                  'Continuar con Google',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                ),
-              ],
+    return ExcludeSemantics(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: ShapeDecoration(
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(size * 0.27),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+          ),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF3D9BFF), AppColors.accent, Color(0xFF0060DF)],
+          ),
+          shadows: [
+            BoxShadow(
+              color: AppColors.accent.withValues(alpha: 0.35),
+              blurRadius: size * 0.33,
+              offset: Offset(0, size * 0.12),
             ),
+          ],
+        ),
+        child: Icon(
+          Icons.directions_transit_filled_rounded,
+          color: Colors.white,
+          size: size * 0.55,
+        ),
+      ),
     );
   }
 }
 
-class _AppleSignInButton extends StatelessWidget {
-  const _AppleSignInButton({
+enum SignInProvider { google, apple }
+
+/// Full-width capsule sign-in button. Solid, not glass: both providers ask
+/// for their own button styles (Apple's white style, Google's dark style).
+class SignInButton extends StatelessWidget {
+  const SignInButton({
+    super.key,
+    required this.provider,
     required this.isLoading,
     required this.onPressed,
   });
 
+  final SignInProvider provider;
   final bool isLoading;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: isLoading ? null : onPressed,
-      style: FilledButton.styleFrom(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: isLoading
-          ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator.adaptive(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
-          : const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.apple, size: 22),
-                SizedBox(width: 8),
-                Text(
-                  'Continuar con Apple',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                ),
-              ],
+    final apple = provider == SignInProvider.apple;
+    final background = apple ? Colors.white : const Color(0xFF131314);
+    final foreground = apple ? Colors.black : const Color(0xFFE3E3E3);
+    final shape = StadiumBorder(
+      side: apple
+          ? BorderSide.none
+          : const BorderSide(color: Color(0xFF8E918F), width: 1),
+    );
+
+    return Material(
+      color: background,
+      shape: shape,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: isLoading ? null : onPressed,
+        customBorder: shape,
+        // Grows with large text instead of clipping the label.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 54),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: Center(
+              child: isLoading
+                  ? SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator.adaptive(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(foreground),
+                      ),
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          apple ? Icons.apple : Icons.g_mobiledata,
+                          size: apple ? 22 : 28,
+                          color: foreground,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            apple
+                                ? 'Continuar con Apple'
+                                : 'Continuar con Google',
+                            textAlign: TextAlign.center,
+                            style:
+                                _text.titleMedium!.copyWith(color: foreground),
+                          ),
+                        ),
+                      ],
+                    ),
             ),
+          ),
+        ),
+      ),
     );
   }
 }

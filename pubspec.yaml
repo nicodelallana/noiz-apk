@@ -61,10 +61,27 @@ flutter:
   uses-material-design: true
   assets:
     - assets/lottie/
-    - assets/fonts/SpaceGrotesk/
     - assets/db/
 
   fonts:
-    - family: SpaceGrotesk
+    # Inter (SIL OFL 1.1, assets/fonts/Inter/OFL.txt): static cuts generated from
+    # the variable font so every renderer gets real weights.
+    - family: Inter
       fonts:
-        - asset: assets/fonts/SpaceGrotesk/SpaceGrotesk-Variable.ttf
+        - asset: assets/fonts/Inter/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter/Inter-DisplayExtraBold.ttf
+          weight: 800
+    # Optical "Display" cut for countdowns and large titles.
+    - family: InterDisplay
+      fonts:
+        - asset: assets/fonts/Inter/Inter-DisplayBold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter/Inter-DisplayExtraBold.ttf
+          weight: 800

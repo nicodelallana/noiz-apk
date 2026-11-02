@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 
-/// Design tokens and color palette for Barik transit companion.
-///
-/// Implements deep dark midnight palette matching Garraio reference,
-/// with per-operator accent colors and high-contrast status badges.
+/// Colour tokens: Apple's dark system palette (label opacities, system
+/// green/orange/red, one blue accent). Operator colours are reserved for line
+/// badges, map dots and the background glow — never for chrome.
 abstract final class AppColors {
-  // ── Dark Theme Canvas (Garraio Midnight Baseline) ─────────────────────────
-  static const Color darkBackground = Color(0xFF0B0D14);
-  static const Color darkSurface = Color(0xFF151822);
-  static const Color darkSurfaceElevated = Color(0xFF1C202D);
-  static const Color darkBorder = Color(0x1AF5F7FF); // rgba(245, 247, 255, 0.10)
-  static const Color darkBorderStrong = Color(0x29F5F7FF); // 0.16
-  static const Color darkTextPrimary = Color(0xFFF5F7FF);
-  static const Color darkTextSecondary = Color(0xFF9198AD);
+  // ── Dark canvas ───────────────────────────────────────────────────────────
+  static const Color darkBackground = Color(0xFF06080C);
+  static const Color darkSurface = Color(0xFF14161C); // solid content cards
+  static const Color darkSurfaceElevated = Color(0xFF1D2028);
+  static const Color darkBorder = Color(0x14FFFFFF); // white 8 %
+  static const Color darkBorderStrong = Color(0x24FFFFFF); // white 14 %
+  static const Color darkTextPrimary = Color(0xFFF5F5F7);
+  static const Color darkTextSecondary = Color(0x99EBEBF5); // label 60 %
+  static const Color darkTextTertiary = Color(0x4DEBEBF5); // label 30 %
+
+  /// The single app accent (iOS dark systemBlue).
+  static const Color accent = Color(0xFF0A84FF);
 
   // ── Light Theme Fallback ──────────────────────────────────────────────────
   static const Color lightBackground = Color(0xFFF8FAFC);
@@ -23,10 +26,10 @@ abstract final class AppColors {
   static const Color lightBorder = Color(0xFFE2E8F0);
 
   // ── Status Indicators ─────────────────────────────────────────────────────
-  static const Color realtimeGreen = Color(0xFF2BB081); // Live / En directo
-  static const Color delayedAmber = Color(0xFFFFB84D);  // +X min delay
-  static const Color disruptedRed = Color(0xFFF2666B);  // Serious delay / disruption
-  static const Color scheduledGray = Color(0xFF9198AD); // Según horario
+  static const Color realtimeGreen = Color(0xFF30D158); // En directo
+  static const Color delayedAmber = Color(0xFFFF9F0A); // +X min
+  static const Color disruptedRed = Color(0xFFFF453A); // Incidencia grave
+  static const Color scheduledGray = Color(0x99EBEBF5); // Según horario
 
   // ── 13 Operator Brand Colors (Euskadi) ────────────────────────────────────
   static const Color opRenfe = Color(0xFFD0142B);

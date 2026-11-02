@@ -3,18 +3,23 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:bizkaia_transit/core/constants/transit_constants.dart';
 import 'package:bizkaia_transit/core/services/live_trip_service.dart';
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
 import 'package:bizkaia_transit/core/theme/app_theme.dart';
+import 'package:bizkaia_transit/core/theme/app_typography.dart';
 import 'package:bizkaia_transit/core/theme/barik_icons.dart';
 import 'package:bizkaia_transit/domain/models/live_trip_models.dart';
 import 'package:bizkaia_transit/presentation/navigation/transport_mode_fab.dart';
 import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/aurora_background.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
 
-/// Main application shell with bottom navigation and central transport FAB.
-///
-/// Features animated operator theme transitions (Metro Red vs Bus Emerald)
-/// and custom designer navigation bar iconography.
+/// App shell: the aurora backdrop behind every tab, and a floating
+/// liquid-glass capsule tab bar with the transport-mode button beside it
+/// (iOS 26 keeps actions out of the tab bar). The bar compacts while the
+/// page scrolls down and expands again on scroll up.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({
     super.key,
@@ -33,7 +38,10 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
+  bool _compact = false;
+
   void _onTabSelected(int index) {
+    if (index == widget.currentIndex) return;
     HapticFeedback.selectionClick();
     final path = switch (index) {
       0 => '/',
@@ -45,83 +53,105 @@ class _AppShellState extends ConsumerState<AppShell> {
     context.go(path);
   }
 
+  bool _onScroll(ScrollUpdateNotification n) {
+    if (n.metrics.axis != Axis.vertical || n.depth > 1) return false;
+    final delta = n.scrollDelta ?? 0;
+    final pastTop = n.metrics.pixels > 32;
+    final compact =
+        (pastTop && delta > 0) || (_compact && pastTop && delta >= -4);
+    if (compact != _compact) setState(() => _compact = compact);
+    return false;
+  }
+
+  @override
+  void didUpdateWidget(AppShell old) {
+    super.didUpdateWidget(old);
+    if (old.currentIndex != widget.currentIndex && _compact) {
+      _compact = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeOperator = ref.watch(selectedOperatorProvider);
-    final activeTheme = AppTheme.themeFor(
-      accentColor: Color(activeOperator.colorHex),
-    );
     final activeTrip = ref.watch(activeLiveTripProvider);
+    final nearbyAlerts = ref.watch(rankedServiceAlertsProvider).valueOrNull
+            ?.where((r) =>
+                r.distanceKm != null &&
+                r.distanceKm! < TransitConstants.nearbyAlertsRadiusKm)
+            .length ??
+        0;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final barBottom = bottomInset + 12;
 
-    return AnimatedTheme(
-      data: activeTheme,
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeInOutCubic,
+    return Theme(
+      data: AppTheme.themeFor(accentColor: AppColors.accent),
       child: Scaffold(
-        body: Stack(
-          children: [
-            Positioned.fill(child: widget.child),
-            if (activeTrip != null)
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 84,
-                child: _ActiveTripMiniBanner(trip: activeTrip),
-              ),
-          ],
-        ),
-        extendBody: true,
-
-        // ── Central Transport Mode FAB ─────────────────────────────────────
-        floatingActionButton: const TransportModeFab(),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-
-        // ── Designer Bottom Navigation Bar ─────────────────────────────────
-        bottomNavigationBar: BottomAppBar(
-          shape: const CircularNotchedRectangle(),
-          notchMargin: 8,
-          padding: EdgeInsets.zero,
-          height: 68,
-          elevation: 10,
-          color: activeTheme.colorScheme.surface,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              // Left side: Inicio + Mapa
-              _NavBarItem(
-                icon: Icons.explore_outlined,
-                selectedIcon: Icons.explore_rounded,
-                label: 'Inicio',
-                isSelected: widget.currentIndex == 0,
-                onTap: () => _onTabSelected(0),
-              ),
-              _NavBarItem(
-                icon: Icons.map_outlined,
-                selectedIcon: Icons.map_rounded,
-                label: 'Mapa',
-                isSelected: widget.currentIndex == 1,
-                onTap: () => _onTabSelected(1),
-              ),
-
-              // Center gap for FAB
-              const SizedBox(width: 64),
-
-              // Right side: Alertas + Cuenta
-              _NavBarItem(
-                icon: Icons.notifications_none_rounded,
-                selectedIcon: Icons.notifications_active_rounded,
-                label: 'Alertas',
-                isSelected: widget.currentIndex == 2,
-                onTap: () => _onTabSelected(2),
-              ),
-              _NavBarItem(
-                icon: Icons.person_outline_rounded,
-                selectedIcon: Icons.person_rounded,
-                label: 'Cuenta',
-                isSelected: widget.currentIndex == 3,
-                onTap: () => _onTabSelected(3),
-              ),
-            ],
+        backgroundColor: AppColors.darkBackground,
+        body: AuroraBackground(
+          accent: Color(activeOperator.colorHex),
+          // Hidden behind the full-screen map: no need to keep drifting.
+          animate: widget.currentIndex != 1,
+          child: BackdropGroup(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: NotificationListener<ScrollUpdateNotification>(
+                    onNotification: _onScroll,
+                    child: widget.child,
+                  ),
+                ),
+                // Scroll-edge fade so content reads under the floating bar.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: barBottom + 90,
+                  child: const IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0x0006080C), Color(0xB306080C)],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (activeTrip != null)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: barBottom + 74,
+                    child: _ActiveTripMiniBanner(trip: activeTrip),
+                  ),
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: barBottom,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: _GlassTabBar(
+                          currentIndex: widget.currentIndex,
+                          compact: _compact,
+                          overMap: widget.currentIndex == 1,
+                          alertsBadge: nearbyAlerts,
+                          onSelected: _onTabSelected,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      TransportModeFab(
+                        compact: _compact,
+                        overMap: widget.currentIndex == 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -129,86 +159,173 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 }
 
-/// Custom navigation bar item with pill highlight and spring scale animation.
-class _NavBarItem extends StatelessWidget {
-  const _NavBarItem({
-    required this.icon,
-    required this.selectedIcon,
-    required this.label,
-    required this.isSelected,
+class _TabSpec {
+  const _TabSpec(this.label, this.icon, this.selectedIcon);
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+}
+
+const _tabs = [
+  _TabSpec('Inicio', Icons.access_time_rounded, Icons.access_time_filled_rounded),
+  _TabSpec('Mapa', Icons.map_outlined, Icons.map_rounded),
+  _TabSpec('Alertas', Icons.notifications_none_rounded, Icons.notifications_rounded),
+  _TabSpec('Cuenta', Icons.person_outline_rounded, Icons.person_rounded),
+];
+
+/// Capsule glass bar with a lighter glass "droplet" that springs between tabs.
+class _GlassTabBar extends StatelessWidget {
+  const _GlassTabBar({
+    required this.currentIndex,
+    required this.compact,
+    required this.overMap,
+    required this.alertsBadge,
+    required this.onSelected,
+  });
+
+  final int currentIndex;
+  final bool compact;
+  final bool overMap;
+  final int alertsBadge;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = Motion.reduced(context);
+    final m = Motion.snappy;
+    final height = compact ? 50.0 : 62.0;
+    final index = currentIndex.clamp(0, _tabs.length - 1);
+
+    return AnimatedContainer(
+      duration: reduced ? Motion.reducedFade : m.duration,
+      curve: reduced ? Curves.linear : m.curve,
+      height: height,
+      child: GlassSurface(
+        kind: overMap ? GlassKind.overMap : GlassKind.regular,
+        radius: 999,
+        padding: const EdgeInsets.all(4),
+        child: Stack(
+          children: [
+            AnimatedAlign(
+              alignment: Alignment(-1 + 2 * index / (_tabs.length - 1), 0),
+              duration: reduced ? Duration.zero : m.duration,
+              curve: m.curve,
+              child: FractionallySizedBox(
+                widthFactor: 1 / _tabs.length,
+                heightFactor: 1,
+                child: DecoratedBox(
+                  decoration: ShapeDecoration(
+                    color: Colors.white.withValues(alpha: 0.13),
+                    shape: StadiumBorder(
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.10),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                for (var i = 0; i < _tabs.length; i++)
+                  Expanded(
+                    child: _TabItem(
+                      spec: _tabs[i],
+                      selected: i == index,
+                      compact: compact,
+                      badge: i == 2 ? alertsBadge : 0,
+                      onTap: () => onSelected(i),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabItem extends StatelessWidget {
+  const _TabItem({
+    required this.spec,
+    required this.selected,
+    required this.compact,
+    required this.badge,
     required this.onTap,
   });
 
-  final IconData icon;
-  final IconData selectedIcon;
-  final String label;
-  final bool isSelected;
+  final _TabSpec spec;
+  final bool selected;
+  final bool compact;
+  final int badge;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
-    final unselectedColor = theme.colorScheme.onSurfaceVariant;
+    final color = selected ? AppColors.darkTextPrimary : AppColors.darkTextSecondary;
+    final reduced = Motion.reduced(context);
+    final m = Motion.snappy;
 
-    return Expanded(
-      child: InkWell(
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: spec.label,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? primaryColor.withValues(alpha: 0.12)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  transitionBuilder: (child, animation) => ScaleTransition(
-                    scale: animation,
-                    child: child,
-                  ),
-                  child: Icon(
-                    isSelected ? selectedIcon : icon,
-                    key: ValueKey(isSelected),
-                    color: isSelected ? primaryColor : unselectedColor,
-                    size: 24,
-                  ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Badge(
+              isLabelVisible: badge > 0,
+              label: Text('$badge'),
+              backgroundColor: AppColors.disruptedRed,
+              textStyle: AppTypography.time.copyWith(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+              child: AnimatedScale(
+                scale: selected && !reduced ? 1.08 : 1,
+                duration: m.duration,
+                curve: m.curve,
+                child: Icon(
+                  selected ? spec.selectedIcon : spec.icon,
+                  color: color,
+                  size: 24,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isSelected ? primaryColor : unselectedColor,
-                  fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  letterSpacing: -0.2,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+            ),
+            AnimatedSize(
+              duration: reduced ? Duration.zero : m.duration,
+              curve: m.curve,
+              child: compact
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        spec.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        style: AppTypography.textTheme().labelSmall!.copyWith(
+                              color: color,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w500,
+                            ),
+                      ),
+                    ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Persistent in-app banner displayed whenever a Live Activity trip is tracking.
+/// Glass banner shown while a departure is being followed.
 class _ActiveTripMiniBanner extends ConsumerWidget {
   const _ActiveTripMiniBanner({required this.trip});
 
@@ -216,92 +333,78 @@ class _ActiveTripMiniBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final parsedColor = Color(
+    final lineColor = Color(
       int.tryParse(trip.lineColor.replaceAll('#', '0xFF')) ?? 0xFFE2001A,
     );
+    final ended = trip.status == LiveTripStatus.ended;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => context.go('/'),
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.darkSurface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: parsedColor.withValues(alpha: 0.6)),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black45,
-                blurRadius: 12,
-                offset: Offset(0, 4),
+    return GlassButton(
+      onPressed: () => context.go('/'),
+      radius: 22,
+      padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: ShapeDecoration(
+              color: lineColor,
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
-            ],
+            ),
+            child: Text(
+              trip.lineName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
           ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: parsedColor,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  trip.lineName,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Hacia ${trip.destination}',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
+                    color: AppColors.darkTextPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    letterSpacing: -0.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  ended
+                      ? 'Viaje finalizado'
+                      : '${trip.minutesRemaining} min · '
+                          '${trip.isRealtime ? 'En directo' : 'Según horario'}',
+                  style: AppTypography.time.copyWith(
+                    color: ended
+                        ? AppColors.realtimeGreen
+                        : AppColors.darkTextSecondary,
                     fontSize: 12,
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Hacia ${trip.destination}',
-                      style: const TextStyle(
-                        color: AppColors.darkTextPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      trip.status == LiveTripStatus.ended
-                          ? 'Viaje finalizado'
-                          : '${trip.minutesRemaining} min · '
-                              '${trip.isRealtime ? 'En directo' : 'Según horario'}',
-                      style: TextStyle(
-                        color: trip.status == LiveTripStatus.ended
-                            ? AppColors.realtimeGreen
-                            : AppColors.darkTextSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: const Icon(
-                  BarikIcons.stopCircle,
-                  color: AppColors.disruptedRed,
-                  size: 20,
-                ),
-                tooltip: 'Detener seguimiento',
-                onPressed: () {
-                  ref.read(activeLiveTripProvider.notifier).endTrip();
-                },
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          IconButton(
+            icon: const Icon(
+              BarikIcons.stopCircle,
+              color: AppColors.darkTextSecondary,
+              size: 22,
+            ),
+            tooltip: 'Detener seguimiento',
+            onPressed: () {
+              ref.read(activeLiveTripProvider.notifier).endTrip();
+            },
+          ),
+        ],
       ),
     );
   }
