@@ -60,6 +60,7 @@ flutter:
   assets:
     - assets/lottie/
     - assets/fonts/SpaceGrotesk/
+    - assets/db/
 
   fonts:
     - family: SpaceGrotesk

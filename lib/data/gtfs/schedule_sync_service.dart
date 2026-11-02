@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -137,6 +138,14 @@ class ScheduleSyncService {
         p.join(dir.path, TransitConstants.manifestMetaFileName);
     final dbFile = File(dbPath);
     final manifestFile = File(manifestPath);
+
+    if (!dbFile.existsSync() || dbFile.lengthSync() < 1024) {
+      try {
+        final data = await rootBundle.load('assets/db/transit.sqlite');
+        final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+        await dbFile.writeAsBytes(bytes, flush: true);
+      } catch (_) {}
+    }
 
     ScheduleManifest? localManifest;
     if (manifestFile.existsSync()) {
