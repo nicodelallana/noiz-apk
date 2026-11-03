@@ -1,6 +1,6 @@
 # Directrices Operativas del Proyecto Bizkaia Transit
 
-Estas directrices proceden del pliego original del proyecto (`docs/prompt-app-transporte-bizkaia.md`).
+Estas directrices proceden de `AGENTS.md` y de la especificación técnica en `spec.md`.
 
 ## Reglas Innegociables
 1. **Fuentes Oficiales y Licencias:** Solo consumir datos oficiales (GTFS, GTFS-RT, APIs abiertas). Citar atribuciones obligatorias y registrar licencias en `docs/licencias-datos.md`. No hacer scraping ni ingeniería inversa.
