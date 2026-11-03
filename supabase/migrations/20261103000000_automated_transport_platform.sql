@@ -466,7 +466,11 @@ create table if not exists public.stop_time_updates (
 
 create index if not exists idx_stop_time_updates_stop on public.stop_time_updates (external_stop_id);
 
-create table if not exists public.service_alerts (
+-- Upgrade service_alerts to full GTFS-RT schema (dropping legacy 20261102 cache table if present)
+drop table if exists public.alert_informed_entities cascade;
+drop table if exists public.service_alerts cascade;
+
+create table public.service_alerts (
   id uuid primary key default gen_random_uuid(),
   operator_id uuid not null references public.transport_operators(id) on delete cascade,
   external_alert_id text not null,
@@ -744,80 +748,137 @@ alter table public.netex_resources enable row level security;
 alter table public.spatial_resources enable row level security;
 
 -- Public Read Policies for Static Transit & Geographies
+drop policy if exists "Public can read provinces" on public.provinces;
 create policy "Public can read provinces" on public.provinces for select using (true);
+drop policy if exists "Public can read administrative boundaries" on public.administrative_boundaries;
 create policy "Public can read administrative boundaries" on public.administrative_boundaries for select using (true);
+drop policy if exists "Public can read municipalities" on public.municipalities;
 create policy "Public can read municipalities" on public.municipalities for select using (true);
+drop policy if exists "Public can read transport modes" on public.transport_modes;
 create policy "Public can read transport modes" on public.transport_modes for select using (true);
+drop policy if exists "Public can read active operators" on public.transport_operators;
 create policy "Public can read active operators" on public.transport_operators for select using (is_active = true);
+drop policy if exists "Public can read operator provinces" on public.operator_provinces;
 create policy "Public can read operator provinces" on public.operator_provinces for select using (true);
+drop policy if exists "Public can read operator transport modes" on public.operator_transport_modes;
 create policy "Public can read operator transport modes" on public.operator_transport_modes for select using (true);
+drop policy if exists "Public can read active feed versions" on public.feed_versions;
 create policy "Public can read active feed versions" on public.feed_versions for select using (status = 'active');
+drop policy if exists "Public can read active gtfs stops" on public.gtfs_stops;
 create policy "Public can read active gtfs stops" on public.gtfs_stops for select using (
   exists (select 1 from public.feed_versions f where f.id = feed_version_id and f.status = 'active')
 );
+drop policy if exists "Public can read active stop provinces" on public.stop_provinces;
 create policy "Public can read active stop provinces" on public.stop_provinces for select using (true);
+drop policy if exists "Public can read active gtfs routes" on public.gtfs_routes;
 create policy "Public can read active gtfs routes" on public.gtfs_routes for select using (
   exists (select 1 from public.feed_versions f where f.id = feed_version_id and f.status = 'active')
 );
+drop policy if exists "Public can read active route provinces" on public.route_provinces;
 create policy "Public can read active route provinces" on public.route_provinces for select using (true);
+drop policy if exists "Public can read active gtfs trips" on public.gtfs_trips;
 create policy "Public can read active gtfs trips" on public.gtfs_trips for select using (
   exists (select 1 from public.feed_versions f where f.id = feed_version_id and f.status = 'active')
 );
+drop policy if exists "Public can read active gtfs stop times" on public.gtfs_stop_times;
 create policy "Public can read active gtfs stop times" on public.gtfs_stop_times for select using (
   exists (select 1 from public.feed_versions f where f.id = feed_version_id and f.status = 'active')
 );
+drop policy if exists "Public can read active gtfs calendars" on public.gtfs_calendars;
 create policy "Public can read active gtfs calendars" on public.gtfs_calendars for select using (
   exists (select 1 from public.feed_versions f where f.id = feed_version_id and f.status = 'active')
 );
+drop policy if exists "Public can read active gtfs calendar dates" on public.gtfs_calendar_dates;
 create policy "Public can read active gtfs calendar dates" on public.gtfs_calendar_dates for select using (
   exists (select 1 from public.feed_versions f where f.id = feed_version_id and f.status = 'active')
 );
+drop policy if exists "Public can read active gtfs shapes" on public.gtfs_shapes;
 create policy "Public can read active gtfs shapes" on public.gtfs_shapes for select using (
   exists (select 1 from public.feed_versions f where f.id = feed_version_id and f.status = 'active')
 );
+drop policy if exists "Public can read active attributions" on public.gtfs_attributions;
 create policy "Public can read active attributions" on public.gtfs_attributions for select using (
   exists (select 1 from public.feed_versions f where f.id = feed_version_id and f.status = 'active')
 );
 
 -- Public Read Policies for Real-Time Telemetry
+drop policy if exists "Public can read latest vehicle positions" on public.vehicle_positions;
 create policy "Public can read latest vehicle positions" on public.vehicle_positions for select using (is_latest = true);
+drop policy if exists "Public can read active trip updates" on public.trip_updates;
 create policy "Public can read active trip updates" on public.trip_updates for select using (true);
+drop policy if exists "Public can read stop time updates" on public.stop_time_updates;
 create policy "Public can read stop time updates" on public.stop_time_updates for select using (true);
+drop policy if exists "Public can read active service alerts" on public.service_alerts;
 create policy "Public can read active service alerts" on public.service_alerts for select using (is_active = true);
+drop policy if exists "Public can read alert informed entities" on public.alert_informed_entities;
 create policy "Public can read alert informed entities" on public.alert_informed_entities for select using (true);
 
 -- Ingestion Pipeline (Service Role) Full CRUD Policies
+drop policy if exists "Service role full access on all tables" on public.provinces;
 create policy "Service role full access on all tables" on public.provinces for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on administrative boundaries" on public.administrative_boundaries;
 create policy "Service role full access on administrative boundaries" on public.administrative_boundaries for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on municipalities" on public.municipalities;
 create policy "Service role full access on municipalities" on public.municipalities for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on transport operators" on public.transport_operators;
 create policy "Service role full access on transport operators" on public.transport_operators for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on operator provinces" on public.operator_provinces;
 create policy "Service role full access on operator provinces" on public.operator_provinces for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on operator transport modes" on public.operator_transport_modes;
 create policy "Service role full access on operator transport modes" on public.operator_transport_modes for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on catalogue snapshots" on public.catalogue_snapshots;
 create policy "Service role full access on catalogue snapshots" on public.catalogue_snapshots for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on catalogue resources" on public.catalogue_resources;
 create policy "Service role full access on catalogue resources" on public.catalogue_resources for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on feed versions" on public.feed_versions;
 create policy "Service role full access on feed versions" on public.feed_versions for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on ingestion jobs" on public.ingestion_jobs;
 create policy "Service role full access on ingestion jobs" on public.ingestion_jobs for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on ingestion errors" on public.ingestion_errors;
 create policy "Service role full access on ingestion errors" on public.ingestion_errors for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs agencies" on public.gtfs_agencies;
 create policy "Service role full access on gtfs agencies" on public.gtfs_agencies for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs stops" on public.gtfs_stops;
 create policy "Service role full access on gtfs stops" on public.gtfs_stops for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on stop provinces" on public.stop_provinces;
 create policy "Service role full access on stop provinces" on public.stop_provinces for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs routes" on public.gtfs_routes;
 create policy "Service role full access on gtfs routes" on public.gtfs_routes for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on route provinces" on public.route_provinces;
 create policy "Service role full access on route provinces" on public.route_provinces for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs calendars" on public.gtfs_calendars;
 create policy "Service role full access on gtfs calendars" on public.gtfs_calendars for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs calendar dates" on public.gtfs_calendar_dates;
 create policy "Service role full access on gtfs calendar dates" on public.gtfs_calendar_dates for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs shapes" on public.gtfs_shapes;
 create policy "Service role full access on gtfs shapes" on public.gtfs_shapes for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs trips" on public.gtfs_trips;
 create policy "Service role full access on gtfs trips" on public.gtfs_trips for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs stop times" on public.gtfs_stop_times;
 create policy "Service role full access on gtfs stop times" on public.gtfs_stop_times for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs frequencies" on public.gtfs_frequencies;
 create policy "Service role full access on gtfs frequencies" on public.gtfs_frequencies for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs transfers" on public.gtfs_transfers;
 create policy "Service role full access on gtfs transfers" on public.gtfs_transfers for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on gtfs attributions" on public.gtfs_attributions;
 create policy "Service role full access on gtfs attributions" on public.gtfs_attributions for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on realtime snapshots" on public.realtime_feed_snapshots;
 create policy "Service role full access on realtime snapshots" on public.realtime_feed_snapshots for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on vehicle positions" on public.vehicle_positions;
 create policy "Service role full access on vehicle positions" on public.vehicle_positions for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on trip updates" on public.trip_updates;
 create policy "Service role full access on trip updates" on public.trip_updates for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on stop time updates" on public.stop_time_updates;
 create policy "Service role full access on stop time updates" on public.stop_time_updates for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on service alerts" on public.service_alerts;
 create policy "Service role full access on service alerts" on public.service_alerts for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on alert informed entities" on public.alert_informed_entities;
 create policy "Service role full access on alert informed entities" on public.alert_informed_entities for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on siri observations" on public.siri_vehicle_observations;
 create policy "Service role full access on siri observations" on public.siri_vehicle_observations for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on siri situations" on public.siri_situation_exchanges;
 create policy "Service role full access on siri situations" on public.siri_situation_exchanges for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on netex resources" on public.netex_resources;
 create policy "Service role full access on netex resources" on public.netex_resources for all using (auth.role() = 'service_role');
+drop policy if exists "Service role full access on spatial resources" on public.spatial_resources;
 create policy "Service role full access on spatial resources" on public.spatial_resources for all using (auth.role() = 'service_role');
