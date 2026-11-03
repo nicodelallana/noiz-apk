@@ -1,0 +1,49 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg_dark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#080E1C"/>
+      <stop offset="100%" stop-color="#03060A"/>
+    </linearGradient>
+    <linearGradient id="n_grad_dark" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0A84FF"/>
+      <stop offset="35%" stop-color="#00C8FF"/>
+      <stop offset="70%" stop-color="#00D26A"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+    <radialGradient id="glow_dark" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00C8FF" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#00C8FF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="1024" height="1024" fill="url(#bg_dark)"/>
+
+  <!-- Station Origin Stop (Bottom-left) -->
+  <circle cx="300" cy="740" r="54" fill="#152033"/>
+  <circle cx="300" cy="740" r="28" fill="#0A84FF"/>
+
+  <!-- Fluid Transit Track forming the 'N' -->
+  <path d="M 300 740
+           L 300 370
+           Q 300 280 380 350
+           L 644 660
+           Q 724 730 724 640
+           L 724 270"
+        fill="none" stroke="url(#n_grad_dark)" stroke-width="76"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Departure Direction Vector -->
+  <path d="M 724 270 L 794 185"
+        fill="none" stroke="#FFFFFF" stroke-width="76" stroke-linecap="round"/>
+
+  <!-- Arrival Station Beacon Glow -->
+  <circle cx="724" cy="270" r="118" fill="url(#glow_dark)"/>
+
+  <!-- Arrival Station Beacon Node (Focal Point) -->
+  <circle cx="724" cy="270" r="62" fill="#00C8FF"/>
+  <circle cx="724" cy="270" r="34" fill="#FFFFFF"/>
+
+  <!-- Departure Vector Tip -->
+  <circle cx="794" cy="185" r="30" fill="#FFFFFF"/>
+</svg>
