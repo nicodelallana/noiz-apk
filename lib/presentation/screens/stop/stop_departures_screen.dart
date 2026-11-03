@@ -13,6 +13,7 @@ import 'package:bizkaia_transit/presentation/widgets/glass/aurora_background.dar
 import 'package:bizkaia_transit/presentation/widgets/glass/content.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 /// Makes [stop] the home screen origin (switching operator if needed) and
 /// clears any destination filter.
@@ -92,7 +93,6 @@ class _StopDeparturesScreenState extends ConsumerState<StopDeparturesScreen> {
     final bottomRoom = padding.bottom + 120;
 
     return AuroraBackground(
-      animate: false,
       accent: opColor,
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -217,6 +217,7 @@ class _StopDeparturesScreenState extends ConsumerState<StopDeparturesScreen> {
                     message: 'Atrás',
                     excludeFromSemantics: true,
                     child: GlassButton(
+                      blur: true,
                       semanticLabel: 'Atrás',
                       padding: EdgeInsets.zero,
                       onPressed: () => Navigator.maybePop(context),
@@ -258,6 +259,7 @@ class _StopDeparturesScreenState extends ConsumerState<StopDeparturesScreen> {
                     ),
                   ),
                   GlassButton(
+                    blur: true,
                     tint: AppColors.accent,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -341,7 +343,7 @@ class StopDeparturesCard extends StatelessWidget {
           end: Alignment.bottomCenter,
           colors: [Color(0xF21A1D24), Color(0xF214161C)],
         ),
-        shape: RoundedSuperellipseBorder(
+        shape: continuousShape(
           borderRadius: BorderRadius.circular(radius),
           side: const BorderSide(color: AppColors.darkBorder),
         ),

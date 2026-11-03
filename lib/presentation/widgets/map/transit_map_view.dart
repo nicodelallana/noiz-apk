@@ -6,6 +6,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
 import 'package:bizkaia_transit/core/theme/app_typography.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 /// Interactive open vector map view powered by MapLibre GL.
 ///
@@ -77,7 +78,7 @@ class _TransitMapViewState extends State<TransitMapView> {
   Widget build(BuildContext context) {
     _reduced = Motion.reduced(context);
 
-    return ClipRSuperellipse(
+    return ContinuousClip(
       borderRadius: BorderRadius.circular(_radius),
       child: SizedBox(
         height: widget.height,
@@ -119,7 +120,7 @@ class _TransitMapViewState extends State<TransitMapView> {
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: ShapeDecoration(
-                    shape: RoundedSuperellipseBorder(
+                    shape: continuousShape(
                       borderRadius: BorderRadius.circular(_radius),
                       side: const BorderSide(color: AppColors.darkBorder),
                     ),
@@ -201,7 +202,7 @@ class _StationLabel extends StatelessWidget {
       child: DecoratedBox(
         decoration: ShapeDecoration(
           color: _TransitMapViewState._overlayFill,
-          shape: RoundedSuperellipseBorder(
+          shape: continuousShape(
             borderRadius: BorderRadius.circular(10),
             side: const BorderSide(color: AppColors.darkBorderStrong),
           ),

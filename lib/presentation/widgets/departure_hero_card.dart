@@ -11,6 +11,7 @@ import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/content.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 /// The next departure, as the screen's hero: line and destination, a 72 pt
 /// countdown, the clock time with its status in words, the departure after
@@ -119,6 +120,7 @@ class DepartureHeroCard extends ConsumerWidget {
                         alignment: Alignment.bottomLeft,
                         child: CountdownText(
                           minutes: departure.minutesRemaining,
+                          clockTime: departure.scheduledTimeFormatted,
                           color: delayMinutes > 0
                               ? AppColors.delayedAmber
                               : AppColors.darkTextPrimary,
@@ -135,7 +137,9 @@ class DepartureHeroCard extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            departure.scheduledTimeFormatted,
+                            departure.minutesRemaining >= 60
+                                ? 'en ${formatWait(departure.minutesRemaining)}'
+                                : departure.scheduledTimeFormatted,
                             style: AppTypography.time.copyWith(
                               fontSize: 17,
                               fontWeight: FontWeight.w600,
@@ -164,7 +168,7 @@ class DepartureHeroCard extends ConsumerWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Después: ${next.scheduledTimeFormatted}'
-                        ' (en ${next.minutesRemaining} min)',
+                        ' (en ${formatWait(next.minutesRemaining)})',
                         style: AppTypography.time.copyWith(
                           color: AppColors.darkTextSecondary,
                         ),
@@ -258,7 +262,7 @@ class DepartureHeroCard extends ConsumerWidget {
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
           backgroundColor: AppColors.darkSurfaceElevated,
-          shape: RoundedSuperellipseBorder(
+          shape: continuousShape(
             borderRadius: BorderRadius.circular(18),
             side: const BorderSide(color: AppColors.darkBorderStrong),
           ),

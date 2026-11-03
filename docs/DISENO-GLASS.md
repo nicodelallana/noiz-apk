@@ -19,14 +19,14 @@ Rediseño en la rama `redesign/glass`. Toma como referencia el lenguaje Liquid G
 | `GlassKind.overMap` | Sobre el mapa. En web el mapa es un elemento HTML que no se puede desenfocar, así que se usa un tinte denso (0,88). En Android el desenfoque sí funciona. |
 | `GlassKind.clear` | Cristal fino para fondos ricos (onboarding). |
 | `GlassButton` | Cristal pulsable: escala a 0,96 con muelle y vibración ligera. `tint:` lo convierte en la acción principal. Sin `onPressed` se atenúa el contenido, no el cristal. |
-| `blur: false` | En `GlassSurface` / `GlassButton`, para controles que van encima de otro cristal (botones de una hoja): basta con un desenfoque. |
+| `blur: true` | En `GlassSurface` / `GlassButton`, activa el desenfoque real. Por defecto está apagado; ver las reglas de rendimiento. |
 | `SurfaceCard` | Tarjeta sólida de contenido (radio 24, filo de 1 px, `onTap` opcional, `accent:` para el borde de color). |
 | `LineBadge` | Insignia de línea con el color del operador. |
 | `SectionHeader` | Título de sección estilo iOS con subtítulo y acción opcional. |
 | `DepartureStatus` | "En directo", "Según horario" o "+N min". |
 | `CountdownText` | Minutos con dígitos tabulares que "ruedan" al cambiar; 0 se muestra como "Ya". |
 | `Motion` | `smooth` (0,5 / 1), `snappy` (0,35 / 0,85), `bouncy` (0,3 / 0,6) y `sheet` (0,45 / 0,88). Cada uno da `.duration` y `.curve`. `Motion.reduced(context)` indica si hay que reducir el movimiento. |
-| `AuroraBackground` | Fondo del shell, a 12 fps. Pásale `animate: false` en pantallas empujadas. |
+| `AuroraBackground` | Fondo del shell, estático (solo anima el cambio de color de operador). Las pantallas empujadas pintan el suyo. |
 
 ## Tipografía (`AppTypography`)
 
@@ -59,13 +59,26 @@ Todas las esquinas son continuas (`RoundedSuperellipseBorder` / `ClipRSuperellip
 
 Los elementos anidados son concéntricos: radio interior = radio exterior − padding.
 
-## Reglas de rendimiento
+## Reglas de rendimiento (medidas)
 
-- Como mucho unos 5 desenfoques vivos por pantalla. El contenido que hace scroll no lleva desenfoque.
-- No metas cristal dentro de `Opacity` ni de `FadeTransition`, porque rompe el desenfoque. Para aparecer, anima el contenido, no el cristal.
-- El shell envuelve las pestañas en un `BackdropGroup`. Los cristales que se solapan (una hoja sobre la barra) usan su propio desenfoque; las hojas modales van en el navegador raíz.
-- El cambio de pestaña es instantáneo, como en iOS. Lo que se anima es la entrada del contenido.
-- Las pantallas empujadas usan la transición de iOS en todas las plataformas: la de Android desvanece la página saliente, y con ella el cristal del shell.
+Medido con Chrome automatizado: móvil de 390×844 a 3×, CPU 4 veces más lenta (un móvil de gama media) y scroll real de Inicio.
+
+| Medida | Antes | Después |
+|---|---|---|
+| CPU en reposo (4 s sin tocar) | ~1.170 ms | 0–1 ms |
+| Fotogramas de más de 25 ms al hacer scroll | 49–59 | 0–3 |
+| Peor tirón | 133–183 ms | 17–33 ms (una vez, 83) |
+| CPU durante el scroll | 6,1 s | 1,9 s |
+
+- **El desenfoque es opcional (`blur: true`).** Solo lo llevan los elementos que tienen contenido moviéndose detrás: la barra de pestañas, el botón de modo, las hojas, las barras fijadas, los botones flotantes y los controles sobre el mapa. Sobre la aurora, que es un degradado suave, desenfocar no se nota pero cuesta una pasada completa en cada fotograma.
+- **En web no hay desenfoque ni sombras.** Flutter web no tiene caché de rasterizado: en cada fotograma de scroll repinta cada desenfoque y cada sombra, y entre los dos eran la mitad de los tirones. En su lugar se usa un tinte denso (0,92) donde pasa contenido por debajo. En Android e iOS se mantiene el desenfoque real.
+- **Superelipses solo en nativo.** `continuousShape()` / `ContinuousClip` (en `widgets/glass/shapes.dart`) dan una superelipse en Android e iOS y un rectángulo redondeado en web. La superelipse es un trazado que se dibuja de nuevo en cada fotograma; el rectángulo redondeado se dibuja directamente. A estos radios no se distinguen. Fue la segunda mayor mejora.
+- **La aurora es estática.** Cualquier repintado del fondo invalida todo el cristal que tiene encima: animada, la app consumía CPU en reposo. Solo se anima el cambio de color al cambiar de operador.
+- **Las pestañas se mantienen vivas** (`StatefulShellRoute.indexedStack`). Al volver al mapa no se recrea MapLibre.
+- **No hay mapa dentro del scroll.** Inicio enlaza a la pestaña Mapa: un mapa embebido es una vista de plataforma que hay que recomponer en cada fotograma.
+- No se usa `InkSparkle` (compila un shader al primer toque); se usa `InkRipple`.
+- No metas cristal dentro de `Opacity` ni de `FadeTransition`. El cambio de pestaña es instantáneo, como en iOS, y las pantallas empujadas usan la transición de iOS en todas las plataformas.
+- **Pendiente:** el renderizador WebAssembly de Flutter sería todavía más rápido, pero `flutter_secure_storage` 9 usa `dart:html` y no compila con `--wasm`. Hace falta actualizarlo a la versión 10.
 
 ## Pantallas
 

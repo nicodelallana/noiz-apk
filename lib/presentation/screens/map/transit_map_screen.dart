@@ -348,6 +348,7 @@ class _NoFixPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = AppTypography.textTheme();
     return GlassSurface(
+      blur: true,
       kind: GlassKind.overMap,
       radius: 999,
       padding: const EdgeInsets.fromLTRB(14, 9, 16, 9),
@@ -400,6 +401,7 @@ class _RecenterButton extends StatelessWidget {
       message: 'Centrar en mi posición',
       excludeFromSemantics: true,
       child: GlassButton(
+        blur: true,
         kind: GlassKind.overMap,
         padding: EdgeInsets.zero,
         semanticLabel: 'Centrar en mi posición',
@@ -489,6 +491,7 @@ class _StopSheet extends ConsumerWidget {
     final t = AppTypography.textTheme();
 
     return GlassSurface(
+      blur: true,
       // The web can't blur the map under the sheet; this kind falls back to
       // a denser tint there.
       kind: GlassKind.overMap,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 /// How the glass treats what is behind it.
 enum GlassKind {
@@ -32,14 +33,16 @@ class GlassSurface extends StatelessWidget {
     this.padding = EdgeInsets.zero,
     this.tint,
     this.shadow = true,
-    this.blur = true,
+    this.blur = false,
   });
 
   final Widget child;
   final GlassKind kind;
 
-  /// Off for controls sitting on another glass surface (a sheet): one blur
-  /// is enough, glass-on-glass only costs a second backdrop pass.
+  /// Real backdrop blur. Off by default: over the aurora (a smooth gradient)
+  /// a blur is invisible but costs a full backdrop pass every frame anything
+  /// behind repaints. Turn it on only where content moves underneath — the
+  /// tab bar, sheets, pinned bars, controls over the map.
   final bool blur;
 
   /// Corner radius; use a large value (e.g. 999) for capsules.
@@ -52,17 +55,31 @@ class GlassSurface extends StatelessWidget {
 
   static const _baseTint = Color(0xFF1D1D20);
 
+  static const _shadows = [
+    BoxShadow(color: Color(0x47000000), blurRadius: 24, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x1F000000), blurRadius: 2, offset: Offset(0, 1)),
+  ];
+
+
   @override
   Widget build(BuildContext context) {
-    final shape = RoundedSuperellipseBorder(
+    final shape = continuousShape(
       borderRadius: BorderRadius.circular(radius),
     );
-    final blur = this.blur && (kind != GlassKind.overMap || !kIsWeb);
+    // The web has no raster cache: every scrolled frame repaints each
+    // backdrop blur and each large shadow. Measured on a throttled phone
+    // profile, those two were half of all dropped frames — so on the web
+    // glass never blurs and keeps only the contact shadow. Where content
+    // moves underneath (this.blur requested), a denser tint keeps it legible.
+    final blur = this.blur && !kIsWeb;
     final tintAlpha = switch (kind) {
-      GlassKind.regular => this.blur ? 0.58 : 0.30,
+      GlassKind.regular => blur ? 0.58 : (this.blur ? 0.92 : 0.30),
       GlassKind.overMap => blur ? 0.66 : 0.88,
       GlassKind.clear => 0.22,
     };
+    // Web: no shadow at all (even a 2 px one is a blur pass per frame);
+    // the rim draws the edge.
+    final shadows = shadow && !kIsWeb ? _shadows : null;
     // Tinted glass is the screen's primary action: mostly the tint colour,
     // still a touch translucent so the rim and sheen read as glass.
     final fill = tint != null
@@ -70,69 +87,56 @@ class GlassSurface extends StatelessWidget {
             .withValues(alpha: 0.9)
         : _baseTint.withValues(alpha: tintAlpha);
 
-    Widget surface = Stack(
-      children: [
-        Positioned.fill(child: ColoredBox(color: fill)),
-        // Specular highlight: light falling on the top edge.
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.white.withValues(alpha: kind == GlassKind.clear ? 0.10 : 0.08),
-                  Colors.white.withValues(alpha: 0),
-                ],
-                stops: const [0, 0.38],
-              ),
-            ),
-          ),
-        ),
-        Padding(padding: padding, child: child),
-        Positioned.fill(
-          child: IgnorePointer(
-            child: CustomPaint(painter: _RimPainter(shape)),
-          ),
-        ),
-      ],
-    );
-
-    if (blur) {
-      surface = BackdropFilter.grouped(
-        filter: ui.ImageFilter.compose(
-          outer: ui.ImageFilter.blur(
-            sigmaX: kind == GlassKind.clear ? 6 : 22,
-            sigmaY: kind == GlassKind.clear ? 6 : 22,
-            tileMode: TileMode.mirror,
-          ),
-          inner: const ColorFilter.matrix(_saturate170),
-        ),
-        child: surface,
-      );
-    }
-
-    return DecoratedBox(
+    // Fill and sheen are painted with the shape itself, so the frosted
+    // (no-blur) variant needs no clip layer at all.
+    final sheen = Colors.white.withValues(alpha: kind == GlassKind.clear ? 0.10 : 0.08);
+    final body = DecoratedBox(
       decoration: ShapeDecoration(
         shape: shape,
-        shadows: shadow
-            ? const [
-                BoxShadow(
-                  color: Color(0x47000000),
-                  blurRadius: 24,
-                  offset: Offset(0, 8),
-                ),
-                BoxShadow(
-                  color: Color(0x1F000000),
-                  blurRadius: 2,
-                  offset: Offset(0, 1),
-                ),
-              ]
-            : null,
+        color: fill,
+        // With blur, the shadow goes outside the clip (below), never under
+        // the translucent fill.
+        shadows: blur ? null : shadows,
       ),
-      child: ClipRSuperellipse(
-        borderRadius: BorderRadius.circular(radius),
-        child: surface,
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          shape: shape,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [sheen, sheen.withValues(alpha: 0)],
+            stops: const [0, 0.38],
+          ),
+        ),
+        position: DecorationPosition.foreground,
+        child: CustomPaint(
+          foregroundPainter: _RimPainter(shape),
+          child: Padding(padding: padding, child: child),
+        ),
+      ),
+    );
+    if (!blur) return body;
+
+    // Native only (see above): blur + saturation behind the shape.
+    final sigma = kind == GlassKind.clear ? 6.0 : 18.0;
+    final blurFilter = ui.ImageFilter.blur(
+      sigmaX: sigma,
+      sigmaY: sigma,
+      tileMode: TileMode.mirror,
+    );
+    return DecoratedBox(
+      decoration: ShapeDecoration(shape: shape, shadows: shadows),
+      child: RepaintBoundary(
+        child: ContinuousClip(
+          borderRadius: BorderRadius.circular(radius),
+          child: BackdropFilter.grouped(
+            filter: ui.ImageFilter.compose(
+              outer: blurFilter,
+              inner: const ColorFilter.matrix(_saturate170),
+            ),
+            child: body,
+          ),
+        ),
       ),
     );
   }
@@ -168,7 +172,15 @@ class _RimPainter extends CustomPainter {
         ],
         stops: const [0, 0.55, 1],
       ).createShader(rect);
-    canvas.drawPath(shape.getOuterPath(rect), paint);
+    final shape = this.shape;
+    if (shape is RoundedRectangleBorder) {
+      canvas.drawRRect(
+        shape.borderRadius.resolve(TextDirection.ltr).toRRect(rect),
+        paint,
+      );
+    } else {
+      canvas.drawPath(shape.getOuterPath(rect), paint);
+    }
   }
 
   @override
@@ -187,7 +199,7 @@ class GlassButton extends StatefulWidget {
     this.padding = const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
     this.tint,
     this.semanticLabel,
-    this.blur = true,
+    this.blur = false,
   });
 
   final Widget child;

@@ -87,7 +87,9 @@ class DepartureRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${departure.scheduledTimeFormatted} · $status',
+                  departure.minutesRemaining >= 60
+                      ? 'en ${formatWait(departure.minutesRemaining)} · $status'
+                      : '${departure.scheduledTimeFormatted} · $status',
                   style: AppTypography.time.copyWith(
                     color: isDelayed
                         ? AppColors.delayedAmber
@@ -100,6 +102,7 @@ class DepartureRow extends StatelessWidget {
           const SizedBox(width: 12),
           CountdownText(
             minutes: departure.minutesRemaining,
+            clockTime: departure.scheduledTimeFormatted,
             style: AppTypography.countdownSmall,
             color: countdownColor,
             unitStyle: t.bodySmall!.copyWith(

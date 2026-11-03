@@ -18,7 +18,6 @@ class LicensesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AuroraBackground(
-      animate: false,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: SafeArea(
@@ -113,6 +112,7 @@ class LicensesScreen extends StatelessWidget {
                 top: 8,
                 left: 16,
                 child: GlassButton(
+                  blur: true,
                   semanticLabel: 'Atrás',
                   padding: const EdgeInsets.all(9),
                   onPressed: () => Navigator.of(context).maybePop(),

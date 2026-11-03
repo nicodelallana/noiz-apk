@@ -9,6 +9,7 @@ import '../../providers/auth_providers.dart';
 import '../../widgets/glass/content.dart';
 import '../legal/licenses_screen.dart';
 import 'auth_screen.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 final _text = AppTypography.textTheme();
 
@@ -206,7 +207,7 @@ class _ProfileContent extends ConsumerWidget {
       builder: (dialogCtx) {
         return AlertDialog(
           backgroundColor: AppColors.darkSurfaceElevated,
-          shape: RoundedSuperellipseBorder(
+          shape: continuousShape(
             borderRadius: BorderRadius.circular(28),
           ),
           title: const Text('¿Eliminar tu cuenta?'),
@@ -469,7 +470,7 @@ class _SettingsRow extends StatelessWidget {
                   height: 30,
                   decoration: ShapeDecoration(
                     color: tileColor,
-                    shape: RoundedSuperellipseBorder(
+                    shape: continuousShape(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),

@@ -17,11 +17,11 @@ import '../../widgets/departure_row.dart';
 import '../../widgets/glass/content.dart';
 import '../../widgets/glass/glass_surface.dart';
 import '../../widgets/glass/motion.dart';
-import '../../widgets/map/transit_map_view.dart';
 import '../nearby/nearby_transit_screen.dart';
 import '../planner/route_planner_screen.dart';
 import '../saved_trips/save_trip_dialog.dart';
 import '../simulator/live_activity_simulator_screen.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 /// Home ("Inicio"): the next departures from the selected stop.
 ///
@@ -119,8 +119,6 @@ class _TransitScreenContent extends ConsumerWidget {
     final topInset = MediaQuery.paddingOf(context).top;
 
     final stopName = activeStop?.name ?? 'Buscando parada…';
-    final latitude = activeStop?.latitude ?? 43.2625;
-    final longitude = activeStop?.longitude ?? -2.9350;
 
     return CustomScrollView(
       slivers: [
@@ -180,20 +178,13 @@ class _TransitScreenContent extends ConsumerWidget {
 
         const _MultiOperatorDeparturesSliverList(),
 
-        const SliverToBoxAdapter(child: SectionHeader('En el mapa')),
+        // A live map here was a platform view inside the scroll view: on
+        // the web every scrolled frame had to re-composite it. A link card
+        // to the Mapa tab gives the same way in at no cost.
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ClipRSuperellipse(
-              borderRadius: BorderRadius.circular(24),
-              child: TransitMapView(
-                latitude: latitude,
-                longitude: longitude,
-                stationName: stopName,
-                height: 170,
-                primaryColor: primaryColor,
-              ),
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: _MapLinkCard(stopName: stopName, color: primaryColor),
           ),
         ),
 
@@ -354,7 +345,7 @@ class _HomeMenu extends StatelessWidget {
       color: AppColors.darkSurfaceElevated.withValues(alpha: 0.97),
       elevation: 12,
       offset: const Offset(0, 52),
-      shape: RoundedSuperellipseBorder(
+      shape: continuousShape(
         borderRadius: BorderRadius.circular(20),
         side: const BorderSide(color: AppColors.darkBorderStrong),
       ),
@@ -781,6 +772,64 @@ class _Dot extends StatelessWidget {
   }
 }
 
+/// "See it on the map" entry: opens the Mapa tab.
+class _MapLinkCard extends StatelessWidget {
+  const _MapLinkCard({required this.stopName, required this.color});
+
+  final String stopName;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTypography.textTheme();
+    return SurfaceCard(
+      padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+      onTap: () => context.go('/map'),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: ShapeDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color.withValues(alpha: 0.85), color.withValues(alpha: 0.45)],
+              ),
+              shape: continuousShape(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Icon(Icons.map_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ver en el mapa',
+                  style: t.titleMedium!.copyWith(color: AppColors.darkTextPrimary),
+                ),
+                Text(
+                  'Paradas y salidas alrededor de $stopName',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.darkTextTertiary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Hero card for the next departure, then the rest grouped in one card.
 class _MultiOperatorDeparturesSliverList extends ConsumerWidget {
   const _MultiOperatorDeparturesSliverList();
@@ -849,7 +898,7 @@ class _MultiOperatorDeparturesSliverList extends ConsumerWidget {
                 sliver: DecoratedSliver(
                   decoration: ShapeDecoration(
                     color: const Color(0xF214161C),
-                    shape: RoundedSuperellipseBorder(
+                    shape: continuousShape(
                       borderRadius: BorderRadius.circular(24),
                       side: const BorderSide(color: AppColors.darkBorder),
                     ),
@@ -970,6 +1019,7 @@ class _MultiOperatorStopSearchModalState
     return Padding(
       padding: EdgeInsets.fromLTRB(8, 0, 8, 8 + media.viewInsets.bottom),
       child: GlassSurface(
+        blur: true,
         radius: 36,
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
         child: SafeArea(

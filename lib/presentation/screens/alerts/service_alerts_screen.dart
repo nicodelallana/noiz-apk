@@ -458,6 +458,7 @@ class _OperatorFilterBarState extends State<_OperatorFilterBar> {
           child: SizedBox(
             width: glassWidth,
             child: GlassSurface(
+              blur: true,
               radius: 999,
               padding: const EdgeInsets.all(_inset),
               child: SizedBox(

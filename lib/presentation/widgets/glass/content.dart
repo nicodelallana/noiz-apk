@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
 import 'package:bizkaia_transit/core/theme/app_typography.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 /// Solid content surface (the content layer never uses glass): near-black
 /// fill, hairline rim, a faint top highlight and continuous corners.
@@ -26,7 +27,7 @@ class SurfaceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shape = RoundedSuperellipseBorder(
+    final shape = continuousShape(
       borderRadius: BorderRadius.circular(radius),
       side: BorderSide(
         color: accent?.withValues(alpha: 0.7) ?? AppColors.darkBorder,
@@ -48,7 +49,8 @@ class SurfaceCard extends StatelessWidget {
         ),
         child: InkWell(
           onTap: onTap,
-          splashFactory: InkSparkle.splashFactory,
+          // InkSparkle compiles a shader on first tap (a visible hitch on web).
+          splashFactory: InkRipple.splashFactory,
           highlightColor: Colors.white.withValues(alpha: 0.04),
           child: Padding(padding: padding, child: child),
         ),
@@ -80,7 +82,7 @@ class LineBadge extends StatelessWidget {
       ),
       decoration: ShapeDecoration(
         color: color,
-        shape: RoundedSuperellipseBorder(
+        shape: continuousShape(
           borderRadius: BorderRadius.circular(large ? 10 : 7),
         ),
       ),
@@ -263,18 +265,31 @@ class _LiveDotState extends State<_LiveDot>
   }
 }
 
+/// "5 h 28 min" / "45 min" for waits shown as text.
+String formatWait(int minutes) {
+  if (minutes < 60) return '$minutes min';
+  final h = minutes ~/ 60;
+  final m = minutes % 60;
+  return m == 0 ? '$h h' : '$h h $m min';
+}
+
 /// Minutes countdown whose number rolls up when it changes (SwiftUI's
-/// numeric text transition); 0 reads "Ya". Tabular figures, no jitter.
+/// numeric text transition); 0 reads "Ya". From an hour on it shows the
+/// [clockTime] instead ("05:42" beats "328 min"). Tabular figures.
 class CountdownText extends StatelessWidget {
   const CountdownText({
     super.key,
     required this.minutes,
+    this.clockTime,
     this.style = AppTypography.countdown,
     this.unitStyle,
     this.color = AppColors.darkTextPrimary,
   });
 
   final int minutes;
+
+  /// Departure clock time, shown instead of minutes for waits ≥ 60 min.
+  final String? clockTime;
   final TextStyle style;
   final TextStyle? unitStyle;
   final Color color;
@@ -283,13 +298,16 @@ class CountdownText extends StatelessWidget {
   Widget build(BuildContext context) {
     final reduced = Motion.reduced(context);
     final now = minutes <= 0;
+    final asClock = minutes >= 60 && clockTime != null;
     final number = Text(
-      now ? 'Ya' : '$minutes',
-      key: ValueKey(minutes <= 0 ? -1 : minutes),
+      now ? 'Ya' : (asClock ? clockTime! : '$minutes'),
+      key: ValueKey(now ? -1 : (asClock ? clockTime : minutes)),
       style: style.copyWith(color: color),
     );
     return Semantics(
-      label: now ? 'Sale ya' : 'Sale en $minutes minutos',
+      label: now
+          ? 'Sale ya'
+          : (asClock ? 'Sale a las $clockTime' : 'Sale en $minutes minutos'),
       excludeSemantics: true,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -318,7 +336,7 @@ class CountdownText extends StatelessWidget {
               child: number,
             ),
           ),
-          if (!now) ...[
+          if (!now && !asClock) ...[
             const SizedBox(width: 4),
             Text(
               'min',

@@ -9,6 +9,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../providers/auth_providers.dart';
 import '../../widgets/glass/aurora_background.dart';
 import '../../widgets/glass/glass_surface.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 final _text = AppTypography.textTheme();
 
@@ -36,7 +37,6 @@ class AuthScreen extends ConsumerWidget {
     final isIOS = !kIsWeb && Platform.isIOS;
 
     return AuroraBackground(
-      animate: false,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: SafeArea(
@@ -134,6 +134,7 @@ class AuthScreen extends ConsumerWidget {
                 top: 8,
                 left: 16,
                 child: GlassButton(
+                  blur: true,
                   semanticLabel: 'Atrás',
                   padding: const EdgeInsets.all(9),
                   onPressed: () => Navigator.of(context).maybePop(),
@@ -165,7 +166,7 @@ class AppMark extends StatelessWidget {
         width: size,
         height: size,
         decoration: ShapeDecoration(
-          shape: RoundedSuperellipseBorder(
+          shape: continuousShape(
             borderRadius: BorderRadius.circular(size * 0.27),
             side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
           ),

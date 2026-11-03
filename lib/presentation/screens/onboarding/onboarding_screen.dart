@@ -14,6 +14,7 @@ import '../../widgets/glass/glass_surface.dart';
 import '../../widgets/glass/motion.dart';
 import '../auth/auth_screen.dart';
 import '../legal/legal_texts.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 final _text = AppTypography.textTheme();
 
@@ -390,7 +391,7 @@ class _SavedTripsPreview extends StatelessWidget {
             height: 36,
             decoration: ShapeDecoration(
               color: color,
-              shape: RoundedSuperellipseBorder(
+              shape: continuousShape(
                 borderRadius: BorderRadius.circular(10),
               ),
             ),

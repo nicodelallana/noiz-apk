@@ -13,6 +13,7 @@ import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/content.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 /// Glass sheet that lets the user pick the transport operator, filtered by
 /// territory (Bizkaia, Gipuzkoa, Araba).
@@ -74,6 +75,7 @@ class TransportSelectorBottomSheet extends ConsumerWidget {
       // Floats off the screen edges, iOS-style.
       padding: EdgeInsets.fromLTRB(8, 0, 8, inset),
       child: GlassSurface(
+        blur: true,
         kind: overMap ? GlassKind.overMap : GlassKind.regular,
         radius: 32,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -473,7 +475,7 @@ class _OperatorTile extends StatelessWidget {
                   height: 36,
                   decoration: ShapeDecoration(
                     color: color,
-                    shape: RoundedSuperellipseBorder(
+                    shape: continuousShape(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     shadows: [

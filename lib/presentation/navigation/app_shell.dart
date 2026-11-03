@@ -15,6 +15,7 @@ import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/aurora_background.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 /// App shell: the aurora backdrop behind every tab, and a floating
 /// liquid-glass capsule tab bar with the transport-mode button beside it
@@ -90,8 +91,6 @@ class _AppShellState extends ConsumerState<AppShell> {
         backgroundColor: AppColors.darkBackground,
         body: AuroraBackground(
           accent: Color(activeOperator.colorHex),
-          // Hidden behind the full-screen map: no need to keep drifting.
-          animate: widget.currentIndex != 1,
           child: BackdropGroup(
             child: Stack(
               children: [
@@ -201,6 +200,7 @@ class _GlassTabBar extends StatelessWidget {
       curve: reduced ? Curves.linear : m.curve,
       height: height,
       child: GlassSurface(
+        blur: true,
         kind: overMap ? GlassKind.overMap : GlassKind.regular,
         radius: 999,
         padding: const EdgeInsets.all(4),
@@ -339,6 +339,7 @@ class _ActiveTripMiniBanner extends ConsumerWidget {
     final ended = trip.status == LiveTripStatus.ended;
 
     return GlassButton(
+      blur: true,
       onPressed: () => context.go('/'),
       radius: 22,
       padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
@@ -348,7 +349,7 @@ class _ActiveTripMiniBanner extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: ShapeDecoration(
               color: lineColor,
-              shape: RoundedSuperellipseBorder(
+              shape: continuousShape(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),

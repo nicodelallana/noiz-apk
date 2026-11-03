@@ -9,6 +9,7 @@ import '../../widgets/animations/empty_transit_view.dart';
 import '../../widgets/glass/content.dart';
 import '../../widgets/glass/glass_surface.dart';
 import 'save_trip_dialog.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 final _text = AppTypography.textTheme();
 
@@ -99,6 +100,7 @@ class SavedTripsScreen extends ConsumerWidget {
               child: Row(
                 children: [
                   GlassButton(
+                    blur: true,
                     semanticLabel: 'Sincronizar viajes',
                     padding: const EdgeInsets.all(10),
                     onPressed: () => ref
@@ -112,6 +114,7 @@ class SavedTripsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(width: 8),
                   GlassButton(
+                    blur: true,
                     tint: AppColors.accent,
                     padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
                     onPressed: () {
@@ -165,7 +168,7 @@ class _SavedTripCard extends ConsumerWidget {
         padding: const EdgeInsets.only(right: 22),
         decoration: ShapeDecoration(
           color: AppColors.disruptedRed,
-          shape: RoundedSuperellipseBorder(
+          shape: continuousShape(
             borderRadius: BorderRadius.circular(24),
           ),
         ),

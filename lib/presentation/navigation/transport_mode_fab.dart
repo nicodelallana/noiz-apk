@@ -53,6 +53,7 @@ class TransportModeFab extends ConsumerWidget {
       width: size,
       height: size,
       child: GlassButton(
+        blur: true,
         onPressed: () => TransportSelectorBottomSheet.show(context),
         semanticLabel: 'Cambiar transporte: ${activeOperator.name}',
         kind: overMap ? GlassKind.overMap : GlassKind.regular,
