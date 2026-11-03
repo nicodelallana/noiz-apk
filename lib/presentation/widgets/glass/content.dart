@@ -74,6 +74,9 @@ class LineBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Light line colours (Bizkaibus green, Renfe C3 blue) need dark text.
+    final onColor =
+        color.computeLuminance() > 0.45 ? AppColors.darkBackground : Colors.white;
     return Container(
       constraints: BoxConstraints(minWidth: large ? 40 : 32),
       padding: EdgeInsets.symmetric(
@@ -92,7 +95,7 @@ class LineBadge extends StatelessWidget {
         maxLines: 1,
         style: TextStyle(
           fontFamily: AppTypography.fontFamily,
-          color: Colors.white,
+          color: onColor,
           fontWeight: FontWeight.w700,
           fontSize: large ? 15 : 12,
           letterSpacing: -0.2,

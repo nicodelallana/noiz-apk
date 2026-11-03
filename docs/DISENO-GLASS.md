@@ -84,3 +84,10 @@ Medido con Chrome automatizado: móvil de 390×844 a 3×, CPU 4 veces más lenta
 
 - **Shell:** barra cápsula flotante (62 → 50 al hacer scroll hacia abajo) con una "gota" de cristal que se desliza entre pestañas, el aviso numérico de avisos cercanos en "Alertas" y el botón de modo como círculo de cristal aparte. Tiene un degradado en el borde inferior para que se lea el contenido.
 - Las páginas de pestaña llevan `Scaffold` transparente y dejan unos 120 px de margen inferior para la barra. Las pantallas empujadas (parada, licencias) pintan su propio `AuroraBackground(animate: false)`.
+- **Mapa en directo:**
+  - Capa GeoJSON de vehículos con datos de `tools/vehicle-proxy`: los de GPS (Bizkaibus) van como punto relleno con borde blanco y los situados por estación (Metro, Renfe) como anillo del color de la línea.
+  - Etiqueta con la línea desde zoom 13.
+  - Los vehículos se deslizan unos 1,1 s hacia cada nueva posición (con "reducir movimiento" saltan) y no se animan saltos de más de 3 km.
+  - La capa consulta cada 20 s solo mientras la pestaña está visible y la app en primer plano.
+  - Una píldora de cristal "En directo · N vehículos" permite ocultarlos y explica qué significa cada marca.
+

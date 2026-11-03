@@ -1,5 +1,14 @@
 # Euskadi Public Transit Data Sources & Integration Audit
 
+> **Verificado en vivo el 3 nov 2026** (en hora punta; ver `tools/vehicle-proxy/README.md`). Varias filas de esta tabla no se cumplen hoy:
+> - **Bilbobus:** sin tiempo real en ningún canal oficial; todos los feeds están vacíos.
+> - **Euskotren y Tranvía:** solo previsiones de llegada; el feed de posiciones está vacío.
+> - **Bizkaibus:** posiciones GPS reales, pero sus "trip updates" no traen previsiones.
+> - **Metro Bilbao y Renfe:** los trenes van situados en una estación, no por GPS, y sí traen previsiones.
+>
+> Ningún feed tiene CORS: la versión web necesita un proxy.
+
+
 Comprehensive registry of official open data feeds, licenses, API specifications, and ingestion architectures for all transport operators across the Basque Country (Euskadi).
 
 ---

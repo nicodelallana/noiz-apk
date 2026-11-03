@@ -16,13 +16,15 @@ import 'package:bizkaia_transit/core/utils/geo.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
 import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
+import 'package:bizkaia_transit/presentation/screens/map/live_vehicles_layer.dart';
 import 'package:bizkaia_transit/presentation/screens/stop/stop_departures_screen.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
 
 /// Full-screen map tab: centres on the user, shows every stop around them
 /// (all operators) and reloads stops for whatever area the camera rests on.
-/// Tapping a stop opens a sheet with its next departures.
+/// Tapping a stop opens a sheet with its next departures. Live vehicles
+/// (GPS buses, trains by station) move on top while the tab is visible.
 class TransitMapScreen extends ConsumerStatefulWidget {
   const TransitMapScreen({super.key});
 
@@ -30,7 +32,8 @@ class TransitMapScreen extends ConsumerStatefulWidget {
   ConsumerState<TransitMapScreen> createState() => _TransitMapScreenState();
 }
 
-class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
+class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
+    with WidgetsBindingObserver {
   /// OpenFreeMap's dark basemap: near-black like the app canvas, so the
   /// operator-coloured stops are what stands out.
   static const _styleUrl = 'https://tiles.openfreemap.org/styles/dark';
@@ -58,10 +61,39 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
   Map<String, Stop> _visibleStops = const {};
   String? _selectedStopId;
 
+  late final LiveVehiclesController _live = LiveVehiclesController(
+    reduceMotion: () => mounted && Motion.reduced(context),
+  );
+  bool _tabVisible = true;
+  bool _foreground = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  // Poll live vehicles only while this tab is on screen (the shell keeps
+  // hidden tabs alive with tickers off) and the app is in the foreground.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _tabVisible = TickerMode.of(context);
+    _live.setActive(_tabVisible && _foreground);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _live.setActive(_tabVisible && _foreground);
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _debounce?.cancel();
     _controller?.onFeatureTapped.remove(_onFeatureTapped);
+    _live.dispose();
     super.dispose();
   }
 
@@ -134,6 +166,8 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
       ),
     );
     _styleReady = true;
+    // Vehicles draw above the stops.
+    await _live.attach(controller);
 
     final here = await ref.read(resolvedUserLocationProvider.future);
     final around = await ref.read(
@@ -206,6 +240,17 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
     String layerId,
     Annotation? annotation,
   ) {
+    if (layerId == LiveVehiclesController.layerId) {
+      final vehicle = _live.vehicleAt(id, coordinates);
+      if (vehicle == null) return;
+      HapticFeedback.selectionClick();
+      VehicleSheet.show(
+        context,
+        vehicle,
+        attribution: _live.state.value.snapshot?.attribution,
+      );
+      return;
+    }
     if (layerId != _layerId) return;
     // Feature ids are not guaranteed to round-trip on every platform, so fall
     // back to the stop closest to the tap.
@@ -289,13 +334,23 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen> {
               attributionButtonPosition: AttributionButtonPosition.bottomLeft,
               attributionButtonMargins: math.Point(16, controlsBottom),
             ),
-            if (!hasRealFix)
-              Positioned(
-                top: padding.top + 12,
-                left: 16,
-                right: 16,
-                child: const Center(child: _NoFixPill()),
+            Positioned(
+              top: padding.top + 12,
+              left: 16,
+              right: 16,
+              child: Column(
+                children: [
+                  if (!hasRealFix) ...[
+                    const _NoFixPill(),
+                    const SizedBox(height: 8),
+                  ],
+                  LiveVehiclesChip(
+                    state: _live.state,
+                    onToggle: _live.toggleVisible,
+                  ),
+                ],
               ),
+            ),
             if (kIsWeb)
               AnimatedPositioned(
                 duration: move,
