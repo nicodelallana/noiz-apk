@@ -2,9 +2,9 @@ name: Moveuskadi Public Transport Data Sync
 
 on:
   schedule:
-    # Optimal cadence: Once daily at 03:30 UTC (madrugada, off-peak, instantaneous runner start).
-    # Uses < 15 min/month of GitHub Actions free quota (0.75% of 2,000 min).
-    - cron: '30 3 * * *'
+    # Moveuskadi regenerates all 35 GTFS feeds daily at 06:01 UTC (07:01 CET).
+    # Running at 06:15 UTC (07:15 CET) guarantees catching today's new timetables immediately.
+    - cron: '15 6 * * *'
   workflow_dispatch:
 
 jobs:
