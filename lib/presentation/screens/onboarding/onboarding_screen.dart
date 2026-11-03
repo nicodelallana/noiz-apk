@@ -5,16 +5,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../providers/auth_providers.dart';
+import '../../widgets/glass/aurora_background.dart';
+import '../../widgets/glass/content.dart';
+import '../../widgets/glass/glass_surface.dart';
+import '../../widgets/glass/motion.dart';
+import '../auth/auth_screen.dart';
+import '../legal/legal_texts.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
-/// Animated onboarding shown when the user is not signed in.
+final _text = AppTypography.textTheme();
+
+/// Onboarding shown when the user is not signed in.
 ///
-/// Features:
-/// - 3 feature-introduction pages with animated icons
+/// - 3 feature pages, each with a floating glass preview over the aurora
 /// - Final sign-in page with Google / Apple buttons
-/// - "Continuar sin cuenta" skip option
-/// - Smooth page indicator dots
-/// - Respects reduced motion (MediaQuery.disableAnimationsOf)
+/// - "Saltar" and "Continuar sin cuenta" both finish onboarding as a guest
+/// - Morphing capsule page indicator
+/// - Respects reduced motion (no parallax, no page animation)
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -28,6 +38,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   static const _totalPages = 4;
 
+  /// Third aurora glow per page: it drifts to the colour of what the page
+  /// talks about.
+  static const _pageGlow = [
+    AppColors.opMetroBilbao,
+    AppColors.opBizkaibus,
+    AppColors.accent,
+    AppColors.accent,
+  ];
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -36,11 +55,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   void _nextPage() {
     if (_currentPage < _totalPages - 1) {
-      _pageController.animateToPage(
-        _currentPage + 1,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      );
+      if (Motion.reduced(context)) {
+        _pageController.jumpToPage(_currentPage + 1);
+      } else {
+        _pageController.animateToPage(
+          _currentPage + 1,
+          duration: Motion.smooth.duration,
+          curve: Motion.smooth.curve,
+        );
+      }
     }
   }
 
@@ -51,107 +74,124 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final isLast = _currentPage == _totalPages - 1;
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Skip button
-            Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8, right: 8),
-                child: TextButton(
-                  onPressed: _skip,
-                  child: Text(
-                    'Saltar',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
+    return AuroraBackground(
+      accent: _pageGlow[_currentPage],
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Skip
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: GlassButton(
+                    kind: GlassKind.clear,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    onPressed: _skip,
+                    child: Text(
+                      'Saltar',
+                      style: _text.labelLarge!.copyWith(
+                        color: AppColors.darkTextPrimary,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
 
-            // Pages
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: (index) {
-                  setState(() => _currentPage = index);
-                },
-                children: const [
-                  _FeaturePage(
-                    icon: Icons.departure_board,
-                    iconColor: Color(0xFFE2001A),
-                    title: 'Metro y Bus en un vistazo',
-                    description:
-                        'Consulta las próximas salidas de Metro Bilbao y Bizkaibus en tiempo real.',
-                  ),
-                  _FeaturePage(
-                    icon: Icons.bookmark_added,
-                    iconColor: Color(0xFF00A651),
-                    title: 'Guarda tus viajes',
-                    description:
-                        'Marca tus trayectos habituales y accédelos con un toque.',
-                  ),
-                  _FeaturePage(
-                    icon: Icons.widgets_rounded,
-                    iconColor: Color(0xFF1D1D1B),
-                    title: 'Widget en tu pantalla',
-                    description:
-                        'Añade un widget a tu pantalla de inicio para ver horarios sin abrir la app.',
-                  ),
-                  _SignInPage(),
-                ],
+              // Pages
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: (index) {
+                    setState(() => _currentPage = index);
+                  },
+                  children: [
+                    _FeaturePage(
+                      index: 0,
+                      controller: _pageController,
+                      preview: const _DeparturePreview(),
+                      title: 'Metro y bus de un vistazo',
+                      description:
+                          'Consulta las próximas salidas de Metro Bilbao y '
+                          'Bizkaibus según su horario.',
+                    ),
+                    _FeaturePage(
+                      index: 1,
+                      controller: _pageController,
+                      preview: const _SavedTripsPreview(),
+                      title: 'Guarda tus viajes',
+                      description:
+                          'Marca tus trayectos habituales y ábrelos con un '
+                          'toque.',
+                    ),
+                    _FeaturePage(
+                      index: 2,
+                      controller: _pageController,
+                      preview: const _WidgetPreview(),
+                      title: 'Widget en tu pantalla',
+                      description:
+                          'Añade un widget a tu pantalla de inicio para ver '
+                          'horarios sin abrir la app.',
+                    ),
+                    const _SignInPage(),
+                  ],
+                ),
               ),
-            ),
 
-            // Bottom controls: dots + button
-            Padding(
-              padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                bottom: bottomPadding + 16,
-                top: 16,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _PageIndicator(
-                    currentPage: _currentPage,
-                    totalPages: _totalPages,
-                  ),
-                  const SizedBox(height: 24),
-                  if (_currentPage < _totalPages - 1)
+              // Bottom controls: indicator + one full-width action. The slot
+              // keeps its height on every page so the pages never jump.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _PageIndicator(
+                      currentPage: _currentPage,
+                      totalPages: _totalPages,
+                    ),
+                    const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
-                      child: FilledButton(
-                        onPressed: _nextPage,
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: Text(
-                          _currentPage == _totalPages - 2
-                              ? 'Empezar'
-                              : 'Siguiente',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
+                      child: isLast
+                          ? GlassButton(
+                              kind: GlassKind.clear,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              onPressed: _skip,
+                              child: Center(
+                                child: Text(
+                                  'Continuar sin cuenta',
+                                  style: _text.titleMedium!.copyWith(
+                                    color: AppColors.darkTextPrimary,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : GlassButton(
+                              tint: AppColors.accent,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              onPressed: _nextPage,
+                              child: Center(
+                                child: Text(
+                                  _currentPage == _totalPages - 2
+                                      ? 'Empezar'
+                                      : 'Siguiente',
+                                  style: _text.titleMedium!.copyWith(
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -164,145 +204,313 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
 class _FeaturePage extends StatelessWidget {
   const _FeaturePage({
-    required this.icon,
-    required this.iconColor,
+    required this.index,
+    required this.controller,
+    required this.preview,
     required this.title,
     required this.description,
   });
 
-  final IconData icon;
-  final Color iconColor;
+  final int index;
+  final PageController controller;
+  final Widget preview;
   final String title;
   final String description;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final reduced = Motion.reduced(context);
+
+    // The glass preview is a layer of its own: it trails the page while
+    // swiping (parallax). Moved, never faded — fading breaks the blur.
+    final floating = ExcludeSemantics(
+      child: reduced
+          ? preview
+          : AnimatedBuilder(
+              animation: controller,
+              child: preview,
+              builder: (context, child) {
+                var page = index.toDouble();
+                if (controller.hasClients &&
+                    controller.position.hasContentDimensions) {
+                  page = controller.page ?? page;
+                }
+                final delta = page - index;
+                return Transform.translate(
+                  offset: Offset(delta * 90, delta.abs() * 18),
+                  child: child,
+                );
+              },
+            ),
+    );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Spacer(flex: 2),
-
-          // Animated icon
-          reduceMotion
-              ? _StaticIcon(icon: icon, color: iconColor)
-              : _AnimatedIcon(icon: icon, color: iconColor),
-
-          const SizedBox(height: 48),
-
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
+          // Decorative mock-ups: shrink rather than overflow on short
+          // screens or with large text.
+          Expanded(
+            child: Center(
+              child: MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.2,
+                child: FittedBox(fit: BoxFit.scaleDown, child: floating),
+              ),
+            ),
+          ),
+          Semantics(
+            header: true,
+            child: Text(
+              title,
+              style: _text.displayMedium!.copyWith(
+                color: AppColors.darkTextPrimary,
+              ),
             ),
           ),
           const SizedBox(height: 12),
           Text(
             description,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              height: 1.5,
+            style: _text.bodyLarge!.copyWith(
+              color: AppColors.darkTextSecondary,
             ),
           ),
-
-          const Spacer(flex: 3),
+          const SizedBox(height: 12),
         ],
       ),
     );
   }
 }
 
-class _StaticIcon extends StatelessWidget {
-  const _StaticIcon({required this.icon, required this.color});
-
-  final IconData icon;
-  final Color color;
+/// Page 1: the next departures, labelled "Según horario" — the app reads
+/// timetables, not live positions.
+class _DeparturePreview extends StatelessWidget {
+  const _DeparturePreview();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 120,
-      height: 120,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        shape: BoxShape.circle,
+    return SizedBox(
+      width: 300,
+      child: GlassSurface(
+        kind: GlassKind.clear,
+        radius: 28,
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const LineBadge(
+                  label: 'L1',
+                  color: AppColors.opMetroBilbao,
+                  large: true,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hacia Plentzia',
+                        style: _text.titleMedium!.copyWith(
+                          color: AppColors.darkTextPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Desde Moyua',
+                        style: _text.bodySmall!.copyWith(
+                          color: AppColors.darkTextSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                CountdownText(minutes: 4),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: 6),
+                    child: Align(
+                      alignment: Alignment.bottomRight,
+                      child: DepartureStatus(isRealtime: false),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1, thickness: 1, color: Color(0x1FFFFFFF)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const LineBadge(label: 'A3136', color: AppColors.opBizkaibus),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Hacia Bilbao',
+                    style: _text.bodyMedium!.copyWith(
+                      color: AppColors.darkTextPrimary,
+                    ),
+                  ),
+                ),
+                Text(
+                  '12 min',
+                  style: AppTypography.time.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.darkTextPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
-      child: Icon(icon, size: 56, color: color),
     );
   }
 }
 
-class _AnimatedIcon extends StatefulWidget {
-  const _AnimatedIcon({required this.icon, required this.color});
-
-  final IconData icon;
-  final Color color;
-
-  @override
-  State<_AnimatedIcon> createState() => _AnimatedIconState();
-}
-
-class _AnimatedIconState extends State<_AnimatedIcon>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scaleAnimation;
-  late final Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-
-    _scaleAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
-      ),
-    );
-
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+/// Page 2: two saved trips with their next scheduled departure.
+class _SavedTripsPreview extends StatelessWidget {
+  const _SavedTripsPreview();
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Container(
-          width: 120,
-          height: 120,
-          decoration: BoxDecoration(
-            color: widget.color.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: widget.color.withValues(alpha: 0.15),
-                blurRadius: 32,
-                spreadRadius: 8,
+    Widget trip(String name, String route, String time, Color color) {
+      return Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: ShapeDecoration(
+              color: color,
+              shape: continuousShape(
+                borderRadius: BorderRadius.circular(10),
               ),
-            ],
+            ),
+            child: const Icon(
+              Icons.bookmark_rounded,
+              size: 20,
+              color: Colors.white,
+            ),
           ),
-          child: Icon(widget.icon, size: 56, color: widget.color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: _text.titleMedium!.copyWith(
+                    color: AppColors.darkTextPrimary,
+                  ),
+                ),
+                Text(
+                  route,
+                  style: _text.bodySmall!.copyWith(
+                    color: AppColors.darkTextSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            time,
+            style: AppTypography.time.copyWith(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.darkTextPrimary,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return SizedBox(
+      width: 300,
+      child: GlassSurface(
+        kind: GlassKind.clear,
+        radius: 28,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            trip('Casa → Trabajo', 'Bagatza → Kabiezes', '08:12',
+                AppColors.opMetroBilbao),
+            const Padding(
+              padding: EdgeInsets.only(left: 48, top: 12, bottom: 12),
+              child: Divider(height: 1, thickness: 1, color: Color(0x1FFFFFFF)),
+            ),
+            trip('Clase', 'Moyua → Leioa', '15:40', AppColors.opBizkaibus),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Page 3: a home-screen widget.
+class _WidgetPreview extends StatelessWidget {
+  const _WidgetPreview();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 172,
+      height: 172,
+      child: GlassSurface(
+        kind: GlassKind.clear,
+        radius: 36,
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                LineBadge(label: 'L2', color: AppColors.opMetroBilbao),
+                Spacer(),
+                Icon(
+                  Icons.directions_subway_rounded,
+                  size: 18,
+                  color: AppColors.darkTextSecondary,
+                ),
+              ],
+            ),
+            const Spacer(),
+            Text(
+              'Hacia Kabiezes',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _text.bodySmall!.copyWith(
+                color: AppColors.darkTextSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 2),
+            CountdownText(
+              minutes: 7,
+              style: AppTypography.countdownSmall.copyWith(fontSize: 34),
+              unitStyle: _text.bodyMedium!.copyWith(
+                color: AppColors.darkTextSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Según horario',
+              style: AppTypography.time.copyWith(
+                fontSize: 12,
+                color: AppColors.darkTextSecondary,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -334,188 +542,107 @@ class _SignInPage extends ConsumerWidget {
       }
     });
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(flex: 2),
-
-          // App icon
-          Container(
-            width: 88,
-            height: 88,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE2001A),
-              borderRadius: BorderRadius.circular(22),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFE2001A).withValues(alpha: 0.3),
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Spacer(),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: AppMark(size: 80),
                 ),
-              ],
-            ),
-            child: const Icon(
-              Icons.directions_transit_filled,
-              color: Colors.white,
-              size: 48,
-            ),
-          ),
-          const SizedBox(height: 28),
+                const SizedBox(height: 24),
+                Semantics(
+                  header: true,
+                  child: Text(
+                    'Noiz',
+                    style: _text.displayMedium!.copyWith(
+                      color: AppColors.darkTextPrimary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Inicia sesión para sincronizar tus viajes entre '
+                  'dispositivos.',
+                  style: _text.bodyLarge!.copyWith(
+                    color: AppColors.darkTextSecondary,
+                  ),
+                ),
+                const SizedBox(height: 28),
 
-          Text(
-            'Noiz',
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Inicia sesión para sincronizar tus viajes entre dispositivos.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
+                // Google sign-in
+                SignInButton(
+                  provider: SignInProvider.google,
+                  isLoading: isLoading,
+                  onPressed: () async {
+                    final success = await ref
+                        .read(authControllerProvider.notifier)
+                        .signInWithGoogle();
+                    if (success && context.mounted) {
+                      context.go('/');
+                    }
+                  },
+                ),
 
-          const Spacer(),
-
-          // Google sign-in
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.tonal(
-              onPressed: isLoading
-                  ? null
-                  : () async {
+                // Apple sign-in (iOS only)
+                if (isIOS) ...[
+                  const SizedBox(height: 12),
+                  SignInButton(
+                    provider: SignInProvider.apple,
+                    isLoading: isLoading,
+                    onPressed: () async {
                       final success = await ref
                           .read(authControllerProvider.notifier)
-                          .signInWithGoogle();
+                          .signInWithApple();
                       if (success && context.mounted) {
                         context.go('/');
                       }
                     },
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child:
-                          CircularProgressIndicator.adaptive(strokeWidth: 2),
-                    )
-                  : const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.g_mobiledata, size: 28),
-                        SizedBox(width: 8),
-                        Text(
-                          'Continuar con Google',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
+                  ),
+                ],
 
-          // Apple sign-in (iOS only)
-          if (isIOS) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: isLoading
-                    ? null
-                    : () async {
-                        final success = await ref
-                            .read(authControllerProvider.notifier)
-                            .signInWithApple();
-                        if (success && context.mounted) {
-                          context.go('/');
-                        }
-                      },
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 16),
+
+                Text(
+                  'Al continuar, aceptas la política de privacidad. '
+                  'Tus datos se almacenan de forma segura.',
+                  style: _text.bodySmall!.copyWith(
+                    color: AppColors.darkTextSecondary,
+                    fontSize: 12,
                   ),
                 ),
-                child: isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator.adaptive(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.apple, size: 22),
-                          SizedBox(width: 8),
-                          Text(
-                            'Continuar con Apple',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-          ],
 
-          const SizedBox(height: 16),
+                const SizedBox(height: 10),
 
-          // Skip / continue without account
-          TextButton(
-            onPressed: () {
-              ref.read(onboardingCompletedProvider.notifier).state = true;
-              context.go('/');
-            },
-            child: Text(
-              'Continuar sin cuenta',
-              style: TextStyle(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
-              ),
+                // Independence notice required by both stores.
+                Text(
+                  LegalTexts.disclaimer,
+                  style: _text.bodySmall!.copyWith(
+                    color: AppColors.darkTextTertiary,
+                    fontSize: 11,
+                    height: 1.35,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+              ],
             ),
           ),
-
-          const SizedBox(height: 8),
-
-          Text(
-            'Al continuar, aceptas la política de privacidad. '
-            'Tus datos se almacenan de forma segura.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.outline,
-              fontSize: 11,
-            ),
-          ),
-
-          const Spacer(),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Page indicator dots
+// Page indicator: the current dot stretches into a capsule
 // ---------------------------------------------------------------------------
 
 class _PageIndicator extends StatelessWidget {
@@ -529,26 +656,29 @@ class _PageIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final reduced = Motion.reduced(context);
+    final m = Motion.snappy;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(totalPages, (index) {
-        final isActive = index == currentPage;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: isActive ? 28 : 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: isActive
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outlineVariant,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        );
-      }),
+    return Semantics(
+      label: 'Página ${currentPage + 1} de $totalPages',
+      excludeSemantics: true,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(totalPages, (index) {
+          final isActive = index == currentPage;
+          return AnimatedContainer(
+            duration: reduced ? Motion.reducedFade : m.duration,
+            curve: reduced ? Curves.linear : m.curve,
+            margin: const EdgeInsets.symmetric(horizontal: 3.5),
+            width: isActive ? 24 : 7,
+            height: 7,
+            decoration: ShapeDecoration(
+              color: Colors.white.withValues(alpha: isActive ? 0.95 : 0.28),
+              shape: const StadiumBorder(),
+            ),
+          );
+        }),
+      ),
     );
   }
 }

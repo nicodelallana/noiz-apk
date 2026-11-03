@@ -4,8 +4,12 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.bizkaia.transit.live.TransitLiveService
@@ -18,6 +22,8 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.bizkaia.transit/live_trip"
     private val NOTIFICATION_PERMISSION_CODE = 1002
     private val LOCATION_PERMISSION_CODE = 1003
+    private val FRESH_FIX_MAX_AGE_MS = 2 * 60 * 1000L
+    private val FRESH_FIX_TIMEOUT_MS = 8000L
 
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var pendingLocationPermissionResult: MethodChannel.Result? = null
@@ -41,6 +47,10 @@ class MainActivity : FlutterActivity() {
                     val isRealtime = call.argument<Boolean>("isRealtime") ?: false
                     val delaySeconds = call.argument<Int>("delaySeconds") ?: 0
                     val instruction = call.argument<String>("instruction")
+                    val operatorName = call.argument<String>("operatorName")
+                    val platform = call.argument<String>("platform")
+                    val followingDepartureMs =
+                        (call.argument<Number>("followingDepartureEpochMs"))?.toLong() ?: 0L
 
                     // Check notification permission on Android 13+
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -70,7 +80,10 @@ class MainActivity : FlutterActivity() {
                         status = status,
                         isRealtime = isRealtime,
                         delaySeconds = delaySeconds,
-                        instruction = instruction
+                        instruction = instruction,
+                        operatorName = operatorName,
+                        platform = platform,
+                        followingDepartureMs = followingDepartureMs
                     )
                     result.success(true)
                 }
@@ -145,8 +158,7 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "getLocation" -> {
-                    val loc = getLastKnownLocation()
-                    result.success(loc)
+                    resolveLocation { loc -> result.success(loc) }
                 }
                 else -> {
                     result.notImplemented()
@@ -155,7 +167,72 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun getLastKnownLocation(): Map<String, Double>? {
+    /**
+     * Replies with the last known fix when it is recent; otherwise asks the
+     * best enabled provider for a fresh one-shot fix (8 s timeout) and falls
+     * back to the stale fix, or null, if none arrives.
+     */
+    private fun resolveLocation(reply: (Map<String, Double>?) -> Unit) {
+        val lastKnown = getLastKnownLocation()
+        val isFresh = lastKnown != null &&
+            System.currentTimeMillis() - lastKnown.time < FRESH_FIX_MAX_AGE_MS
+        if (isFresh) {
+            reply(lastKnown!!.toMap())
+            return
+        }
+
+        val locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        val provider = locationManager?.let {
+            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+                .firstOrNull { p -> it.isProviderEnabled(p) }
+        }
+        if (locationManager == null || provider == null || !hasAnyLocationPermission()) {
+            reply(lastKnown?.toMap())
+            return
+        }
+
+        val handler = Handler(Looper.getMainLooper())
+        var replied = false
+        val finish: (Location?) -> Unit = { loc ->
+            if (!replied) {
+                replied = true
+                handler.removeCallbacksAndMessages(null)
+                reply((loc ?: lastKnown)?.toMap())
+            }
+        }
+        handler.postDelayed({ finish(null) }, FRESH_FIX_TIMEOUT_MS)
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                locationManager.getCurrentLocation(provider, null, mainExecutor) { finish(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                locationManager.requestSingleUpdate(
+                    provider,
+                    object : LocationListener {
+                        override fun onLocationChanged(location: Location) = finish(location)
+                        @Deprecated("Required on API < 29")
+                        override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
+                        override fun onProviderEnabled(p: String) {}
+                        override fun onProviderDisabled(p: String) = finish(null)
+                    },
+                    Looper.getMainLooper()
+                )
+            }
+        } catch (_: SecurityException) {
+            finish(null)
+        }
+    }
+
+    private fun Location.toMap() = mapOf("latitude" to latitude, "longitude" to longitude)
+
+    private fun hasAnyLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun getLastKnownLocation(): Location? {
         val fineGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
@@ -181,9 +258,7 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        return bestLocation?.let {
-            mapOf("latitude" to it.latitude, "longitude" to it.longitude)
-        }
+        return bestLocation
     }
 
     override fun onRequestPermissionsResult(
@@ -199,7 +274,8 @@ class MainActivity : FlutterActivity() {
                 pendingPermissionResult = null
             }
             LOCATION_PERMISSION_CODE -> {
-                val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                // Fine or approximate: either one is enough to find nearby stops.
+                val granted = grantResults.any { it == PackageManager.PERMISSION_GRANTED }
                 pendingLocationPermissionResult?.success(granted)
                 pendingLocationPermissionResult = null
             }

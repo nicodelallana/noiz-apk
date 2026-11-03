@@ -20,6 +20,13 @@ abstract final class TransitConstants {
   /// Polling interval for theoretical departures refresh (30 seconds).
   static const Duration departureRefreshInterval = Duration(seconds: 30);
 
+  /// Fallback location when GPS permission is denied: Plaza Moyúa, Bilbao.
+  static const double defaultLatitude = 43.2630;
+  static const double defaultLongitude = -2.9349;
+
+  /// Radius for the "Cerca de ti" alerts section.
+  static const double nearbyAlertsRadiusKm = 3;
+
   /// Reference Metro Bilbao parent station IDs.
   static const String stationBagatzaId = '35';
   static const String stationKabiezesId = '42';

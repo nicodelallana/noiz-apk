@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
@@ -40,8 +41,22 @@ abstract final class AppTheme {
       colorScheme: colorScheme,
       textTheme: textTheme,
       fontFamily: AppTypography.fontFamily,
+      // iOS slide on every platform: pushed screens paint their own aurora,
+      // and Android's fade/zoom would fade the shell's glass with them.
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
+        },
+      ),
+
+      // Tabs are transparent so the shell's aurora shows through.
       scaffoldBackgroundColor: isDark
-          ? AppColors.darkBackground
+          ? Colors.transparent
           : AppColors.lightBackground,
 
       // ── AppBar ──────────────────────────────────────────────────────────

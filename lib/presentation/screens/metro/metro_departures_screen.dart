@@ -1,33 +1,36 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../../core/services/location_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/barik_icons.dart';
+import '../../../core/utils/geo.dart';
 import '../../../domain/models/saved_trip_models.dart';
-import '../../../domain/models/transit_models.dart';
 import '../../navigation/transport_selector_sheet.dart';
 import '../../providers/transit_providers.dart';
-import '../../widgets/animations/arrival_pulse_indicator.dart';
 import '../../widgets/animations/empty_transit_view.dart';
 import '../../widgets/departure_hero_card.dart';
-import '../../widgets/map/transit_map_view.dart';
+import '../../widgets/departure_row.dart';
+import '../../widgets/glass/content.dart';
+import '../../widgets/glass/glass_surface.dart';
+import '../../widgets/glass/motion.dart';
 import '../nearby/nearby_transit_screen.dart';
 import '../planner/route_planner_screen.dart';
 import '../saved_trips/save_trip_dialog.dart';
 import '../simulator/live_activity_simulator_screen.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
-/// Next departures screen for Barik Transit.
+/// Home ("Inicio"): the next departures from the selected stop.
 ///
-/// Features:
-/// - Fully multi-operator & province-aware across Bizkaia, Gipuzkoa, and Araba.
-/// - Prompts for location permission on launch and auto-detects nearest stop.
-/// - Seamless theme transitions adapting to the active operator's official brand color.
-/// - MapLibre GL vector map centered dynamically on the active station.
-/// - High-contrast Midnight dark UI tokens with zero misplaced white cards.
-/// - Next departure hero card with lock-screen follow action and Lottie pulse.
-/// - Full offline GTFS schedules across all 13 operators of Euskadi.
+/// Layout, top to bottom: the stop as a large title (operator above it,
+/// glass buttons for save and menu), territory segmented control and
+/// operator chips, the origin → destination glass capsule, the next
+/// departure as the hero card, the following departures grouped in one
+/// card, and the stop on a mini map. Asks for location once and jumps to
+/// the nearest stop only on a real GPS fix.
 class MetroDeparturesScreen extends ConsumerStatefulWidget {
   const MetroDeparturesScreen({super.key});
 
@@ -47,215 +50,63 @@ class _MetroDeparturesScreenState
   }
 
   Future<void> _requestLocationAndDetectNearby() async {
-    final locService = ref.read(locationServiceProvider);
-    final granted = await locService.requestPermission();
-    if (granted && mounted) {
-      final loc = await locService.getCurrentLocation();
-      if (loc != null && mounted) {
-        ref.read(userLocationProvider.notifier).state = loc;
-        // Find nearest stop for active operator
-        final stops = await ref.read(stopsForActiveOperatorProvider.future);
-        if (stops.isNotEmpty && mounted) {
-          final nearest = stops.reduce((a, b) {
-            final aLat = a.latitude ?? 0.0;
-            final aLon = a.longitude ?? 0.0;
-            final bLat = b.latitude ?? 0.0;
-            final bLon = b.longitude ?? 0.0;
-            final da = (aLat - loc.latitude) * (aLat - loc.latitude) +
-                (aLon - loc.longitude) * (aLon - loc.longitude);
-            final db = (bLat - loc.latitude) * (bLat - loc.latitude) +
-                (bLon - loc.longitude) * (bLon - loc.longitude);
-            return da < db ? a : b;
-          });
-          ref.read(selectedTransitStopProvider.notifier).state = nearest;
-        }
-      }
-    }
+    final loc = await ref.read(resolvedUserLocationProvider.future);
+    // Only jump to the nearest stop on a real GPS fix, not on the fallback.
+    if (!mounted || ref.read(userLocationProvider) == null) return;
+    final stops = await ref.read(stopsForActiveOperatorProvider.future);
+    if (stops.isEmpty || !mounted) return;
+    final nearest = stops.reduce((a, b) {
+      final da = haversineKm(
+        loc.latitude,
+        loc.longitude,
+        a.latitude ?? 0,
+        a.longitude ?? 0,
+      );
+      final db = haversineKm(
+        loc.latitude,
+        loc.longitude,
+        b.latitude ?? 0,
+        b.longitude ?? 0,
+      );
+      return da < db ? a : b;
+    });
+    ref.read(selectedTransitStopProvider.notifier).state = nearest;
   }
 
   @override
   Widget build(BuildContext context) {
-    final activeOperator = ref.watch(selectedOperatorProvider);
-    final primaryColor = Color(activeOperator.colorHex);
-
-    return Scaffold(
-      backgroundColor: AppColors.darkBackground,
-      appBar: AppBar(
-        title: GestureDetector(
-          onTap: () => TransportSelectorBottomSheet.show(context),
-          child: Row(
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeInOutCubic,
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  _iconForMode(activeOperator.mode),
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Barik',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 18,
-                      letterSpacing: -0.5,
-                      color: AppColors.darkTextPrimary,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Text(
-                        activeOperator.name,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: primaryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 14,
-                        color: primaryColor,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.bookmark_add_outlined),
-            tooltip: 'Guardar esta parada',
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              final activeStop = ref.read(selectedTransitStopProvider);
-              showDialog<void>(
-                context: context,
-                builder: (_) => SaveTripDialog(
-                  initialOrigin: activeStop,
-                ),
-              );
-            },
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded),
-            tooltip: 'Herramientas y rutas',
-            color: AppColors.darkSurfaceElevated,
-            elevation: 8,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: AppColors.darkBorder),
-            ),
-            onSelected: (value) {
-              HapticFeedback.lightImpact();
-              switch (value) {
-                case 'planner':
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const RoutePlannerScreen(),
-                    ),
-                  );
-                case 'nearby':
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const NearbyTransitScreen(),
-                    ),
-                  );
-                case 'simulator':
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const LiveActivitySimulatorScreen(),
-                    ),
-                  );
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'planner',
-                child: Row(
-                  children: [
-                    Icon(BarikIcons.path, size: 20, color: AppColors.darkTextPrimary),
-                    SizedBox(width: 12),
-                    Text(
-                      'Rutas paso a paso',
-                      style: TextStyle(
-                        color: AppColors.darkTextPrimary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'nearby',
-                child: Row(
-                  children: [
-                    Icon(BarikIcons.radar, size: 20, color: AppColors.darkTextPrimary),
-                    SizedBox(width: 12),
-                    Text(
-                      'Paradas cerca de ti',
-                      style: TextStyle(
-                        color: AppColors.darkTextPrimary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(height: 1),
-              const PopupMenuItem(
-                value: 'simulator',
-                child: Row(
-                  children: [
-                    Icon(BarikIcons.broadcast, size: 20, color: AppColors.delayedAmber),
-                    SizedBox(width: 12),
-                    Text(
-                      'Simulador Live Activity',
-                      style: TextStyle(
-                        color: AppColors.darkTextPrimary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 6),
-        ],
-      ),
-      body: const _TransitScreenContent(),
+    return const Scaffold(
+      backgroundColor: Colors.transparent,
+      body: _TransitScreenContent(),
     );
-  }
-
-  IconData _iconForMode(TransitModeType mode) {
-    return switch (mode) {
-      TransitModeType.metro => BarikIcons.subway,
-      TransitModeType.train => BarikIcons.train,
-      TransitModeType.tram => BarikIcons.tram,
-      TransitModeType.bus => BarikIcons.bus,
-      TransitModeType.funicular => BarikIcons.cableCar,
-    };
   }
 }
 
-/// Content containing Territory/Operator Selector, Map, Stop Selector, and Departures.
+IconData _iconForMode(TransitModeType mode) {
+  return switch (mode) {
+    TransitModeType.metro => BarikIcons.subway,
+    TransitModeType.train => BarikIcons.train,
+    TransitModeType.tram => BarikIcons.tram,
+    TransitModeType.bus => BarikIcons.bus,
+    TransitModeType.funicular => BarikIcons.cableCar,
+  };
+}
+
+void _openStopPicker(
+  BuildContext context, {
+  bool isDestination = false,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: 0.35),
+    builder: (ctx) => _MultiOperatorStopSearchModal(isDestination: isDestination),
+  );
+}
+
+/// Scrolling content of the home tab.
 class _TransitScreenContent extends ConsumerWidget {
   const _TransitScreenContent();
 
@@ -265,140 +116,291 @@ class _TransitScreenContent extends ConsumerWidget {
     final primaryColor = Color(activeOperator.colorHex);
     final activeStop = ref.watch(selectedTransitStopProvider);
     final destinationStop = ref.watch(selectedDestinationStopProvider);
+    final topInset = MediaQuery.paddingOf(context).top;
 
-    final stopName = activeStop?.name ?? 'Cargando parada...';
-    final destName = destinationStop?.name ?? 'Todas las direcciones';
-    final latitude = activeStop?.latitude ?? 43.2625;
-    final longitude = activeStop?.longitude ?? -2.9350;
+    final stopName = activeStop?.name ?? 'Buscando parada…';
 
     return CustomScrollView(
       slivers: [
-        // ── 0. Territory & Multi-Operator Selector Bar ───────────────────
-        const SliverToBoxAdapter(
-          child: _TerritoryAndOperatorChipsHeader(),
-        ),
-
-        // ── 1. MapLibre GL Vector Map View ──────────────────────────────────
-        SliverToBoxAdapter(
-          child: TransitMapView(
-            latitude: latitude,
-            longitude: longitude,
-            stationName: stopName,
-            height: 180,
-            primaryColor: primaryColor,
-          ),
-        ),
-
-        // ── 2. Origin-Destination Station Selector Card ───────────────────
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-            child: _OriginDestinationSelectorCard(
-              originStopName: stopName,
-              destStopName: destName,
-              operatorName: activeOperator.name,
-              primaryColor: primaryColor,
-              mode: activeOperator.mode,
-              hasDestination: destinationStop != null,
-              onTapOrigin: () => _openStopPicker(context, ref, isDestination: false),
-              onTapDestination: () => _openStopPicker(context, ref, isDestination: true),
-              onSwap: () {
-                if (activeStop != null && destinationStop != null) {
-                  final tmp = activeStop;
-                  ref.read(selectedTransitStopProvider.notifier).state = destinationStop;
-                  ref.read(selectedDestinationStopProvider.notifier).state = tmp;
-                } else if (activeStop != null && destinationStop == null) {
-                  _openStopPicker(context, ref, isDestination: true);
-                }
-              },
-              onClearDestination: () {
-                HapticFeedback.lightImpact();
-                ref.read(selectedDestinationStopProvider.notifier).state = null;
-              },
-            ),
-          ),
-        ),
-
-        // ── Active Direction Filter Banner ──
-        if (destinationStop != null)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: primaryColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: primaryColor.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.filter_list_rounded, size: 14, color: primaryColor),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Mostrando salidas de ${activeStop?.name ?? "origen"} hacia ${destinationStop.name}',
-                        style: TextStyle(
-                          color: primaryColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        ref.read(selectedDestinationStopProvider.notifier).state = null;
-                      },
-                      child: const Text(
-                        'Ver todas',
-                        style: TextStyle(
-                          color: AppColors.darkTextPrimary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+            padding: EdgeInsets.fromLTRB(20, topInset + 20, 16, 0),
+            child: _Reveal(
+              index: 0,
+              child: _HomeHeader(
+                stopName: stopName,
+                operatorName: activeOperator.name,
+                operatorColor: primaryColor,
+                modeIcon: _iconForMode(activeOperator.mode),
               ),
             ),
           ),
-
+        ),
         const SliverToBoxAdapter(
-          child: Divider(
-            height: 14,
-            thickness: 1,
-            indent: 16,
-            endIndent: 16,
-            color: AppColors.darkBorder,
+          child: _Reveal(
+            index: 1,
+            fade: false, // contains glass
+            child: _TerritoryAndOperatorChipsHeader(),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: _Reveal(
+              index: 2,
+              fade: false, // glass
+              child: _RouteCapsule(
+                originStopName: stopName,
+                destStopName: destinationStop?.name,
+                operatorColor: primaryColor,
+                onTapOrigin: () => _openStopPicker(context),
+                onTapDestination: () =>
+                    _openStopPicker(context, isDestination: true),
+                onSwap: () {
+                  if (activeStop != null && destinationStop != null) {
+                    ref.read(selectedTransitStopProvider.notifier).state =
+                        destinationStop;
+                    ref.read(selectedDestinationStopProvider.notifier).state =
+                        activeStop;
+                  } else if (activeStop != null) {
+                    _openStopPicker(context, isDestination: true);
+                  }
+                },
+                onClearDestination: () {
+                  HapticFeedback.lightImpact();
+                  ref.read(selectedDestinationStopProvider.notifier).state =
+                      null;
+                },
+              ),
+            ),
           ),
         ),
 
-        // ── 3. Departures List ─────────────────────────────────────────────
         const _MultiOperatorDeparturesSliverList(),
 
-        // Extra padding at bottom for FAB & Navbar
-        const SliverToBoxAdapter(
-          child: SizedBox(height: 96),
+        // A live map here was a platform view inside the scroll view: on
+        // the web every scrolled frame had to re-composite it. A link card
+        // to the Mapa tab gives the same way in at no cost.
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: _MapLinkCard(stopName: stopName, color: primaryColor),
+          ),
+        ),
+
+        // Room for the floating tab bar.
+        SliverToBoxAdapter(
+          child: SizedBox(height: 120 + MediaQuery.paddingOf(context).bottom),
         ),
       ],
     );
   }
+}
 
-  void _openStopPicker(BuildContext context, WidgetRef ref, {bool isDestination = false}) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _MultiOperatorStopSearchModal(isDestination: isDestination),
+/// Large-title header: operator (opens the transport selector) above the
+/// stop name (opens the stop picker), with glass save and menu buttons.
+class _HomeHeader extends ConsumerWidget {
+  const _HomeHeader({
+    required this.stopName,
+    required this.operatorName,
+    required this.operatorColor,
+    required this.modeIcon,
+  });
+
+  final String stopName;
+  final String operatorName;
+  final Color operatorColor;
+  final IconData modeIcon;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppTypography.textTheme();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Semantics(
+                button: true,
+                label: 'Operador: $operatorName. Cambiar',
+                onTap: () => TransportSelectorBottomSheet.show(context),
+                excludeSemantics: true,
+                child: GestureDetector(
+                  onTap: () => TransportSelectorBottomSheet.show(context),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(modeIcon, size: 15, color: operatorColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          operatorName,
+                          style: t.titleSmall!.copyWith(color: operatorColor),
+                        ),
+                        Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: operatorColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Semantics(
+                button: true,
+                label: 'Parada: $stopName. Cambiar parada',
+                onTap: () => _openStopPicker(context),
+                excludeSemantics: true,
+                child: GestureDetector(
+                  onTap: () => _openStopPicker(context),
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedSwitcher(
+                    duration: Motion.reduced(context)
+                        ? Motion.reducedFade
+                        : const Duration(milliseconds: 260),
+                    child: Text(
+                      stopName,
+                      key: ValueKey(stopName),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.displayMedium!.copyWith(
+                        color: AppColors.darkTextPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            children: [
+              GlassButton(
+                semanticLabel: 'Guardar esta parada',
+                padding: EdgeInsets.zero,
+                onPressed: () {
+                  final activeStop = ref.read(selectedTransitStopProvider);
+                  showDialog<void>(
+                    context: context,
+                    builder: (_) => SaveTripDialog(initialOrigin: activeStop),
+                  );
+                },
+                child: const SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Icon(
+                    Icons.bookmark_add_outlined,
+                    size: 21,
+                    color: AppColors.darkTextPrimary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const _HomeMenu(),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
-/// Territory and Operator selector bar covering all of Euskadi.
+/// "⋯" glass button with the secondary tools.
+class _HomeMenu extends StatelessWidget {
+  const _HomeMenu();
+
+  @override
+  Widget build(BuildContext context) {
+    PopupMenuItem<String> item(String value, IconData icon, String label,
+        {Color color = AppColors.darkTextPrimary}) {
+      return PopupMenuItem(
+        value: value,
+        height: 46,
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: AppTypography.textTheme().bodyMedium!.copyWith(
+                    color: AppColors.darkTextPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return PopupMenuButton<String>(
+      tooltip: 'Herramientas y rutas',
+      color: AppColors.darkSurfaceElevated.withValues(alpha: 0.97),
+      elevation: 12,
+      offset: const Offset(0, 52),
+      shape: continuousShape(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColors.darkBorderStrong),
+      ),
+      onSelected: (value) {
+        HapticFeedback.lightImpact();
+        switch (value) {
+          case 'planner':
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const RoutePlannerScreen()),
+            );
+          case 'nearby':
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const NearbyTransitScreen()),
+            );
+          case 'saved':
+            context.go('/saved-trips');
+          case 'simulator':
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const LiveActivitySimulatorScreen(),
+              ),
+            );
+        }
+      },
+      itemBuilder: (context) => [
+        item('planner', BarikIcons.path, 'Rutas paso a paso'),
+        item('nearby', BarikIcons.radar, 'Paradas cerca de ti'),
+        item('saved', Icons.bookmark_rounded, 'Viajes guardados'),
+        // Developer tool: never shipped in release builds.
+        if (kDebugMode) ...[
+          const PopupMenuDivider(height: 1),
+          item('simulator', BarikIcons.broadcast, 'Simulador Live Activity (debug)',
+              color: AppColors.delayedAmber),
+        ],
+      ],
+      child: const IgnorePointer(
+        child: GlassSurface(
+          radius: 999,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(
+              Icons.more_horiz_rounded,
+              size: 22,
+              color: AppColors.darkTextPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Territory segmented control (glass, sliding indicator) and the
+/// operators of that territory as chips.
 class _TerritoryAndOperatorChipsHeader extends ConsumerWidget {
   const _TerritoryAndOperatorChipsHeader();
 
@@ -407,359 +409,274 @@ class _TerritoryAndOperatorChipsHeader extends ConsumerWidget {
     final territory = ref.watch(selectedTerritoryProvider);
     final activeOperator = ref.watch(selectedOperatorProvider);
     final operators = ref.watch(operatorListProvider);
-    final opColor = Color(activeOperator.colorHex);
+    final territories = TransitTerritory.values;
+    final index = territories.indexOf(territory);
+    final reduced = Motion.reduced(context);
+    final m = Motion.snappy;
+    final t = AppTypography.textTheme();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Province / Territory Segmented Bar
-          Container(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+          child: GlassSurface(
+            radius: 999,
             padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: AppColors.darkSurfaceElevated,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.darkBorder),
-            ),
-            child: Row(
-              children: TransitTerritory.values.map((t) {
-                final isSel = t == territory;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      ref.read(selectedTerritoryProvider.notifier).state = t;
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOutCubic,
-                      padding: const EdgeInsets.symmetric(vertical: 7),
-                      decoration: BoxDecoration(
-                        color: isSel ? opColor : Colors.transparent,
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                      child: Text(
-                        t.name,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: isSel ? Colors.white : AppColors.darkTextSecondary,
-                          fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
-                          fontSize: 12,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // Horizontal Operator Selector Carousel
-          SizedBox(
-            height: 38,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: operators.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final op = operators[index];
-                final isSel = op == activeOperator;
-                final thisOpColor = Color(op.colorHex);
-
-                return Material(
-                  color: isSel
-                      ? thisOpColor.withValues(alpha: 0.18)
-                      : AppColors.darkSurfaceElevated,
-                  borderRadius: BorderRadius.circular(12),
-                  child: InkWell(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      ref.read(selectedOperatorProvider.notifier).state = op;
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSel ? thisOpColor : AppColors.darkBorder,
-                          width: isSel ? 1.5 : 1.0,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: thisOpColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 7),
-                          Text(
-                            op.name,
-                            style: TextStyle(
-                              color: isSel ? Colors.white : AppColors.darkTextPrimary,
-                              fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
-                              fontSize: 12.5,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Origin-Destination station selector card styled in Midnight theme.
-/// Allows selecting both origin and destination stops ("elegir de qué parada a qué parada").
-class _OriginDestinationSelectorCard extends StatelessWidget {
-  const _OriginDestinationSelectorCard({
-    required this.originStopName,
-    required this.destStopName,
-    required this.operatorName,
-    required this.primaryColor,
-    required this.mode,
-    required this.onTapOrigin,
-    required this.onTapDestination,
-    required this.onSwap,
-    required this.hasDestination,
-    required this.onClearDestination,
-  });
-
-  final String originStopName;
-  final String destStopName;
-  final String operatorName;
-  final Color primaryColor;
-  final TransitModeType mode;
-  final VoidCallback onTapOrigin;
-  final VoidCallback onTapDestination;
-  final VoidCallback onSwap;
-  final bool hasDestination;
-  final VoidCallback onClearDestination;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.darkBorderStrong, width: 1.2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 16,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // ── 1. Origin Stop Row ──
-          InkWell(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              onTapOrigin();
-            },
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 14, 10),
-              child: Row(
+            shadow: false,
+            child: SizedBox(
+              height: 36,
+              child: Stack(
                 children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: primaryColor.withValues(alpha: 0.18),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: primaryColor, width: 2),
+                  AnimatedAlign(
+                    alignment: Alignment(
+                      territories.length == 1
+                          ? 0
+                          : -1 + 2 * index / (territories.length - 1),
+                      0,
                     ),
-                    child: Center(
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: primaryColor,
-                          shape: BoxShape.circle,
+                    duration: reduced ? Duration.zero : m.duration,
+                    curve: m.curve,
+                    child: FractionallySizedBox(
+                      widthFactor: 1 / territories.length,
+                      heightFactor: 1,
+                      child: DecoratedBox(
+                        decoration: ShapeDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          shape: StadiumBorder(
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ORIGEN · $operatorName'.toUpperCase(),
-                          style: TextStyle(
-                            color: primaryColor,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.6,
+                  Row(
+                    children: [
+                      for (final terr in territories)
+                        Expanded(
+                          child: Semantics(
+                            selected: terr == territory,
+                            button: true,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                if (terr == territory) return;
+                                HapticFeedback.selectionClick();
+                                ref
+                                    .read(selectedTerritoryProvider.notifier)
+                                    .state = terr;
+                              },
+                              child: Center(
+                                child: Text(
+                                  terr.name,
+                                  style: t.labelLarge!.copyWith(
+                                    fontSize: 13,
+                                    color: terr == territory
+                                        ? AppColors.darkTextPrimary
+                                        : AppColors.darkTextSecondary,
+                                    fontWeight: terr == territory
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          originStopName,
-                          style: const TextStyle(
-                            fontSize: 16.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.3,
-                            color: AppColors.darkTextPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.unfold_more_rounded,
-                    color: AppColors.darkTextSecondary,
-                    size: 18,
+                    ],
                   ),
                 ],
               ),
             ),
           ),
+        ),
+        SizedBox(
+          height: 36,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: operators.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              final op = operators[i];
+              return _OperatorChip(
+                name: op.name,
+                color: Color(op.colorHex),
+                selected: op == activeOperator,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  ref.read(selectedOperatorProvider.notifier).state = op;
+                },
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+}
 
-          // ── Divider with Centered Swap Button ──
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              const Divider(
-                height: 1,
-                thickness: 1,
-                color: AppColors.darkBorder,
-                indent: 52,
-                endIndent: 52,
+/// Operator chip: translucent capsule (no blur — it scrolls), filled with
+/// the operator's colour when selected.
+class _OperatorChip extends StatelessWidget {
+  const _OperatorChip({
+    required this.name,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String name;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = Motion.reduced(context);
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: reduced ? Duration.zero : Motion.snappy.duration,
+          curve: Motion.snappy.curve,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          alignment: Alignment.center,
+          decoration: ShapeDecoration(
+            color: selected
+                ? color.withValues(alpha: 0.9)
+                : Colors.white.withValues(alpha: 0.07),
+            shape: StadiumBorder(
+              side: BorderSide(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : Colors.white.withValues(alpha: 0.10),
               ),
-              GestureDetector(
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!selected) ...[
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 7),
+              ],
+              Text(
+                name,
+                style: AppTypography.textTheme().labelLarge!.copyWith(
+                      fontSize: 13,
+                      color: selected ? Colors.white : AppColors.darkTextPrimary,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Origin → destination in one glass capsule (Apple Maps directions style),
+/// with a swap button. "Todas las direcciones" when no destination is set.
+class _RouteCapsule extends StatelessWidget {
+  const _RouteCapsule({
+    required this.originStopName,
+    required this.destStopName,
+    required this.operatorColor,
+    required this.onTapOrigin,
+    required this.onTapDestination,
+    required this.onSwap,
+    required this.onClearDestination,
+  });
+
+  final String originStopName;
+  final String? destStopName;
+  final Color operatorColor;
+  final VoidCallback onTapOrigin;
+  final VoidCallback onTapDestination;
+  final VoidCallback onSwap;
+  final VoidCallback onClearDestination;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDestination = destStopName != null;
+    return GlassSurface(
+      radius: 24,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              children: [
+                _RouteRow(
+                  label: 'Desde',
+                  value: originStopName,
+                  marker: _Dot(color: operatorColor, filled: true),
+                  onTap: onTapOrigin,
+                ),
+                const Padding(
+                  padding: EdgeInsets.only(left: 46),
+                  child: Divider(height: 1, thickness: 0.7, color: AppColors.darkBorder),
+                ),
+                _RouteRow(
+                  label: 'Hacia',
+                  value: destStopName ?? 'Todas las direcciones',
+                  muted: !hasDestination,
+                  marker: _Dot(
+                    color: hasDestination
+                        ? AppColors.darkTextPrimary
+                        : AppColors.darkTextTertiary,
+                    filled: false,
+                  ),
+                  onTap: onTapDestination,
+                  trailing: hasDestination
+                      ? IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          color: AppColors.darkTextSecondary,
+                          tooltip: 'Ver todas las direcciones',
+                          onPressed: onClearDestination,
+                        )
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: Semantics(
+              button: true,
+              label: 'Intercambiar origen y destino',
+              onTap: onSwap,
+              excludeSemantics: true,
+              child: GestureDetector(
                 onTap: () {
                   HapticFeedback.mediumImpact();
                   onSwap();
                 },
                 child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: AppColors.darkSurfaceElevated,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.darkBorderStrong),
+                  width: 40,
+                  height: 40,
+                  decoration: ShapeDecoration(
+                    color: Colors.white.withValues(alpha: 0.10),
+                    shape: CircleBorder(
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+                    ),
                   ),
                   child: const Icon(
                     Icons.swap_vert_rounded,
+                    size: 20,
                     color: AppColors.darkTextPrimary,
-                    size: 18,
                   ),
                 ),
-              ),
-            ],
-          ),
-
-          // ── 2. Destination Stop Row ──
-          InkWell(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              onTapDestination();
-            },
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 14, 14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: hasDestination
-                          ? AppColors.realtimeGreen.withValues(alpha: 0.18)
-                          : AppColors.darkSurfaceElevated,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: hasDestination
-                            ? AppColors.realtimeGreen
-                            : AppColors.darkBorderStrong,
-                        width: 2,
-                      ),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        hasDestination
-                            ? Icons.flag_rounded
-                            : Icons.near_me_outlined,
-                        size: 16,
-                        color: hasDestination
-                            ? AppColors.realtimeGreen
-                            : AppColors.darkTextSecondary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'DESTINO / DIRECCIÓN'.toUpperCase(),
-                          style: TextStyle(
-                            color: hasDestination
-                                ? AppColors.realtimeGreen
-                                : AppColors.darkTextSecondary,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          destStopName,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: hasDestination
-                                ? FontWeight.w800
-                                : FontWeight.w600,
-                            letterSpacing: -0.3,
-                            color: hasDestination
-                                ? AppColors.darkTextPrimary
-                                : AppColors.darkTextSecondary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (hasDestination)
-                    IconButton(
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: AppColors.darkTextSecondary,
-                        size: 18,
-                      ),
-                      tooltip: 'Ver todas las direcciones',
-                      onPressed: onClearDestination,
-                    )
-                  else
-                    const Icon(
-                      Icons.unfold_more_rounded,
-                      color: AppColors.darkTextSecondary,
-                      size: 18,
-                    ),
-                ],
               ),
             ),
           ),
@@ -769,7 +686,151 @@ class _OriginDestinationSelectorCard extends StatelessWidget {
   }
 }
 
-/// Multi-Operator departures sliver list.
+class _RouteRow extends StatelessWidget {
+  const _RouteRow({
+    required this.label,
+    required this.value,
+    required this.marker,
+    required this.onTap,
+    this.trailing,
+    this.muted = false,
+  });
+
+  final String label;
+  final String value;
+  final Widget marker;
+  final VoidCallback onTap;
+  final Widget? trailing;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTypography.textTheme();
+    return Semantics(
+      button: true,
+      label: '$label $value',
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
+        child: SizedBox(
+          height: 54,
+          child: Row(
+            children: [
+              SizedBox(width: 46, child: Center(child: marker)),
+              SizedBox(
+                width: 52,
+                child: Text(
+                  label,
+                  style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.titleMedium!.copyWith(
+                    fontSize: 16,
+                    color: muted
+                        ? AppColors.darkTextSecondary
+                        : AppColors.darkTextPrimary,
+                    fontWeight: muted ? FontWeight.w500 : FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (trailing != null) trailing! else const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot({required this.color, required this.filled});
+
+  final Color color;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 12,
+      height: 12,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: filled ? color : Colors.transparent,
+        border: Border.all(color: color, width: 2),
+        boxShadow: filled
+            ? [BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 8)]
+            : null,
+      ),
+    );
+  }
+}
+
+/// "See it on the map" entry: opens the Mapa tab.
+class _MapLinkCard extends StatelessWidget {
+  const _MapLinkCard({required this.stopName, required this.color});
+
+  final String stopName;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTypography.textTheme();
+    return SurfaceCard(
+      padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+      onTap: () => context.go('/map'),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: ShapeDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color.withValues(alpha: 0.85), color.withValues(alpha: 0.45)],
+              ),
+              shape: continuousShape(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Icon(Icons.map_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ver en el mapa',
+                  style: t.titleMedium!.copyWith(color: AppColors.darkTextPrimary),
+                ),
+                Text(
+                  'Paradas y salidas alrededor de $stopName',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.darkTextTertiary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Hero card for the next departure, then the rest grouped in one card.
 class _MultiOperatorDeparturesSliverList extends ConsumerWidget {
   const _MultiOperatorDeparturesSliverList();
 
@@ -780,32 +841,22 @@ class _MultiOperatorDeparturesSliverList extends ConsumerWidget {
     final activeStop = ref.watch(selectedTransitStopProvider);
 
     return departuresState.when(
-      loading: () => const SliverFillRemaining(
-        hasScrollBody: false,
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(32.0),
-            child: CircularProgressIndicator(),
-          ),
-        ),
-      ),
-      error: (error, _) => SliverFillRemaining(
-        hasScrollBody: false,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Text(
-              'Error al cargar horarios: $error',
-              style: const TextStyle(color: AppColors.disruptedRed),
-              textAlign: TextAlign.center,
-            ),
+      // The minute tick recomputes departures: keep the list, no skeleton.
+      skipLoadingOnReload: true,
+      loading: () => const SliverToBoxAdapter(child: _HeroSkeleton()),
+      error: (error, _) => SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'No se pudieron cargar los horarios: $error',
+            style: const TextStyle(color: AppColors.disruptedRed),
+            textAlign: TextAlign.center,
           ),
         ),
       ),
       data: (departures) {
         if (departures.isEmpty) {
-          return SliverFillRemaining(
-            hasScrollBody: false,
+          return SliverToBoxAdapter(
             child: EmptyTransitView(
               title: 'Sin próximas salidas',
               message:
@@ -815,188 +866,133 @@ class _MultiOperatorDeparturesSliverList extends ConsumerWidget {
           );
         }
 
-        return SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (ctx, index) {
-                final departure = departures[index];
-                if (index == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
+        // The hero is the next train that actually runs.
+        final hero = departures.firstWhere(
+          (d) => d.status != 'cancelled',
+          orElse: () => departures.first,
+        );
+        final rest = [for (final d in departures) if (!identical(d, hero)) d];
+        return SliverMainAxisGroup(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverToBoxAdapter(
+                // The hero animates; isolate its repaints from the list.
+                child: RepaintBoundary(
+                  child: _Reveal(
+                    index: 3,
                     child: DepartureHeroCard(
-                      departure: departure,
+                      departure: hero,
                       operator: activeOperator,
-                      originName: activeStop?.name ?? departure.stationName,
+                      originName: activeStop?.name ?? hero.stationName,
+                      followingDeparture: rest.isEmpty ? null : rest.first,
                     ),
-                  );
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _MultiOperatorDepartureCard(
-                    departure: departure,
-                    operator: activeOperator,
                   ),
-                );
-              },
-              childCount: departures.length,
+                ),
+              ),
             ),
-          ),
+            if (rest.isNotEmpty) ...[
+              SliverToBoxAdapter(
+                child: SectionHeader(
+                  'Más salidas',
+                  subtitle: rest.any((d) => d.isRealtime)
+                      ? 'En directo · datos oficiales del operador'
+                      : 'Horario programado',
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: DecoratedSliver(
+                  decoration: ShapeDecoration(
+                    color: const Color(0xF214161C),
+                    shape: continuousShape(
+                      borderRadius: BorderRadius.circular(24),
+                      side: const BorderSide(color: AppColors.darkBorder),
+                    ),
+                  ),
+                  sliver: SliverPadding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    sliver: SliverFixedExtentList.builder(
+                      itemExtent: DepartureRow.extentOf(context),
+                      itemCount: rest.length,
+                      itemBuilder: (ctx, index) => DepartureRow(
+                        departure: rest[index],
+                        operator: activeOperator,
+                        divider: index > 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
         );
       },
     );
   }
 }
 
-/// Departure card in Midnight dark theme.
-class _MultiOperatorDepartureCard extends StatelessWidget {
-  const _MultiOperatorDepartureCard({
-    required this.departure,
-    required this.operator,
-  });
-
-  final Departure departure;
-  final TransitOperator operator;
+/// Placeholder in the hero's shape while the timetable loads.
+class _HeroSkeleton extends StatelessWidget {
+  const _HeroSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    final opColor = Color(operator.colorHex);
-    final isImminent = departure.minutesRemaining <= 3;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isImminent
-              ? AppColors.realtimeGreen.withValues(alpha: 0.45)
-              : AppColors.darkBorder,
-          width: isImminent ? 1.2 : 1.0,
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16),
+      child: SurfaceCard(
+        radius: 28,
+        child: SizedBox(
+          height: 210,
+          child: Center(
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.darkTextSecondary,
+              ),
+            ),
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          // Line Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: opColor,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              departure.lineCode.isNotEmpty ? departure.lineCode : departure.line.id,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-                letterSpacing: -0.2,
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-
-          // Destination and Time
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  departure.headsign,
-                  style: const TextStyle(
-                    color: AppColors.darkTextPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    letterSpacing: -0.3,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.schedule_rounded,
-                      size: 13,
-                      color: AppColors.darkTextSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Salida programada: ${departure.scheduledTimeFormatted}',
-                      style: const TextStyle(
-                        color: AppColors.darkTextSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Minutes Remaining + Real-time indicator
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  if (isImminent) ...[
-                    const ArrivalPulseIndicator(size: 20),
-                    const SizedBox(width: 4),
-                  ],
-                  Text(
-                    '${departure.minutesRemaining} min',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      color: isImminent
-                          ? AppColors.realtimeGreen
-                          : AppColors.darkTextPrimary,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 3),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: departure.isRealtime
-                      ? AppColors.realtimeGreen.withValues(alpha: 0.12)
-                      : AppColors.darkSurfaceElevated,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: departure.isRealtime
-                        ? AppColors.realtimeGreen.withValues(alpha: 0.3)
-                        : Colors.transparent,
-                    width: 0.8,
-                  ),
-                ),
-                child: Text(
-                  departure.isRealtime ? 'En directo' : 'Según horario',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: departure.isRealtime
-                        ? AppColors.realtimeGreen
-                        : AppColors.darkTextSecondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
 }
 
-/// Modal sheet to search and pick any stop for the active operator (origin or destination).
+/// Entrance: content rises 8 px (and fades, unless it contains glass),
+/// staggered 35 ms by [index]. Skipped under reduce-motion.
+class _Reveal extends StatelessWidget {
+  const _Reveal({required this.index, required this.child, this.fade = true});
+
+  final int index;
+  final bool fade;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (Motion.reduced(context)) return child;
+    final delay = 35 * index;
+    final total = 280 + delay;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: total),
+      curve: Interval(delay / total, 1, curve: Curves.easeOutCubic),
+      builder: (context, v, child) {
+        final moved = Transform.translate(
+          offset: Offset(0, 8 * (1 - v)),
+          child: child,
+        );
+        return fade ? Opacity(opacity: v, child: moved) : moved;
+      },
+      child: child,
+    );
+  }
+}
+
+/// Glass sheet to search and pick a stop of the active operator, as origin
+/// or as destination ("Todas las direcciones" first).
 class _MultiOperatorStopSearchModal extends ConsumerStatefulWidget {
   const _MultiOperatorStopSearchModal({this.isDestination = false});
 
@@ -1024,222 +1020,259 @@ class _MultiOperatorStopSearchModalState
     final stopsAsync = ref.watch(stopsForActiveOperatorProvider);
     final opColor = Color(activeOperator.colorHex);
     final isDest = widget.isDestination;
+    final t = AppTypography.textTheme();
+    final media = MediaQuery.of(context);
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(
-          top: BorderSide(color: AppColors.darkBorderStrong, width: 1.5),
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.darkBorderStrong,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            Text(
-              isDest
-                  ? 'Elige destino o dirección (${activeOperator.name})'
-                  : 'Parada de origen (${activeOperator.name})',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: AppColors.darkTextPrimary,
-                letterSpacing: -0.4,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              isDest
-                  ? 'Filtra salidas de qué parada a qué parada'
-                  : 'Toca una estación para ver sus próximas salidas',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.darkTextSecondary,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Search box
-            TextField(
-              controller: _searchController,
-              onChanged: (val) => setState(() => _query = val.trim().toLowerCase()),
-              style: const TextStyle(
-                color: AppColors.darkTextPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-              decoration: InputDecoration(
-                prefixIcon: const Icon(
-                  BarikIcons.magnifyingGlass,
-                  color: AppColors.darkTextSecondary,
-                ),
-                hintText: isDest
-                    ? 'Buscar estación de destino...'
-                    : 'Buscar estación de origen...',
-                hintStyle: const TextStyle(color: AppColors.darkTextSecondary),
-                filled: true,
-                fillColor: AppColors.darkSurfaceElevated,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Stops list
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.55,
-              ),
-              child: stopsAsync.when(
-                loading: () => const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(32.0),
-                    child: CircularProgressIndicator(),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(8, 0, 8, 8 + media.viewInsets.bottom),
+      child: GlassSurface(
+        blur: true,
+        radius: 36,
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 5,
+                  decoration: ShapeDecoration(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    shape: const StadiumBorder(),
                   ),
                 ),
-                error: (e, _) => Center(
-                  child: Text(
-                    'Error al cargar paradas: $e',
-                    style: const TextStyle(color: AppColors.disruptedRed),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                isDest ? 'Hacia dónde' : 'Desde qué parada',
+                style: t.headlineSmall!.copyWith(color: AppColors.darkTextPrimary),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                isDest
+                    ? 'Filtra las salidas por destino · ${activeOperator.name}'
+                    : 'Toca una parada para ver sus salidas · ${activeOperator.name}',
+                style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _searchController,
+                onChanged: (val) =>
+                    setState(() => _query = val.trim().toLowerCase()),
+                style: t.bodyLarge!.copyWith(color: AppColors.darkTextPrimary),
+                cursorColor: AppColors.accent,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(
+                    BarikIcons.magnifyingGlass,
+                    color: AppColors.darkTextSecondary,
+                    size: 20,
+                  ),
+                  hintText: 'Buscar parada',
+                  hintStyle: t.bodyLarge!.copyWith(color: AppColors.darkTextTertiary),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.08),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  border: const OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(999)),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: const OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(999)),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: const OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(999)),
+                    borderSide: BorderSide(color: AppColors.accent, width: 1.5),
                   ),
                 ),
-                data: (stops) {
-                  final filtered = _query.isEmpty
-                      ? stops
-                      : stops
-                          .where((s) => s.name.toLowerCase().contains(_query))
-                          .toList();
-
-                  final currentOrigin = ref.watch(selectedTransitStopProvider);
-                  final currentDest = ref.watch(selectedDestinationStopProvider);
-
-                  return ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: (isDest && _query.isEmpty)
-                        ? filtered.length + 1
-                        : filtered.length,
-                    separatorBuilder: (_, __) => const Divider(
-                      height: 1,
-                      color: AppColors.darkBorder,
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: media.size.height * 0.55),
+                child: stopsAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-                    itemBuilder: (ctx, index) {
-                      // Top item in destination picker: "Todas las direcciones"
-                      if (isDest && _query.isEmpty && index == 0) {
-                        final isSelected = currentDest == null;
-                        return ListTile(
-                          leading: const Icon(
-                            Icons.all_inclusive_rounded,
-                            color: AppColors.realtimeGreen,
-                          ),
-                          title: const Text(
-                            'Todas las direcciones',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.darkTextPrimary,
-                            ),
-                          ),
-                          subtitle: const Text(
-                            'Ver todas las salidas desde la parada de origen',
-                            style: TextStyle(
-                              fontSize: 12,
+                  ),
+                  error: (e, _) => Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'No se pudieron cargar las paradas: $e',
+                      style: const TextStyle(color: AppColors.disruptedRed),
+                    ),
+                  ),
+                  data: (stops) {
+                    final filtered = _query.isEmpty
+                        ? stops
+                        : stops
+                            .where((s) => s.name.toLowerCase().contains(_query))
+                            .toList();
+                    final currentOrigin = ref.watch(selectedTransitStopProvider);
+                    final currentDest = ref.watch(selectedDestinationStopProvider);
+                    final showAll = isDest && _query.isEmpty;
+
+                    if (filtered.isEmpty && !showAll) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 28),
+                        child: Center(
+                          child: Text(
+                            'Ninguna parada coincide',
+                            style: t.bodyMedium!.copyWith(
                               color: AppColors.darkTextSecondary,
                             ),
                           ),
-                          trailing: isSelected
-                              ? const Icon(Icons.check_rounded, color: AppColors.realtimeGreen)
-                              : null,
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            ref.read(selectedDestinationStopProvider.notifier).state = null;
-                            Navigator.of(context).pop();
-                          },
-                        );
-                      }
-
-                      final stop = (isDest && _query.isEmpty)
-                          ? filtered[index - 1]
-                          : filtered[index];
-
-                      final isSelected = isDest
-                          ? currentDest?.id == stop.id
-                          : currentOrigin?.id == stop.id;
-
-                      final isOtherRole = isDest
-                          ? currentOrigin?.id == stop.id
-                          : currentDest?.id == stop.id;
-
-                      return ListTile(
-                        leading: Icon(
-                          isDest ? Icons.flag_rounded : Icons.location_on_rounded,
-                          color: isSelected
-                              ? opColor
-                              : (isOtherRole
-                                  ? AppColors.darkTextSecondary.withValues(alpha: 0.5)
-                                  : AppColors.darkTextSecondary),
                         ),
-                        title: Text(
-                          stop.name,
-                          style: TextStyle(
-                            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                            color: isSelected
-                                ? opColor
-                                : AppColors.darkTextPrimary,
-                          ),
+                      );
+                    }
+
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.only(top: 4),
+                      itemCount: showAll ? filtered.length + 1 : filtered.length,
+                      separatorBuilder: (_, __) => const Padding(
+                        padding: EdgeInsets.only(left: 44),
+                        child: Divider(
+                          height: 1,
+                          thickness: 0.7,
+                          color: AppColors.darkBorder,
                         ),
-                        subtitle: isOtherRole
-                            ? Text(
-                                isDest
-                                    ? '(Estación de origen actual)'
-                                    : '(Estación de destino actual)',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.darkTextSecondary,
-                                ),
-                              )
-                            : null,
-                        trailing: isSelected
-                            ? Icon(Icons.check_rounded, color: opColor)
-                            : null,
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          if (isDest) {
-                            ref
-                                .read(selectedDestinationStopProvider.notifier)
-                                .state = stop;
-                          } else {
-                            ref
-                                .read(selectedTransitStopProvider.notifier)
-                                .state = stop;
-                            if (currentDest?.id == stop.id) {
+                      ),
+                      itemBuilder: (ctx, index) {
+                        if (showAll && index == 0) {
+                          return _StopOption(
+                            icon: Icons.all_inclusive_rounded,
+                            iconColor: AppColors.darkTextSecondary,
+                            title: 'Todas las direcciones',
+                            subtitle: 'Todas las salidas desde el origen',
+                            selected: currentDest == null,
+                            selectedColor: AppColors.accent,
+                            onTap: () {
                               ref
                                   .read(selectedDestinationStopProvider.notifier)
                                   .state = null;
+                              Navigator.of(context).pop();
+                            },
+                          );
+                        }
+                        final stop = showAll ? filtered[index - 1] : filtered[index];
+                        final isSelected = isDest
+                            ? currentDest?.id == stop.id
+                            : currentOrigin?.id == stop.id;
+                        final isOtherRole = isDest
+                            ? currentOrigin?.id == stop.id
+                            : currentDest?.id == stop.id;
+
+                        return _StopOption(
+                          icon: isDest
+                              ? Icons.flag_rounded
+                              : Icons.location_on_rounded,
+                          iconColor: isOtherRole
+                              ? AppColors.darkTextTertiary
+                              : opColor,
+                          title: stop.name,
+                          subtitle: isOtherRole
+                              ? (isDest ? 'Es tu origen' : 'Es tu destino')
+                              : null,
+                          selected: isSelected,
+                          selectedColor: opColor,
+                          onTap: () {
+                            if (isDest) {
+                              ref
+                                  .read(selectedDestinationStopProvider.notifier)
+                                  .state = stop;
+                            } else {
+                              ref.read(selectedTransitStopProvider.notifier).state =
+                                  stop;
+                              if (currentDest?.id == stop.id) {
+                                ref
+                                    .read(selectedDestinationStopProvider.notifier)
+                                    .state = null;
+                              }
                             }
-                          }
-                          Navigator.of(context).pop();
-                        },
-                      );
-                    },
-                  );
-                },
+                            Navigator.of(context).pop();
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StopOption extends StatelessWidget {
+  const _StopOption({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.selected,
+    required this.selectedColor,
+    required this.onTap,
+    this.subtitle,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String? subtitle;
+  final bool selected;
+  final Color selectedColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTypography.textTheme();
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 52),
+        child: Row(
+          children: [
+            SizedBox(width: 44, child: Icon(icon, size: 20, color: iconColor)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: t.bodyLarge!.copyWith(
+                        color: AppColors.darkTextPrimary,
+                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        style: t.bodySmall!.copyWith(
+                          color: AppColors.darkTextSecondary,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
+            if (selected)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(Icons.check_rounded, color: selectedColor, size: 22),
+              ),
           ],
         ),
       ),

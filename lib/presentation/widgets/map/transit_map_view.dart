@@ -3,10 +3,17 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
+import 'package:bizkaia_transit/core/theme/app_colors.dart';
+import 'package:bizkaia_transit/core/theme/app_typography.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
+
 /// Interactive open vector map view powered by MapLibre GL.
 ///
 /// Uses open, keyless vector map tiles (OpenFreeMap / MapLibre) without Google Maps.
 /// Automatically animates camera position when the active station coordinates change.
+///
+/// It lives in scrolling content, so its overlays are solid (no glass).
 class TransitMapView extends StatefulWidget {
   const TransitMapView({
     super.key,
@@ -31,9 +38,15 @@ class TransitMapView extends StatefulWidget {
 
 class _TransitMapViewState extends State<TransitMapView> {
   MapLibreMapController? _mapController;
+  bool _reduced = false;
 
-  static const String _mapStyle =
-      'https://tiles.openfreemap.org/styles/liberty';
+  /// Same dark OpenFreeMap basemap as the map tab.
+  static const String _mapStyle = 'https://tiles.openfreemap.org/styles/dark';
+
+  static const double _radius = 24;
+
+  /// Solid overlay fill: the content surface at 90 %.
+  static const Color _overlayFill = Color(0xE614161C);
 
   @override
   void didUpdateWidget(covariant TransitMapView oldWidget) {
@@ -50,20 +63,23 @@ class _TransitMapViewState extends State<TransitMapView> {
   }
 
   void _animateToCurrentStation() {
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(
-        LatLng(widget.latitude, widget.longitude),
-        14.8,
-      ),
+    final update = CameraUpdate.newLatLngZoom(
+      LatLng(widget.latitude, widget.longitude),
+      14.8,
     );
+    if (_reduced) {
+      _mapController?.moveCamera(update);
+    } else {
+      _mapController?.animateCamera(update);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    _reduced = Motion.reduced(context);
 
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+    return ContinuousClip(
+      borderRadius: BorderRadius.circular(_radius),
       child: SizedBox(
         height: widget.height,
         width: double.infinity,
@@ -79,134 +95,136 @@ class _TransitMapViewState extends State<TransitMapView> {
               onMapCreated: _onMapCreated,
               compassEnabled: false,
               myLocationEnabled: false,
-              attributionButtonPosition: AttributionButtonPosition.bottomRight,
+              // Bottom-left, away from the recenter button.
+              attributionButtonPosition: AttributionButtonPosition.bottomLeft,
               attributionButtonMargins: const math.Point(8, 8),
             ),
 
-            // ── Top Gradient Overlay for readability ───────────────────────
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 48,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.35),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Central Station Pin with Subtle Pulse ──────────────────────
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+            // ── Station marker: the map tab's selected-stop dot + its name ──
+            IgnorePointer(
+              child: Stack(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
+                  Center(child: _StationDot(color: widget.primaryColor)),
+                  Center(
+                    child: Transform.translate(
+                      offset: const Offset(0, -30),
+                      child: _StationLabel(name: widget.stationName),
                     ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF151822),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF2C3246)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: widget.primaryColor,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          widget.stationName,
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFFF5F7FF),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Icon(
-                    Icons.location_on,
-                    size: 36,
-                    color: widget.primaryColor,
                   ),
                 ],
               ),
             ),
 
-            // ── Mode Indicator Tag ──────────────────────────────────────────
-            Positioned(
-              top: 12,
-              left: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.map_rounded,
-                      size: 14,
-                      color: Colors.white,
+            // ── Hairline rim, like the solid content cards ─────────────────
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: ShapeDecoration(
+                    shape: continuousShape(
+                      borderRadius: BorderRadius.circular(_radius),
+                      side: const BorderSide(color: AppColors.darkBorder),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      widget.stationName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
 
             // ── Recenter Button ─────────────────────────────────────────────
             Positioned(
-              bottom: 12,
-              right: 12,
-              child: FloatingActionButton.small(
-                heroTag: 'recenter_map_fab',
-                onPressed: _animateToCurrentStation,
-                backgroundColor: Colors.white,
-                foregroundColor: widget.primaryColor,
-                elevation: 3,
-                child: const Icon(Icons.my_location_rounded, size: 20),
+              bottom: 10,
+              right: 10,
+              child: Tooltip(
+                message: 'Centrar en la parada',
+                child: Material(
+                  color: _overlayFill,
+                  shape: const CircleBorder(
+                    side: BorderSide(color: AppColors.darkBorderStrong),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: _animateToCurrentStation,
+                    child: const SizedBox.square(
+                      dimension: 36,
+                      child: Icon(
+                        Icons.near_me_rounded,
+                        size: 17,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Operator-coloured dot with a white rim and a soft halo — the same mark
+/// the map tab uses for the selected stop.
+class _StationDot extends StatelessWidget {
+  const _StationDot({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.5),
+            blurRadius: 14,
+            spreadRadius: 4,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StationLabel extends StatelessWidget {
+  const _StationLabel({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 220),
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: _TransitMapViewState._overlayFill,
+          shape: continuousShape(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: AppColors.darkBorderStrong),
+          ),
+          shadows: const [
+            BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 10,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.textTheme().labelMedium!.copyWith(
+                  color: AppColors.darkTextPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
         ),
       ),
     );

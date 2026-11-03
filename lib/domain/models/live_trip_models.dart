@@ -44,6 +44,9 @@ class LiveTripState {
     this.transferInfo,
     this.instruction,
     required this.updatedAt,
+    this.operatorName,
+    this.platform,
+    this.followingDepartureTime,
   });
 
   final String tripId;
@@ -65,6 +68,15 @@ class LiveTripState {
   final String? transferInfo;
   final String? instruction;
   final DateTime updatedAt;
+
+  /// Commercial operator name for the notification title ("Metro Bilbao").
+  final String? operatorName;
+
+  /// Boarding platform, when the timetable provides one.
+  final String? platform;
+
+  /// Departure after the tracked one, shown as "Siguiente: N min".
+  final DateTime? followingDepartureTime;
 
   int get minutesRemaining {
     final diff = arrivalTime.difference(DateTime.now()).inMinutes;
@@ -99,6 +111,10 @@ class LiveTripState {
         'transferInfo': transferInfo,
         'instruction': instruction,
         'updatedAt': updatedAt.toIso8601String(),
+        'operatorName': operatorName,
+        'platform': platform,
+        'followingDepartureEpochMs':
+            followingDepartureTime?.millisecondsSinceEpoch,
       };
 
   factory LiveTripState.fromJson(Map<String, dynamic> json) {
@@ -128,6 +144,13 @@ class LiveTripState {
       instruction: json['instruction'] as String?,
       updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
           DateTime.now(),
+      operatorName: json['operatorName'] as String?,
+      platform: json['platform'] as String?,
+      followingDepartureTime: json['followingDepartureEpochMs'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(
+              json['followingDepartureEpochMs'] as int,
+            )
+          : null,
     );
   }
 
@@ -151,6 +174,9 @@ class LiveTripState {
     String? transferInfo,
     String? instruction,
     DateTime? updatedAt,
+    String? operatorName,
+    String? platform,
+    DateTime? followingDepartureTime,
   }) {
     return LiveTripState(
       tripId: tripId ?? this.tripId,
@@ -172,6 +198,10 @@ class LiveTripState {
       transferInfo: transferInfo ?? this.transferInfo,
       instruction: instruction ?? this.instruction,
       updatedAt: updatedAt ?? this.updatedAt,
+      operatorName: operatorName ?? this.operatorName,
+      platform: platform ?? this.platform,
+      followingDepartureTime:
+          followingDepartureTime ?? this.followingDepartureTime,
     );
   }
 }

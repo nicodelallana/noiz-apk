@@ -19,6 +19,28 @@
 | **Metro Bilbao** | `metrobilbao.eus` / Moveuskadi | GTFS / GTFS-RT | Semanal / 30s RT | Reutilización abierta | Sí | **Logo protegido:** isotipo no utilizable en apps comerciales |
 | **Renfe Cercanías** | `data.renfe.com` / Moveuskadi | GTFS | Mensual | Reutilización sector público (Ley 37/2007) | Sí | Marcas registradas Renfe / Cercanías protegidas |
 
+### 1.1 Fuentes en tiempo real usadas por la app (verificadas el 3 nov 2026)
+
+Todas se consumen a través del proxy `tools/vehicle-proxy`. El proxy guarda cada respuesta en la CDN (20 s para vehículos y salidas, 60 s para incidencias), así que a cada fuente le llegan como mucho unas 3 peticiones por minuto, haya los usuarios que haya. La atribución se muestra en la app: en la hoja del vehículo, en la explicación del directo y en Incidencias.
+
+| Fuente | URL | Formato | Refresco observado | Uso en la app | Licencia |
+|---|---|---|---|---|---|
+| Metro Bilbao · posiciones | `ctb-gtfs-rt.s3.eu-south-2.amazonaws.com/metro-bilbao-vehicle-positions.pb` | GTFS-RT | ~60 s | Mapa (tren por estación) | CC BY 4.0 (CTB) |
+| Metro Bilbao · previsiones | `…/metro-bilbao-trip-updates.pb` | GTFS-RT | ~30–60 s | Salidas en directo | CC BY 4.0 (CTB) |
+| Metro Bilbao · incidencias | `…/metro-bilbao-service-alerts.pb` | GTFS-RT | ~60 s | Incidencias | CC BY 4.0 (CTB) |
+| Bizkaibus · posiciones | `baliabideak.bizkaia.eus/Bizkaibus/GTFSRealTime/FeedVehiculos.pb` | GTFS-RT | 60–70 s (datos con ~80 s de retraso) | Mapa (GPS) | CC BY 4.0 |
+| Bizkaibus · incidencias | `…/FeedAlerts.pb` | GTFS-RT | ~5 min | Incidencias | CC BY 4.0 |
+| Euskotren y tranvías · previsiones | `opendata.euskadi.eus/transport/moveuskadi/euskotren/gtfsrt_euskotren_trip_updates.pb` | GTFS-RT | 2–4 min | Salidas (en directo solo si el tren ha salido o trae retraso) | CC BY (Moveuskadi) |
+| Euskotren · incidencias | `…/gtfsrt_euskotren_alerts.pb` | GTFS-RT | — (vacío el 3 nov) | Incidencias | CC BY (Moveuskadi) |
+| Renfe Cercanías · posiciones | `gtfsrt.renfe.com/vehicle_positions.pb` | GTFS-RT | 15–20 s | Mapa (por estación, filtrado a Bizkaia) | CC BY 4.0 (data.renfe.com) |
+| Renfe Cercanías · incidencias | `gtfsrt.renfe.com/alerts.pb` | GTFS-RT | Desactualizado (~27 días el 3 nov) | Se descarta si tiene más de 6 h | CC BY 4.0 |
+
+Quedan fuera:
+- **Bilbobus:** todos sus feeds en tiempo real están vacíos, y CTB lista sus posiciones como **CC BY-NC 4.0** (no comercial): habría que revisarlo antes de usarlas.
+- **Renfe · previsiones:** solo da la próxima parada de cada tren, que no basta para listar las salidas de una estación. Hace falta su GTFS estático (parte II del spec).
+
+Índice oficial de feeds: `opendata.euskadi.eus/transport/moveuskadi/data-index-gtfs-rt.json`.
+
 ---
 
 ## 2. Textos Obligatorios de Atribución (Ajustes → Acerca de)

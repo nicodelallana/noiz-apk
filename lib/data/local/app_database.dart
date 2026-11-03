@@ -1,12 +1,8 @@
 import 'dart:io';
 
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:flutter/services.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
-import '../../core/constants/transit_constants.dart';
+import 'connection/open_connection.dart';
 
 /// Drift table definition for public transit operators.
 @DataClassName('OperatorRecord')
@@ -258,36 +254,10 @@ class AppDatabase {
   AppDatabase({
     QueryExecutor? executor,
     File? databaseFile,
-  }) : _executor = executor ?? _createDefaultExecutor(databaseFile);
+  }) : _executor = executor ?? openTransitDatabase(file: databaseFile);
 
   final QueryExecutor _executor;
   bool _isOpen = false;
-
-  static QueryExecutor _createDefaultExecutor(File? file) {
-    if (file != null) {
-      return NativeDatabase.createInBackground(file);
-    }
-    return LazyDatabase(() async {
-      final docs = await getApplicationDocumentsDirectory();
-      final dbFile = File(p.join(docs.path, TransitConstants.sqliteDbFileName));
-      try {
-        final data = await rootBundle.load('assets/db/transit.sqlite');
-        if (!dbFile.existsSync() || dbFile.lengthSync() != data.lengthInBytes) {
-          final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-          await dbFile.writeAsBytes(bytes, flush: true);
-        }
-      } catch (_) {
-        if (!dbFile.existsSync() || dbFile.lengthSync() < 1024) {
-          try {
-            final data = await rootBundle.load('assets/db/transit.sqlite');
-            final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-            await dbFile.writeAsBytes(bytes, flush: true);
-          } catch (_) {}
-        }
-      }
-      return NativeDatabase.createInBackground(dbFile);
-    });
-  }
 
   Future<void> _ensureOpen() async {
     if (!_isOpen) {
@@ -394,6 +364,29 @@ class AppDatabase {
     sql.write(' ORDER BY stop_name COLLATE NOCASE ASC');
 
     final rows = await _executor.runSelect(sql.toString(), args);
+    return rows.map(RawStopRecord.fromMap).toList();
+  }
+
+  /// Stations of every operator inside a lat/lon bounding box (map viewport).
+  Future<List<RawStopRecord>> getStationsInBounds({
+    required double minLat,
+    required double maxLat,
+    required double minLon,
+    required double maxLon,
+    int limit = 300,
+  }) async {
+    await _ensureOpen();
+
+    const sql = '''
+      SELECT stop_id, operator_id, stop_name, stop_lat, stop_lon, zone_id, parent_station
+      FROM stops
+      WHERE stop_lat BETWEEN ? AND ?
+        AND stop_lon BETWEEN ? AND ?
+        AND (parent_station IS NULL OR parent_station = '')
+      LIMIT ?
+    ''';
+    final rows = await _executor
+        .runSelect(sql, [minLat, maxLat, minLon, maxLon, limit]);
     return rows.map(RawStopRecord.fromMap).toList();
   }
 

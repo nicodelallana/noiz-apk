@@ -5,12 +5,13 @@ import 'package:bizkaia_transit/presentation/navigation/app_shell.dart';
 import 'package:bizkaia_transit/presentation/providers/auth_providers.dart';
 import 'package:bizkaia_transit/presentation/screens/alerts/service_alerts_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/auth/profile_settings_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/legal/licenses_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/map/transit_map_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/metro/metro_departures_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/nearby/nearby_transit_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/onboarding/onboarding_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/planner/route_planner_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/saved_trips/saved_trips_screen.dart';
-import 'package:bizkaia_transit/presentation/screens/simulator/live_activity_simulator_screen.dart';
 
 /// Application router using GoRouter with auth-based redirects.
 ///
@@ -52,65 +53,81 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const OnboardingScreen(),
       ),
 
-      // Main app with bottom navigation shell
-      ShellRoute(
-        builder: (context, state, child) {
-          // Determine active tab from location
-          final location = state.matchedLocation;
-          final index = switch (location) {
-            '/saved-trips' => 1,
-            '/alerts' => 2,
-            '/settings' => 3,
-            _ => 0,
-          };
-
-          return AppShell(
-            currentIndex: index,
-            child: child,
-          );
-        },
-        routes: [
-          GoRoute(
-            path: '/',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: MetroDeparturesScreen(),
-            ),
+      // Main app: one branch per tab, kept alive in an IndexedStack. Leaving
+      // a tab no longer destroys it, so coming back is instant — above all
+      // the map, which otherwise re-created its MapLibre view (and refetched
+      // its style) on every visit.
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) => AppShell(
+          currentIndex: navigationShell.currentIndex,
+          child: navigationShell,
+        ),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/',
+                pageBuilder: (context, state) => const NoTransitionPage(
+                  child: MetroDeparturesScreen(),
+                ),
+              ),
+              // Saved trips left the tab bar for the map; still reachable
+              // from the home menu because they feed the home-screen widget.
+              GoRoute(
+                path: '/saved-trips',
+                pageBuilder: (context, state) => const NoTransitionPage(
+                  child: SavedTripsScreen(),
+                ),
+              ),
+              GoRoute(
+                path: '/nearby',
+                pageBuilder: (context, state) => const NoTransitionPage(
+                  child: NearbyTransitScreen(),
+                ),
+              ),
+              GoRoute(
+                path: '/routes',
+                pageBuilder: (context, state) => const NoTransitionPage(
+                  child: RoutePlannerScreen(),
+                ),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/saved-trips',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: SavedTripsScreen(),
-            ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/map',
+                pageBuilder: (context, state) => const NoTransitionPage(
+                  child: TransitMapScreen(),
+                ),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/alerts',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ServiceAlertsScreen(),
-            ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/alerts',
+                pageBuilder: (context, state) => const NoTransitionPage(
+                  child: ServiceAlertsScreen(),
+                ),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/nearby',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: NearbyTransitScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/routes',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: RoutePlannerScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/simulator',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: LiveActivitySimulatorScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/settings',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ProfileSettingsScreen(),
-            ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/settings',
+                pageBuilder: (context, state) => const NoTransitionPage(
+                  child: ProfileSettingsScreen(),
+                ),
+                routes: [
+                  GoRoute(
+                    path: 'licenses',
+                    builder: (context, state) => const LicensesScreen(),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),

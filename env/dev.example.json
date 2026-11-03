@@ -7,5 +7,7 @@
   "CTB_GTFS_RT_BASE_URL": "https://ctb-gtfs-rt.s3.eu-south-2.amazonaws.com",
   "BIZKAIBUS_RT_BASE_URL": "https://baliabideak.bizkaia.eus/Bizkaibus/GTFSRealTime",
   "GOOGLE_WEB_CLIENT_ID": "",
-  "GOOGLE_IOS_CLIENT_ID": ""
+  "GOOGLE_IOS_CLIENT_ID": "",
+  "LIVE_VEHICLES_URL": "https://noiz-glass-vista-previa.vercel.app/api/vehicles",
+  "LIVE_API_BASE": "https://noiz-glass-vista-previa.vercel.app/api"
 }

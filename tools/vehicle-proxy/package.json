@@ -1,0 +1,9 @@
+{
+  "name": "noiz-vehicle-proxy",
+  "private": true,
+  "description": "GTFS-RT vehicle positions -> JSON for the Noiz map (Vercel function).",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "gtfs-realtime-bindings": "2.2.0"
+  }
+}

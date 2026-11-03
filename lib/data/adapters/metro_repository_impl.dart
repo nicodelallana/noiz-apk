@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../domain/models/transit_models.dart';
 import '../../domain/repositories/metro_repository.dart';
 import '../gtfs/schedule_sync_service.dart';
@@ -22,6 +24,8 @@ class MetroRepositoryImpl implements MetroRepository {
 
   @override
   Future<bool> isScheduleReady() async {
+    // On the web the bundled DB is loaded into memory; there is no file.
+    if (kIsWeb) return true;
     return _syncService.isDatabasePresent();
   }
 

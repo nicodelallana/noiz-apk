@@ -5,6 +5,8 @@ import 'package:bizkaia_transit/core/theme/barik_icons.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/presentation/navigation/transport_selector_sheet.dart';
 import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
 
 /// Legacy transport mode toggle for backward compatibility with existing tests.
 enum TransportMode {
@@ -22,36 +24,54 @@ final transportModeProvider = StateProvider<TransportMode>(
   (ref) => TransportMode.metro,
 );
 
-/// Central Floating Action Button that opens the Province-Aware Transport Selector.
-/// Displays the active transport mode's icon and operator color.
+/// Glass circle beside the tab bar that opens the transport selector. Tinted
+/// with the active operator's colour: it is the screen's one primary action.
 class TransportModeFab extends ConsumerWidget {
-  const TransportModeFab({super.key});
+  const TransportModeFab({
+    super.key,
+    this.compact = false,
+    this.overMap = false,
+  });
+
+  /// Matches the tab bar's compact height while the page scrolls.
+  final bool compact;
+
+  /// Sits over the map (Mapa tab): see [GlassKind.overMap].
+  final bool overMap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activeOperator = ref.watch(selectedOperatorProvider);
     final activeColor = Color(activeOperator.colorHex);
     final icon = _iconForMode(activeOperator.mode);
+    final size = compact ? 50.0 : 62.0;
+    final reduced = Motion.reduced(context);
 
-    return SizedBox(
-      width: 62,
-      height: 62,
-      child: FloatingActionButton(
-        heroTag: 'transport_mode_fab',
+    return AnimatedContainer(
+      duration: reduced ? Motion.reducedFade : Motion.snappy.duration,
+      curve: reduced ? Curves.linear : Motion.snappy.curve,
+      width: size,
+      height: size,
+      child: GlassButton(
+        blur: true,
         onPressed: () => TransportSelectorBottomSheet.show(context),
-        backgroundColor: activeColor,
-        elevation: 8,
-        shape: const CircleBorder(),
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          transitionBuilder: (child, animation) {
-            return ScaleTransition(scale: animation, child: child);
-          },
-          child: Icon(
-            icon,
-            key: ValueKey(activeOperator.id),
-            color: Colors.white,
-            size: 28,
+        semanticLabel: 'Cambiar transporte: ${activeOperator.name}',
+        kind: overMap ? GlassKind.overMap : GlassKind.regular,
+        tint: activeColor,
+        padding: EdgeInsets.zero,
+        child: Center(
+          child: AnimatedSwitcher(
+            duration: reduced ? Motion.reducedFade : Motion.bouncy.duration,
+            switchInCurve: reduced ? Curves.linear : Motion.bouncy.curve,
+            transitionBuilder: (child, animation) => reduced
+                ? FadeTransition(opacity: animation, child: child)
+                : ScaleTransition(scale: animation, child: child),
+            child: Icon(
+              icon,
+              key: ValueKey(activeOperator.id),
+              color: Colors.white,
+              size: compact ? 22 : 26,
+            ),
           ),
         ),
       ),

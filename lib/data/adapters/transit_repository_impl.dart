@@ -1,5 +1,4 @@
-import 'dart:math' as math;
-
+import 'package:bizkaia_transit/core/utils/geo.dart';
 import 'package:bizkaia_transit/data/local/app_database.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
@@ -81,19 +80,19 @@ class TransitRepositoryImpl implements TransitRepository {
       );
     }
 
+    // The query includes the current minute (minTime is HH:MM:00), so compare
+    // at minute resolution: 23:05 at 23:05:30 leaves now, not tomorrow.
+    final thisMinute =
+        DateTime(time.year, time.month, time.day, time.hour, time.minute);
     return rawDepartures.map((raw) {
       final parts = raw.departureTime.split(':');
       final hour = int.tryParse(parts[0]) ?? time.hour;
       final minute = int.tryParse(parts[1]) ?? time.minute;
       var sched = DateTime(time.year, time.month, time.day, hour % 24, minute);
-      if (sched.isBefore(time)) {
+      if (sched.isBefore(thisMinute)) {
         sched = sched.add(const Duration(days: 1));
       }
       final remaining = sched.difference(time).inMinutes;
-
-      final isRt = operatorId != 'alavabus' &&
-          operatorId != 'artxanda' &&
-          operatorId != 'la_union';
 
       return Departure(
         tripId: raw.tripId,
@@ -103,13 +102,16 @@ class TransitRepositoryImpl implements TransitRepository {
         line: raw.inferredLine == 'L2' ? MetroLine.l2 : MetroLine.l1,
         lineCode: raw.inferredLine ?? 'L1',
         scheduledTime: sched,
+        // GTFS times run past 24:00 for after-midnight trips; show 00:10.
         scheduledTimeFormatted:
-            '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}',
+            '${(hour % 24).toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}',
         minutesRemaining: remaining > 0 ? remaining : 0,
-        isTheoretical: !isRt,
-        isRealtime: isRt,
+        // No GTFS-RT feed is merged into departures yet, so every time shown
+        // is the theoretical schedule. Flip these once trip updates are fused.
+        isTheoretical: true,
+        isRealtime: false,
         operatorId: operatorId ?? 'metro',
-        status: isRt ? 'tracking' : 'scheduled',
+        status: 'scheduled',
       );
     }).toList();
   }
@@ -127,31 +129,55 @@ class TransitRepositoryImpl implements TransitRepository {
       allStops.addAll(stops);
     }
 
-    // Distance calculation using Haversine formula
-    double haversineDistance(double lat1, double lon1, double lat2, double lon2) {
-      const p = 0.017453292519943295; // Math.PI / 180
-      final a = 0.5 -
-          math.cos((lat2 - lat1) * p) / 2 +
-          math.cos(lat1 * p) *
-              math.cos(lat2 * p) *
-              (1 - math.cos((lon2 - lon1) * p)) /
-              2;
-      return 12742 * math.asin(math.sqrt(a)); // 2 * R * asin...
-    }
-
     final nearby = allStops.where((s) {
       if (s.latitude == null || s.longitude == null) return false;
-      final dist = haversineDistance(latitude, longitude, s.latitude!, s.longitude!);
+      final dist = haversineKm(latitude, longitude, s.latitude!, s.longitude!);
       return dist <= radiusKm;
     }).toList();
 
     nearby.sort((a, b) {
-      final da = haversineDistance(latitude, longitude, a.latitude!, a.longitude!);
-      final db = haversineDistance(latitude, longitude, b.latitude!, b.longitude!);
+      final da = haversineKm(latitude, longitude, a.latitude!, a.longitude!);
+      final db = haversineKm(latitude, longitude, b.latitude!, b.longitude!);
       return da.compareTo(db);
     });
 
     return nearby.take(15).toList();
+  }
+
+  @override
+  Future<List<Stop>> getStopsInBounds({
+    required double minLat,
+    required double maxLat,
+    required double minLon,
+    required double maxLon,
+  }) async {
+    final rows = await _db.getStationsInBounds(
+      minLat: minLat,
+      maxLat: maxLat,
+      minLon: minLon,
+      maxLon: maxLon,
+    );
+    return rows.map(_toStop).toList();
+  }
+
+  @override
+  Future<Stop?> getStopById(String stopId) async {
+    final raw = await _db.getStopById(stopId);
+    return raw == null ? null : _toStop(raw);
+  }
+
+  Stop _toStop(RawStopRecord raw) {
+    final op = TransitOperator.fromId(raw.operatorId);
+    return Stop(
+      id: raw.stopId,
+      name: raw.stopName,
+      latitude: raw.stopLat,
+      longitude: raw.stopLon,
+      parentStation: raw.parentStation,
+      operatorId: raw.operatorId,
+      territory: op.territory.id,
+      mode: op.mode.id,
+    );
   }
 
   @override
@@ -324,6 +350,7 @@ class TransitRepositoryImpl implements TransitRepository {
         description:
             'Trabajos de mantenimiento en catenaria entre Llodio y Orduña. Posibles demoras de 5 a 10 minutos.',
         activePeriod: 'Hoy todo el día',
+        affectedStopIds: ['renfe_llodio', 'renfe_orduna'],
       ),
       const ServiceAlert(
         id: 'alt_02',
@@ -335,6 +362,7 @@ class TransitRepositoryImpl implements TransitRepository {
         description:
             'Frecuencia intensificada a 15 min en la línea Bilbao Termibus - Loiu Aireportua.',
         activePeriod: 'Hasta las 23:30',
+        affectedStopIds: ['bizkaibus_termibus', 'bizkaibus_aireportua'],
       ),
       const ServiceAlert(
         id: 'alt_03',
@@ -346,6 +374,7 @@ class TransitRepositoryImpl implements TransitRepository {
         description:
             'Línea 28 traslada su cabecera provisionalmente a Plaza Gipuzkoa.',
         activePeriod: '16:00 a 20:00',
+        affectedStopIds: ['dbus_boulevard'],
       ),
       const ServiceAlert(
         id: 'alt_04',
@@ -356,6 +385,7 @@ class TransitRepositoryImpl implements TransitRepository {
         title: 'BEI funcionamiento regular sin incidencias',
         description: 'Tiempos de paso cada 7 minutos en todo el anillo circular.',
         activePeriod: 'En curso',
+        affectedStopIds: ['tuvisa_prado', 'tuvisa_boulevard_vitoria'],
       ),
       const ServiceAlert(
         id: 'alt_05',
@@ -367,6 +397,7 @@ class TransitRepositoryImpl implements TransitRepository {
         description:
             'Transbordo en autobús habilitado entre Irun Ficoba y Hendaia por obras en estación.',
         activePeriod: 'Hasta el domingo',
+        affectedStopIds: ['euskotren_hendaia', 'renfe_irun'],
       ),
     ];
 
