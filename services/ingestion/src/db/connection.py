@@ -10,18 +10,59 @@ from src.utils.logging import logger
 
 Base = declarative_base()
 
-try:
-    engine = create_engine(
-        settings.DATABASE_URL,
-        pool_size=settings.DATABASE_POOL_SIZE,
-        max_overflow=settings.DATABASE_MAX_OVERFLOW,
-        pool_pre_ping=True
-    )
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-except Exception as e:
-    logger.warning(f"Could not initialize SQLAlchemy engine with {settings.DATABASE_URL}: {e}")
-    engine = None
-    SessionLocal = None
+
+def _create_robust_engine():
+    db_url = settings.DATABASE_URL
+    if not db_url:
+        return None
+
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+    errors = []
+    # Strategy 1: Standard URL
+    try:
+        return create_engine(
+            db_url,
+            pool_size=settings.DATABASE_POOL_SIZE,
+            max_overflow=settings.DATABASE_MAX_OVERFLOW,
+            pool_pre_ping=True
+        )
+    except Exception as e1:
+        errors.append(f"default ({e1})")
+
+    # Strategy 2: Explicit psycopg2 driver
+    if "psycopg2" not in db_url and db_url.startswith("postgresql://"):
+        try:
+            alt_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            return create_engine(
+                alt_url,
+                pool_size=settings.DATABASE_POOL_SIZE,
+                max_overflow=settings.DATABASE_MAX_OVERFLOW,
+                pool_pre_ping=True
+            )
+        except Exception as e2:
+            errors.append(f"psycopg2 ({e2})")
+
+    # Strategy 3: Explicit psycopg (psycopg3) driver
+    if "+psycopg" not in db_url and db_url.startswith("postgresql://"):
+        try:
+            alt_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+            return create_engine(
+                alt_url,
+                pool_size=settings.DATABASE_POOL_SIZE,
+                max_overflow=settings.DATABASE_MAX_OVERFLOW,
+                pool_pre_ping=True
+            )
+        except Exception as e3:
+            errors.append(f"psycopg3 ({e3})")
+
+    logger.warning(f"Could not initialize SQLAlchemy engine with {db_url}: {'; '.join(errors)}")
+    return None
+
+
+engine = _create_robust_engine()
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) if engine else None
 
 
 @contextmanager
