@@ -37,15 +37,21 @@ class DepartureRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lineColor = Color(departure.routeColorHex ?? operator.colorHex);
-    final isDelayed = departure.isRealtime && departure.delaySeconds >= 60;
-    final countdownColor = !departure.isRealtime
-        ? AppColors.darkTextPrimary
-        : (isDelayed ? AppColors.delayedAmber : AppColors.realtimeGreen);
-    final status = !departure.isRealtime
-        ? 'Según horario'
-        : isDelayed
-            ? '+${departure.delaySeconds ~/ 60} min'
-            : 'En directo';
+    final cancelled = departure.status == 'cancelled';
+    final isDelayed =
+        !cancelled && departure.isRealtime && departure.delaySeconds >= 60;
+    final countdownColor = cancelled
+        ? AppColors.darkTextTertiary
+        : !departure.isRealtime
+            ? AppColors.darkTextPrimary
+            : (isDelayed ? AppColors.delayedAmber : AppColors.realtimeGreen);
+    final status = cancelled
+        ? 'Cancelado'
+        : !departure.isRealtime
+            ? 'Según horario'
+            : isDelayed
+                ? '+${departure.delaySeconds ~/ 60} min'
+                : 'En directo';
     final t = AppTypography.textTheme();
 
     return Container(
@@ -91,9 +97,11 @@ class DepartureRow extends StatelessWidget {
                       ? 'en ${formatWait(departure.minutesRemaining)} · $status'
                       : '${departure.scheduledTimeFormatted} · $status',
                   style: AppTypography.time.copyWith(
-                    color: isDelayed
-                        ? AppColors.delayedAmber
-                        : AppColors.darkTextSecondary,
+                    color: cancelled
+                        ? AppColors.disruptedRed
+                        : isDelayed
+                            ? AppColors.delayedAmber
+                            : AppColors.darkTextSecondary,
                   ),
                 ),
               ],
@@ -103,7 +111,11 @@ class DepartureRow extends StatelessWidget {
           CountdownText(
             minutes: departure.minutesRemaining,
             clockTime: departure.scheduledTimeFormatted,
-            style: AppTypography.countdownSmall,
+            style: cancelled
+                ? AppTypography.countdownSmall.copyWith(
+                    decoration: TextDecoration.lineThrough,
+                  )
+                : AppTypography.countdownSmall,
             color: countdownColor,
             unitStyle: t.bodySmall!.copyWith(
               color: AppColors.darkTextSecondary,

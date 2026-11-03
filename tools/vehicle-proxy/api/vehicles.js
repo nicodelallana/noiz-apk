@@ -19,8 +19,7 @@
 // Data: Consorcio de Transportes de Bizkaia (CTB), Diputación Foral de
 // Bizkaia (Bizkaibus) and Renfe Viajeros — CC BY 4.0.
 
-const GtfsRealtimeBindings = require('gtfs-realtime-bindings');
-const lookups = require('./_data/lookups.json');
+const { lookups, fetchFeed, num } = require('./_lib/gtfsrt');
 
 const FEEDS = [
   {
@@ -41,25 +40,9 @@ const FEEDS = [
 ];
 
 const MAX_AGE_S = 180;
-const TIMEOUT_MS = 8000;
 const STATUS = ['incoming', 'stopped', 'in_transit'];
 // Bizkaia, roughly: Renfe's feed is national.
 const inBizkaia = (lat, lon) => lat > 42.9 && lat < 43.5 && lon > -3.45 && lon < -2.4;
-
-const num = (v) => (v == null ? null : Number(v));
-
-async function fetchFeed(url) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buf = new Uint8Array(await res.arrayBuffer());
-    return GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buf);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 // Line, colour, destination and stop name for one vehicle, per operator.
 const label = {

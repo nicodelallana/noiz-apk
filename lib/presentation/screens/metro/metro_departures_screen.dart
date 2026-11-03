@@ -866,7 +866,12 @@ class _MultiOperatorDeparturesSliverList extends ConsumerWidget {
           );
         }
 
-        final rest = departures.skip(1).toList();
+        // The hero is the next train that actually runs.
+        final hero = departures.firstWhere(
+          (d) => d.status != 'cancelled',
+          orElse: () => departures.first,
+        );
+        final rest = [for (final d in departures) if (!identical(d, hero)) d];
         return SliverMainAxisGroup(
           slivers: [
             SliverPadding(
@@ -877,9 +882,9 @@ class _MultiOperatorDeparturesSliverList extends ConsumerWidget {
                   child: _Reveal(
                     index: 3,
                     child: DepartureHeroCard(
-                      departure: departures.first,
+                      departure: hero,
                       operator: activeOperator,
-                      originName: activeStop?.name ?? departures.first.stationName,
+                      originName: activeStop?.name ?? hero.stationName,
                       followingDeparture: rest.isEmpty ? null : rest.first,
                     ),
                   ),
@@ -890,7 +895,9 @@ class _MultiOperatorDeparturesSliverList extends ConsumerWidget {
               SliverToBoxAdapter(
                 child: SectionHeader(
                   'Más salidas',
-                  subtitle: rest.first.isRealtime ? null : 'Horario programado',
+                  subtitle: rest.any((d) => d.isRealtime)
+                      ? 'En directo · datos oficiales del operador'
+                      : 'Horario programado',
                 ),
               ),
               SliverPadding(

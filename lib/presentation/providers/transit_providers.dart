@@ -7,6 +7,8 @@ import 'package:bizkaia_transit/core/constants/transit_constants.dart';
 import 'package:bizkaia_transit/core/services/location_service.dart';
 import 'package:bizkaia_transit/core/utils/geo.dart';
 import 'package:bizkaia_transit/data/adapters/transit_repository_impl.dart';
+import 'package:bizkaia_transit/data/live/live_alerts.dart';
+import 'package:bizkaia_transit/data/live/live_departures.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
 import 'package:bizkaia_transit/domain/repositories/transit_repository.dart';
@@ -151,12 +153,39 @@ final minuteTickProvider = StreamProvider<DateTime>((ref) {
   return controller.stream;
 });
 
+final liveDeparturesServiceProvider =
+    Provider<LiveDeparturesService>((ref) => LiveDeparturesService());
+
+final liveAlertsServiceProvider =
+    Provider<LiveAlertsService>((ref) => LiveAlertsService());
+
+/// Live departures first (Metro, Euskotren, trams: official GTFS-RT
+/// predictions), the timetable otherwise. The live feed can't filter by
+/// destination, so with a destination set the timetable answers.
+Future<List<Departure>> _departuresFor(
+  Ref ref,
+  Stop stop, {
+  required String operatorId,
+  Stop? destination,
+}) async {
+  if (destination == null && LiveDeparturesService.supports(operatorId)) {
+    final live =
+        await ref.read(liveDeparturesServiceProvider).fetch(stop, operatorId);
+    if (live != null) return live;
+  }
+  return ref.read(transitRepositoryProvider).getDepartures(
+        stopId: stop.id,
+        destinationStopId: destination?.id,
+        operatorId: operatorId,
+      );
+}
+
 final departuresForActiveStopProvider =
     FutureProvider<List<Departure>>((ref) async {
   ref.watch(minuteTickProvider);
   var stop = ref.watch(selectedTransitStopProvider);
   final destStop = ref.watch(selectedDestinationStopProvider);
-  final repo = ref.watch(transitRepositoryProvider);
+  ref.watch(transitRepositoryProvider);
   final op = ref.watch(selectedOperatorProvider);
 
   if (stop == null || stop.operatorId != op.id) {
@@ -168,11 +197,7 @@ final departuresForActiveStopProvider =
     });
   }
 
-  return repo.getDepartures(
-    stopId: stop.id,
-    destinationStopId: destStop?.id,
-    operatorId: op.id,
-  );
+  return _departuresFor(ref, stop, operatorId: op.id, destination: destStop);
 });
 
 /// Upcoming departures for any stop, independent of the home screen selection
@@ -180,10 +205,8 @@ final departuresForActiveStopProvider =
 final departuresForStopProvider =
     FutureProvider.autoDispose.family<List<Departure>, Stop>((ref, stop) {
   ref.watch(minuteTickProvider);
-  return ref.watch(transitRepositoryProvider).getDepartures(
-        stopId: stop.id,
-        operatorId: stop.operatorId,
-      );
+  ref.watch(transitRepositoryProvider);
+  return _departuresFor(ref, stop, operatorId: stop.operatorId);
 });
 
 /// Nearby transit stops within walking distance, centered on user GPS if allowed
@@ -201,10 +224,17 @@ final nearbyStopsProvider = FutureProvider<List<Stop>>((ref) async {
 });
 
 /// Service alerts across all of Euskadi.
+/// Official incidents in force (GTFS-RT Alerts), refreshed every 3 minutes
+/// while watched. Failures surface as errors — never as "no incidents".
+final liveAlertsProvider = FutureProvider<LiveAlerts>((ref) async {
+  final timer = Timer(const Duration(minutes: 3), ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+  return ref.watch(liveAlertsServiceProvider).fetch();
+});
+
 final serviceAlertsProvider =
     FutureProvider<List<ServiceAlert>>((ref) async {
-  final repo = ref.watch(transitRepositoryProvider);
-  return repo.getServiceAlerts();
+  return (await ref.watch(liveAlertsProvider.future)).alerts;
 });
 
 /// An alert paired with its closest affected stop and that stop's distance
@@ -227,6 +257,44 @@ final rankedServiceAlertsProvider =
   for (final alert in alerts) {
     double? best;
     Stop? bestStop;
+    // Official alerts name their places; link the closest one to an app
+    // stop within 400 m for "Ver parada".
+    AlertLocation? bestPlace;
+    for (final place in alert.locations) {
+      final d = haversineKm(
+        here.latitude,
+        here.longitude,
+        place.latitude,
+        place.longitude,
+      );
+      if (best == null || d < best) {
+        best = d;
+        bestPlace = place;
+      }
+    }
+    if (bestPlace != null) {
+      const dDeg = 0.004;
+      final candidates = await repo.getStopsInBounds(
+        minLat: bestPlace.latitude - dDeg,
+        maxLat: bestPlace.latitude + dDeg,
+        minLon: bestPlace.longitude - dDeg,
+        maxLon: bestPlace.longitude + dDeg,
+      );
+      var closest = 0.4;
+      for (final s in candidates) {
+        if (s.latitude == null || s.longitude == null) continue;
+        final d = haversineKm(
+          bestPlace.latitude,
+          bestPlace.longitude,
+          s.latitude!,
+          s.longitude!,
+        );
+        if (d < closest) {
+          closest = d;
+          bestStop = s;
+        }
+      }
+    }
     for (final stopId in alert.affectedStopIds) {
       final stop = await repo.getStopById(stopId);
       if (stop?.latitude == null || stop?.longitude == null) continue;

@@ -1,5 +1,7 @@
+import 'package:bizkaia_transit/data/live/live_alerts.dart';
 import 'package:bizkaia_transit/presentation/navigation/app_shell.dart';
 import 'package:bizkaia_transit/presentation/navigation/transport_mode_fab.dart';
+import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
 import 'package:bizkaia_transit/presentation/widgets/animations/arrival_pulse_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,8 +12,15 @@ void main() {
     testWidgets('AppShell renders "Cuenta" tab in navigation bar instead of "Ajustes"',
         (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
+        ProviderScope(
+          // The shell's Alertas badge reads live incidents: no network here.
+          overrides: [
+            liveAlertsProvider.overrideWith(
+              (ref) async =>
+                  const LiveAlerts(alerts: [], attribution: '', unavailable: []),
+            ),
+          ],
+          child: const MaterialApp(
             home: AppShell(
               currentIndex: 0,
               child: Scaffold(body: Text('Contenido Principal')),

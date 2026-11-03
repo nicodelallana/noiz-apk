@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
@@ -188,7 +189,10 @@ class DepartureStatus extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _LiveDot(),
+        // A looping pulse keeps the web repainting the whole scene every
+        // frame (no raster cache there): measured ~40 % CPU at rest. The web
+        // gets a still dot; native pulses inside its own repaint boundary.
+        if (kIsWeb) const _StillLiveDot() else const RepaintBoundary(child: _LiveDot()),
         const SizedBox(width: 6),
         Text(
           'En directo',
@@ -198,6 +202,34 @@ class DepartureStatus extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _StillLiveDot extends StatelessWidget {
+  const _StillLiveDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 14,
+      height: 14,
+      child: Center(
+        child: Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.realtimeGreen,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.realtimeGreen.withValues(alpha: 0.55),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

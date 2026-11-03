@@ -5,13 +5,16 @@ GTFS-RT vehicle positions only carry ids (trip_id, stop_id); names and
 colours live in each operator's official static GTFS. Run this whenever an
 operator publishes a new static GTFS (Bizkaibus: every ~2 months).
 
-Usage: python3 build_lookups.py <dir with gtfs_metro/ gtfs_bzk/ gtfs_renfe/>
+Usage: python3 build_lookups.py <dir with gtfs_metro/ gtfs_bzk/ gtfs_renfe/ gtfs_eusko/>
 
 Sources (official, CC BY 4.0):
   gtfs_metro  https://ctb-gtfs.s3.eu-south-2.amazonaws.com/metrobilbao.zip
   gtfs_bzk    https://ctb-gtfs.s3.eu-south-2.amazonaws.com/bizkaibus.zip
   gtfs_renfe  https://ssl.renfe.com/ftransit/Fichero_CER_FOMENTO/fomento_transit.zip
-Only routes.txt, trips.txt and stops.txt are read.
+  gtfs_eusko  https://opendata.euskadi.eus/transport/moveuskadi/euskotren/gtfs_euskotren.zip
+Only routes.txt, trips.txt and stops.txt are read. Stop coordinates
+("coords") let the proxy find the official stops around the app's stop and
+place incidents for "Cerca de ti".
 """
 import csv
 import json
@@ -40,6 +43,29 @@ def rows(path):
             yield {k.strip(): (v or '').strip() for k, v in r.items() if k}
 
 
+def coords(d, keep=lambda lat, lon: True):
+    out = {}
+    for s in rows(f'{d}/stops.txt'):
+        try:
+            lat, lon = float(s['stop_lat']), float(s['stop_lon'])
+        except (KeyError, ValueError):
+            continue
+        if keep(lat, lon):
+            out[s['stop_id']] = [round(lat, 5), round(lon, 5)]
+    return out
+
+
+def headsign_index(d, trips_out):
+    heads, head_ix = [], {}
+    for t in rows(f'{d}/trips.txt'):
+        h = nice(t.get('trip_headsign', ''))
+        if h not in head_ix:
+            head_ix[h] = len(heads)
+            heads.append(h)
+        trips_out[t['trip_id']] = [t['route_id'], head_ix[h]]
+    return heads
+
+
 def metro(d):
     # One GTFS route ("MB") for both lines; the shape tells them apart:
     # Kabiezes/Basauri (KAB/BSR) is L2, everything else L1.
@@ -54,6 +80,7 @@ def metro(d):
         'lines': {'L1': 'FF6505', 'L2': 'D94A00'},
         'trips': trips,
         'stops': stops,
+        'coords': coords(d),
     }
 
 
@@ -69,7 +96,7 @@ def bizkaibus(d):
         trips[t['trip_id']] = [t['route_id'], head_ix[h]]
     stops = {s['stop_id']: nice(s['stop_name']) for s in rows(f'{d}/stops.txt')}
     return {'name': 'Bizkaibus', 'routes': routes, 'headsigns': heads,
-            'trips': trips, 'stops': stops}
+            'trips': trips, 'stops': stops, 'coords': coords(d)}
 
 
 def renfe(d):
@@ -86,7 +113,20 @@ def renfe(d):
         lat, lon = float(s['stop_lat']), float(s['stop_lon'])
         if 42.9 < lat < 43.45 and -3.35 < lon < -2.55:
             stops[s['stop_id']] = nice(s['stop_name'])
-    return {'name': 'Renfe Cercanías', 'routes': routes, 'trips': trips, 'stops': stops}
+    bizkaia = lambda lat, lon: 42.9 < lat < 43.45 and -3.35 < lon < -2.55
+    return {'name': 'Renfe Cercanías', 'routes': routes, 'trips': trips,
+            'stops': stops, 'coords': coords(d, bizkaia)}
+
+
+def euskotren(d):
+    # Euskotren trains, Topo, Bilbao and Vitoria-Gasteiz trams, funicular.
+    routes = {r['route_id']: [r['route_short_name'], r.get('route_color') or '005A8B']
+              for r in rows(f'{d}/routes.txt')}
+    trips = {}
+    heads = headsign_index(d, trips)
+    stops = {s['stop_id']: nice(s['stop_name']) for s in rows(f'{d}/stops.txt')}
+    return {'name': 'Euskotren', 'routes': routes, 'headsigns': heads,
+            'trips': trips, 'stops': stops, 'coords': coords(d)}
 
 
 def main():
@@ -95,6 +135,7 @@ def main():
         'metro': metro(f'{src}/gtfs_metro'),
         'bizkaibus': bizkaibus(f'{src}/gtfs_bzk'),
         'renfe': renfe(f'{src}/gtfs_renfe'),
+        'euskotren': euskotren(f'{src}/gtfs_eusko'),
     }
     path = os.path.join(os.path.dirname(__file__), 'api', '_data', 'lookups.json')
     os.makedirs(os.path.dirname(path), exist_ok=True)

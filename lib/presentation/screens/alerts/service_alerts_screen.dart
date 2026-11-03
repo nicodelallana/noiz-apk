@@ -83,7 +83,7 @@ class _ServiceAlertsScreenState extends ConsumerState<ServiceAlertsScreen> {
             ),
             slivers: [
               const SliverToBoxAdapter(child: _LargeTitle('Incidencias')),
-              const SliverToBoxAdapter(child: _SampleDataNotice()),
+              const SliverToBoxAdapter(child: _SourceNotice()),
               ...ranked.when(
                 loading: () => const [
                   SliverFillRemaining(
@@ -202,13 +202,24 @@ class _LargeTitle extends StatelessWidget {
   }
 }
 
-/// The alerts feed is not connected yet: say so instead of passing the
-/// bundled examples off as live incidents.
-class _SampleDataNotice extends StatelessWidget {
-  const _SampleDataNotice();
+/// Where the incidents come from, and which operators aren't answering now
+/// (a silent feed must not look like "no incidents").
+class _SourceNotice extends ConsumerWidget {
+  const _SourceNotice();
+
+  static const _names = {
+    'metro': 'Metro Bilbao',
+    'bizkaibus': 'Bizkaibus',
+    'euskotren': 'Euskotren',
+    'renfe': 'Renfe',
+  };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(liveAlertsProvider).valueOrNull;
+    final missing = [
+      for (final op in data?.unavailable ?? const <String>[]) _names[op] ?? op,
+    ];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: SurfaceCard(
@@ -220,16 +231,17 @@ class _SampleDataNotice extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.only(top: 1),
               child: Icon(
-                Icons.info_outline_rounded,
+                Icons.verified_outlined,
                 size: 18,
-                color: AppColors.accent,
+                color: AppColors.realtimeGreen,
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Avisos de ejemplo: la conexión con los avisos oficiales de '
-                'los operadores aún no está activa.',
+                'Incidencias oficiales en vigor de Metro Bilbao, Bizkaibus, '
+                'Euskotren y Renfe.'
+                '${missing.isEmpty ? '' : ' Ahora sin datos de: ${missing.join(', ')}.'}',
                 style: _text.bodySmall!.copyWith(
                   color: AppColors.darkTextSecondary,
                 ),

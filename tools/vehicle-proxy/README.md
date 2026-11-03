@@ -1,6 +1,26 @@
-# Proxy de vehículos en directo
+# Proxy de datos en directo
 
-`GET /api/vehicles` devuelve en un solo JSON los vehículos en directo de Bizkaia para el mapa de la app.
+Tres endpoints en JSON, todos con CORS y caché en la CDN:
+
+| Endpoint | Qué devuelve | Caché |
+|---|---|---|
+| `GET /api/vehicles` | Vehículos en directo de Bizkaia para el mapa | 20 s |
+| `GET /api/departures?op=metro\|euskotren&lat=…&lon=…` | Próximas salidas desde las paradas oficiales a menos de 350 m de ese punto | 20 s |
+| `GET /api/alerts` | Incidencias oficiales en vigor, con sus líneas y paradas | 60 s |
+
+### `/api/departures`
+
+- **Metro:** todo lo que devuelve es en directo, porque el feed solo trae trenes en circulación.
+- **Euskotren y tranvías:** solo es en directo si el tren ya ha salido o la parada trae un retraso explícito; si no, es su horario oficial.
+- **Cancelaciones:** salen marcadas, no se ocultan.
+- **Renfe:** no está, porque su feed solo trae la próxima parada de cada tren.
+
+### `/api/alerts`
+
+- Saca el título del texto cuando Bizkaibus pone "Incidencia" a todas.
+- Une los avisos duplicados que solo cambian de línea.
+- Sitúa la estación que nombra el texto cuando el aviso marca toda la red.
+- Descarta el feed de Renfe si tiene más de 6 h.
 
 ## Por qué hace falta
 

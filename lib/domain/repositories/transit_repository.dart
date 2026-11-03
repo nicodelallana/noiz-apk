@@ -62,6 +62,8 @@ class ServiceAlert {
     required this.description,
     this.activePeriod,
     this.affectedStopIds = const [],
+    this.locations = const [],
+    this.networkWide = false,
   });
 
   final String id;
@@ -76,6 +78,26 @@ class ServiceAlert {
   /// Stops informed by the alert (GTFS-RT `informed_entity.stop_id`), used
   /// to rank alerts by distance to the user.
   final List<String> affectedStopIds;
+
+  /// Affected stops as named points, for alerts from the official feeds
+  /// (their stop ids are the operators', not the app's).
+  final List<AlertLocation> locations;
+
+  /// Applies to the whole network (or no single place can be named).
+  final bool networkWide;
+}
+
+/// A named place an alert affects.
+class AlertLocation {
+  const AlertLocation({
+    required this.name,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final String name;
+  final double latitude;
+  final double longitude;
 }
 
 /// Unified Transit Repository for all operators and modes across Euskadi.

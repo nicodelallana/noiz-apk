@@ -77,6 +77,7 @@ Medido con Chrome automatizado: móvil de 390×844 a 3×, CPU 4 veces más lenta
 - **Las pestañas se mantienen vivas** (`StatefulShellRoute.indexedStack`). Al volver al mapa no se recrea MapLibre.
 - **No hay mapa dentro del scroll.** Inicio enlaza a la pestaña Mapa: un mapa embebido es una vista de plataforma que hay que recomponer en cada fotograma.
 - No se usa `InkSparkle` (compila un shader al primer toque); se usa `InkRipple`.
+- **En web no hay animaciones en bucle.** El punto de "En directo" latía sin parar y, sin caché de rasterizado, repintaba toda la pantalla en cada fotograma: ~1,6 s de CPU cada 4 s en reposo. En web el punto es fijo y en nativo late dentro de su `RepaintBoundary`.
 - No metas cristal dentro de `Opacity` ni de `FadeTransition`. El cambio de pestaña es instantáneo, como en iOS, y las pantallas empujadas usan la transición de iOS en todas las plataformas.
 - **Pendiente:** el renderizador WebAssembly de Flutter sería todavía más rápido, pero `flutter_secure_storage` 9 usa `dart:html` y no compila con `--wasm`. Hace falta actualizarlo a la versión 10.
 
