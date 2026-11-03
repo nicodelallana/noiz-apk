@@ -9,7 +9,6 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/barik_icons.dart';
 import '../../../core/utils/geo.dart';
 import '../../../domain/models/saved_trip_models.dart';
-import '../../navigation/transport_selector_sheet.dart';
 import '../../providers/transit_providers.dart';
 import '../../widgets/animations/empty_transit_view.dart';
 import '../../widgets/departure_hero_card.dart';
@@ -124,7 +123,7 @@ class _TransitScreenContent extends ConsumerWidget {
       slivers: [
         SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(20, topInset + 20, 16, 0),
+            padding: EdgeInsets.fromLTRB(20, topInset + 10, 16, 0),
             child: _Reveal(
               index: 0,
               child: _HomeHeader(
@@ -136,18 +135,11 @@ class _TransitScreenContent extends ConsumerWidget {
             ),
           ),
         ),
-        const SliverToBoxAdapter(
-          child: _Reveal(
-            index: 1,
-            fade: false, // contains glass
-            child: _TerritoryAndOperatorChipsHeader(),
-          ),
-        ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: _Reveal(
-              index: 2,
+              index: 1,
               fade: false, // glass
               child: _RouteCapsule(
                 originStopName: stopName,
@@ -190,7 +182,7 @@ class _TransitScreenContent extends ConsumerWidget {
 
         // Room for the floating tab bar.
         SliverToBoxAdapter(
-          child: SizedBox(height: 120 + MediaQuery.paddingOf(context).bottom),
+          child: SizedBox(height: 96 + MediaQuery.paddingOf(context).bottom),
         ),
       ],
     );
@@ -222,33 +214,21 @@ class _HomeHeader extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Semantics(
-                button: true,
-                label: 'Operador: $operatorName. Cambiar',
-                onTap: () => TransportSelectorBottomSheet.show(context),
-                excludeSemantics: true,
-                child: GestureDetector(
-                  onTap: () => TransportSelectorBottomSheet.show(context),
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(modeIcon, size: 15, color: operatorColor),
-                        const SizedBox(width: 6),
-                        Text(
-                          operatorName,
-                          style: t.titleSmall!.copyWith(color: operatorColor),
-                        ),
-                        Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          size: 18,
-                          color: operatorColor,
-                        ),
-                      ],
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(modeIcon, size: 15, color: operatorColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      operatorName,
+                      style: t.titleSmall!.copyWith(
+                        color: operatorColor,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
               Semantics(
@@ -392,193 +372,6 @@ class _HomeMenu extends StatelessWidget {
               size: 22,
               color: AppColors.darkTextPrimary,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Territory segmented control (glass, sliding indicator) and the
-/// operators of that territory as chips.
-class _TerritoryAndOperatorChipsHeader extends ConsumerWidget {
-  const _TerritoryAndOperatorChipsHeader();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final territory = ref.watch(selectedTerritoryProvider);
-    final activeOperator = ref.watch(selectedOperatorProvider);
-    final operators = ref.watch(operatorListProvider);
-    final territories = TransitTerritory.values;
-    final index = territories.indexOf(territory);
-    final reduced = Motion.reduced(context);
-    final m = Motion.snappy;
-    final t = AppTypography.textTheme();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
-          child: GlassSurface(
-            radius: 999,
-            padding: const EdgeInsets.all(3),
-            shadow: false,
-            child: SizedBox(
-              height: 36,
-              child: Stack(
-                children: [
-                  AnimatedAlign(
-                    alignment: Alignment(
-                      territories.length == 1
-                          ? 0
-                          : -1 + 2 * index / (territories.length - 1),
-                      0,
-                    ),
-                    duration: reduced ? Duration.zero : m.duration,
-                    curve: m.curve,
-                    child: FractionallySizedBox(
-                      widthFactor: 1 / territories.length,
-                      heightFactor: 1,
-                      child: DecoratedBox(
-                        decoration: ShapeDecoration(
-                          color: Colors.white.withValues(alpha: 0.16),
-                          shape: StadiumBorder(
-                            side: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.12),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      for (final terr in territories)
-                        Expanded(
-                          child: Semantics(
-                            selected: terr == territory,
-                            button: true,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () {
-                                if (terr == territory) return;
-                                HapticFeedback.selectionClick();
-                                ref
-                                    .read(selectedTerritoryProvider.notifier)
-                                    .state = terr;
-                              },
-                              child: Center(
-                                child: Text(
-                                  terr.name,
-                                  style: t.labelLarge!.copyWith(
-                                    fontSize: 13,
-                                    color: terr == territory
-                                        ? AppColors.darkTextPrimary
-                                        : AppColors.darkTextSecondary,
-                                    fontWeight: terr == territory
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          height: 36,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: operators.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (context, i) {
-              final op = operators[i];
-              return _OperatorChip(
-                name: op.name,
-                color: Color(op.colorHex),
-                selected: op == activeOperator,
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  ref.read(selectedOperatorProvider.notifier).state = op;
-                },
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 12),
-      ],
-    );
-  }
-}
-
-/// Operator chip: translucent capsule (no blur — it scrolls), filled with
-/// the operator's colour when selected.
-class _OperatorChip extends StatelessWidget {
-  const _OperatorChip({
-    required this.name,
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String name;
-  final Color color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final reduced = Motion.reduced(context);
-    return Semantics(
-      selected: selected,
-      button: true,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: reduced ? Duration.zero : Motion.snappy.duration,
-          curve: Motion.snappy.curve,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          alignment: Alignment.center,
-          decoration: ShapeDecoration(
-            color: selected
-                ? color.withValues(alpha: 0.9)
-                : Colors.white.withValues(alpha: 0.07),
-            shape: StadiumBorder(
-              side: BorderSide(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.25)
-                    : Colors.white.withValues(alpha: 0.10),
-              ),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!selected) ...[
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 7),
-              ],
-              Text(
-                name,
-                style: AppTypography.textTheme().labelLarge!.copyWith(
-                      fontSize: 13,
-                      color: selected ? Colors.white : AppColors.darkTextPrimary,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    ),
-              ),
-            ],
           ),
         ),
       ),

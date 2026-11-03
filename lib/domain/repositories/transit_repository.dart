@@ -123,12 +123,35 @@ abstract class TransitRepository {
     double radiusKm = 1.5,
   });
 
-  /// Stations of every operator inside the visible map region.
+  /// Stations and stops inside the visible map region.
   Future<List<Stop>> getStopsInBounds({
     required double minLat,
     required double maxLat,
     required double minLon,
     required double maxLon,
+    String? operatorId,
+    String? mode,
+    String? routeId,
+    bool includePlatforms = false,
+  });
+
+  /// Retrieves the polyline coordinates [lon, lat] for a route.
+  Future<List<List<double>>> getRouteShape(
+    String routeId, {
+    int? directionId,
+  });
+
+  /// Retrieves routes with optional filtering.
+  Future<List<TransitRoute>> getRoutes({
+    String? operatorId,
+    String? mode,
+    TransitTerritory? territory,
+  });
+
+  /// Retrieves ordered stops along a specific route and direction.
+  Future<List<Stop>> getStopsForRoute(
+    String routeId, {
+    int? directionId,
   });
 
   Future<Stop?> getStopById(String stopId);

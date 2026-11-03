@@ -28,21 +28,12 @@ class TransitRepositoryImpl implements TransitRepository {
     String? searchQuery,
   }) async {
     final rawStops = await _db.getStations(
-      operatorId: operatorId ?? 'metro',
+      operatorId: operatorId,
+      territory: territory?.id,
       searchQuery: searchQuery,
     );
 
-    return rawStops.map((raw) {
-      return Stop(
-        id: raw.stopId,
-        name: raw.stopName,
-        latitude: raw.stopLat,
-        longitude: raw.stopLon,
-        parentStation: raw.parentStation,
-        operatorId: raw.operatorId,
-        territory: territory?.id ?? 'bizkaia',
-      );
-    }).toList();
+    return rawStops.map(_toStop).toList();
   }
 
   @override
@@ -54,31 +45,18 @@ class TransitRepositoryImpl implements TransitRepository {
   }) async {
     final time = atTime ?? DateTime.now();
     final activeServices = await _db.getActiveServiceIds(time);
+    if (activeServices.isEmpty) return [];
+
     final minTime = '${time.hour.toString().padLeft(2, '0')}:'
         '${time.minute.toString().padLeft(2, '0')}:00';
 
-    var rawDepartures = await _db.getDepartures(
+    final rawDepartures = await _db.getDepartures(
       stationId: stopId,
       destinationStopId: destinationStopId,
-      activeServiceIds: activeServices.isNotEmpty
-          ? activeServices
-          : {'daily_regular'},
+      activeServiceIds: activeServices,
       minDepartureTime: minTime,
       limit: 15,
     );
-
-    // If no departures remaining for today (e.g. late night), show upcoming morning departures
-    if (rawDepartures.isEmpty) {
-      rawDepartures = await _db.getDepartures(
-        stationId: stopId,
-        destinationStopId: destinationStopId,
-        activeServiceIds: activeServices.isNotEmpty
-            ? activeServices
-            : {'daily_regular'},
-        minDepartureTime: '06:00:00',
-        limit: 15,
-      );
-    }
 
     // The query includes the current minute (minTime is HH:MM:00), so compare
     // at minute resolution: 23:05 at 23:05:30 leaves now, not tomorrow.
@@ -122,14 +100,14 @@ class TransitRepositoryImpl implements TransitRepository {
     required double longitude,
     double radiusKm = 1.5,
   }) async {
-    // Collect all stops from database across all operators
-    final allStops = <Stop>[];
-    for (final op in TransitOperator.values) {
-      final stops = await getStops(operatorId: op.id);
-      allStops.addAll(stops);
-    }
+    final stops = await getStopsInBounds(
+      minLat: latitude - (radiusKm / 111.0),
+      maxLat: latitude + (radiusKm / 111.0),
+      minLon: longitude - (radiusKm / 80.0),
+      maxLon: longitude + (radiusKm / 80.0),
+    );
 
-    final nearby = allStops.where((s) {
+    final nearby = stops.where((s) {
       if (s.latitude == null || s.longitude == null) return false;
       final dist = haversineKm(latitude, longitude, s.latitude!, s.longitude!);
       return dist <= radiusKm;
@@ -150,13 +128,52 @@ class TransitRepositoryImpl implements TransitRepository {
     required double maxLat,
     required double minLon,
     required double maxLon,
+    String? operatorId,
+    String? mode,
+    String? routeId,
+    bool includePlatforms = false,
   }) async {
     final rows = await _db.getStationsInBounds(
       minLat: minLat,
       maxLat: maxLat,
       minLon: minLon,
       maxLon: maxLon,
+      operatorId: operatorId,
+      mode: mode,
+      routeId: routeId,
+      includePlatforms: includePlatforms,
     );
+    return rows.map(_toStop).toList();
+  }
+
+  @override
+  Future<List<List<double>>> getRouteShape(
+    String routeId, {
+    int? directionId,
+  }) {
+    return _db.getRouteShape(routeId, directionId: directionId);
+  }
+
+  @override
+  Future<List<TransitRoute>> getRoutes({
+    String? operatorId,
+    String? mode,
+    TransitTerritory? territory,
+  }) async {
+    final rows = await _db.getRoutes(
+      operatorId: operatorId,
+      mode: mode,
+      territory: territory?.id,
+    );
+    return rows.map(_toTransitRoute).toList();
+  }
+
+  @override
+  Future<List<Stop>> getStopsForRoute(
+    String routeId, {
+    int? directionId,
+  }) async {
+    final rows = await _db.getStopsForRoute(routeId, directionId: directionId);
     return rows.map(_toStop).toList();
   }
 
@@ -175,8 +192,20 @@ class TransitRepositoryImpl implements TransitRepository {
       longitude: raw.stopLon,
       parentStation: raw.parentStation,
       operatorId: raw.operatorId,
-      territory: op.territory.id,
-      mode: op.mode.id,
+      territory: raw.territory.isNotEmpty ? raw.territory : op.territory.id,
+      mode: raw.mode.isNotEmpty ? raw.mode : op.mode.id,
+    );
+  }
+
+  TransitRoute _toTransitRoute(RawRouteRecord raw) {
+    return TransitRoute(
+      id: raw.routeId,
+      operatorId: raw.operatorId,
+      shortName: raw.routeShortName,
+      longName: raw.routeLongName,
+      type: raw.routeType,
+      colorHex: raw.routeColor,
+      territory: raw.territory,
     );
   }
 

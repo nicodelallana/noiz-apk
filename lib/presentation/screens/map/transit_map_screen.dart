@@ -17,6 +17,7 @@ import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
 import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
 import 'package:bizkaia_transit/presentation/screens/map/live_vehicles_layer.dart';
+import 'package:bizkaia_transit/presentation/screens/map/map_transit_selector.dart';
 import 'package:bizkaia_transit/presentation/screens/stop/stop_departures_screen.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
@@ -38,10 +39,12 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
   /// operator-coloured stops are what stands out.
   static const _styleUrl = 'https://tiles.openfreemap.org/styles/dark';
   static const _walkingZoom = 15.5;
-  static const _initialRadiusKm = 0.6;
   static const _sourceId = 'stops';
   static const _layerId = 'stops-circles';
   static const _haloLayerId = 'stops-selected-halo';
+  static const _routeSourceId = 'route-shape-source';
+  static const _routeLineLayerId = 'route-shape-line';
+  static const _routeGlowLayerId = 'route-shape-glow';
 
   /// Clearance for the floating controls: the shell's tab bar ends at
   /// safe area + 74; while a departure is followed its banner sits above it.
@@ -108,6 +111,50 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
     final controller = _controller;
     if (controller == null) return;
 
+    // Route shape layers (drawn underneath the stop dots)
+    await controller.addGeoJsonSource(_routeSourceId, _emptyLineCollection());
+    await controller.addLineLayer(
+      _routeSourceId,
+      _routeGlowLayerId,
+      const LineLayerProperties(
+        lineColor: [Expressions.get, 'color'],
+        lineWidth: [
+          Expressions.interpolate,
+          ['linear'],
+          [Expressions.zoom],
+          10,
+          6.0,
+          14,
+          10.0,
+          18,
+          16.0,
+        ],
+        lineOpacity: 0.35,
+        lineBlur: 2.0,
+      ),
+    );
+    await controller.addLineLayer(
+      _routeSourceId,
+      _routeLineLayerId,
+      const LineLayerProperties(
+        lineColor: [Expressions.get, 'color'],
+        lineWidth: [
+          Expressions.interpolate,
+          ['linear'],
+          [Expressions.zoom],
+          10,
+          3.5,
+          14,
+          5.5,
+          18,
+          8.5,
+        ],
+        lineOpacity: 0.95,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+    );
+
     await controller.addGeoJsonSource(_sourceId, _featureCollection(const []));
     // Soft glow under the selected stop; drawn first so the dots sit on top,
     // and not tappable so taps keep landing on the dots layer.
@@ -169,30 +216,151 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
     // Vehicles draw above the stops.
     await _live.attach(controller);
 
-    final here = await ref.read(resolvedUserLocationProvider.future);
-    final around = await ref.read(
-      stopsAroundProvider(
-        (lat: here.latitude, lon: here.longitude, radiusKm: _initialRadiusKm),
-      ).future,
-    );
-    await _showStops(around);
+    final selectedRoute = ref.read(mapSelectedRouteProvider);
+    if (selectedRoute != null) {
+      await _onRouteFilterChanged(selectedRoute);
+    } else {
+      await _reloadViewportStops();
+    }
+  }
+
+  Map<String, dynamic> _emptyLineCollection() => const {
+        'type': 'FeatureCollection',
+        'features': <Map<String, dynamic>>[],
+      };
+
+  Map<String, dynamic> _routeLineCollection(
+    List<List<double>> coords,
+    String colorHex,
+  ) =>
+      {
+        'type': 'FeatureCollection',
+        'features': [
+          if (coords.isNotEmpty)
+            {
+              'type': 'Feature',
+              'properties': {
+                'color': colorHex,
+              },
+              'geometry': {
+                'type': 'LineString',
+                'coordinates': coords,
+              },
+            },
+        ],
+      };
+
+  Future<void> _reloadViewportStops() async {
+    final controller = _controller;
+    if (controller == null || !_styleReady || !mounted) return;
+
+    final selectedRoute = ref.read(mapSelectedRouteProvider);
+    if (selectedRoute != null) {
+      final stops = await ref
+          .read(transitRepositoryProvider)
+          .getStopsForRoute(selectedRoute.id);
+      if (mounted) await _showStops(stops);
+      return;
+    }
+
+    final bounds = await controller.getVisibleRegion();
+    final activeOp = ref.read(mapSelectedOperatorProvider);
+    final activeMode = ref.read(mapSelectedModeProvider);
+
+    final stops = await ref.read(transitRepositoryProvider).getStopsInBounds(
+          minLat: bounds.southwest.latitude,
+          maxLat: bounds.northeast.latitude,
+          minLon: bounds.southwest.longitude,
+          maxLon: bounds.northeast.longitude,
+          operatorId: activeOp?.id,
+          mode: activeMode?.id,
+        );
+    if (mounted) await _showStops(stops);
   }
 
   /// Debounced reload of the stops inside the resting viewport.
   void _onCameraIdle() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () async {
-      final controller = _controller;
-      if (controller == null || !_styleReady || !mounted) return;
-      final bounds = await controller.getVisibleRegion();
-      final stops = await ref.read(transitRepositoryProvider).getStopsInBounds(
-            minLat: bounds.southwest.latitude,
-            maxLat: bounds.northeast.latitude,
-            minLon: bounds.southwest.longitude,
-            maxLon: bounds.northeast.longitude,
-          );
-      if (mounted) await _showStops(stops);
+      await _reloadViewportStops();
     });
+  }
+
+  Future<void> _onRouteFilterChanged(TransitRoute? route) async {
+    final controller = _controller;
+    if (controller == null || !_styleReady || !mounted) return;
+
+    if (route == null) {
+      await controller.setGeoJsonSource(_routeSourceId, _emptyLineCollection());
+      final op = ref.read(mapSelectedOperatorProvider);
+      _live.setFilter(operatorId: op?.id);
+      await _reloadViewportStops();
+      return;
+    }
+
+    final repo = ref.read(transitRepositoryProvider);
+    final coords = await repo.getRouteShape(route.id);
+    final routeColorHex = route.colorHex ??
+        _hex(TransitOperator.fromId(route.operatorId).colorHex);
+
+    await controller.setGeoJsonSource(
+      _routeSourceId,
+      _routeLineCollection(coords, routeColorHex),
+    );
+
+    if (coords.isNotEmpty) {
+      double minLat = 90.0;
+      double maxLat = -90.0;
+      double minLon = 180.0;
+      double maxLon = -180.0;
+      for (final pt in coords) {
+        final lon = pt[0];
+        final lat = pt[1];
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lon < minLon) minLon = lon;
+        if (lon > maxLon) maxLon = lon;
+      }
+      final bounds = LatLngBounds(
+        southwest: LatLng(minLat, minLon),
+        northeast: LatLng(maxLat, maxLon),
+      );
+      if (Motion.reduced(context)) {
+        await controller.moveCamera(
+          CameraUpdate.newLatLngBounds(
+            bounds,
+            left: 40,
+            right: 40,
+            top: 180,
+            bottom: 120,
+          ),
+        );
+      } else {
+        await controller.animateCamera(
+          CameraUpdate.newLatLngBounds(
+            bounds,
+            left: 40,
+            right: 40,
+            top: 180,
+            bottom: 120,
+          ),
+        );
+      }
+    }
+
+    final stops = await repo.getStopsForRoute(route.id);
+    if (mounted) await _showStops(stops);
+    _live.setFilter(line: route.shortName, operatorId: route.operatorId);
+  }
+
+  Future<void> _onOperatorFilterChanged(TransitOperator? op) async {
+    _live.setFilter(operatorId: op?.id);
+    await _reloadViewportStops();
+  }
+
+  Future<void> _onModeFilterChanged(TransitModeType? mode) async {
+    _live.setFilter();
+    await _reloadViewportStops();
   }
 
   Future<void> _showStops(List<Stop> stops) async {
@@ -311,6 +479,21 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
     final reduced = Motion.reduced(context);
     final move = reduced ? Duration.zero : Motion.smooth.duration;
 
+    ref.listen<TransitRoute?>(mapSelectedRouteProvider, (_, next) {
+      _onRouteFilterChanged(next);
+    });
+    ref.listen<TransitOperator?>(mapSelectedOperatorProvider, (_, next) {
+      if (ref.read(mapSelectedRouteProvider) == null) {
+        _onOperatorFilterChanged(next);
+      }
+    });
+    ref.listen<TransitModeType?>(mapSelectedModeProvider, (_, next) {
+      if (ref.read(mapSelectedRouteProvider) == null &&
+          ref.read(mapSelectedOperatorProvider) == null) {
+        _onModeFilterChanged(next);
+      }
+    });
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: location.when(
@@ -339,14 +522,23 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
               left: 16,
               right: 16,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (!hasRealFix) ...[
-                    const _NoFixPill(),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: _NoFixPill(),
+                    ),
                     const SizedBox(height: 8),
                   ],
-                  LiveVehiclesChip(
-                    state: _live.state,
-                    onToggle: _live.toggleVisible,
+                  const MapTransitSelector(),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: LiveVehiclesChip(
+                      state: _live.state,
+                      onToggle: _live.toggleVisible,
+                    ),
                   ),
                 ],
               ),

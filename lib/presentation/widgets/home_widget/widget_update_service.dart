@@ -5,6 +5,7 @@ import 'package:home_widget/home_widget.dart';
 import '../../../domain/models/transit_models.dart';
 import '../../../domain/repositories/metro_repository.dart';
 import '../../../domain/repositories/saved_trips_repository.dart';
+import '../../../domain/repositories/transit_repository.dart';
 
 /// Precomputes and synchronizes upcoming departures with native home-screen widgets.
 /// Writes versioned JSON and key-value entries to shared storage (SharedPreferences / UserDefaults).
@@ -12,17 +13,20 @@ class WidgetUpdateService {
   const WidgetUpdateService({
     required MetroRepository metroRepository,
     required SavedTripsRepository savedTripsRepository,
+    TransitRepository? transitRepository,
   })  : _metroRepository = metroRepository,
-        _savedTripsRepository = savedTripsRepository;
+        _savedTripsRepository = savedTripsRepository,
+        _transitRepository = transitRepository;
 
   final MetroRepository _metroRepository;
   final SavedTripsRepository _savedTripsRepository;
+  final TransitRepository? _transitRepository;
 
   static const String dataKey = 'transit_widget_data';
   static const String androidWidgetProvider = 'TransitWidgetProvider';
 
-  /// Precomputes upcoming 12-hour departures for all trips with widget_enabled = true
-  /// and notifies the native widget provider to refresh.
+  /// Precomputes upcoming departures for all trips with widget_enabled = true
+  /// across any Euskadi transit operator and notifies the native widget provider to refresh.
   Future<void> update() async {
     if (kIsWeb) return;
     try {
@@ -34,26 +38,42 @@ class WidgetUpdateService {
       for (final trip in enabledTrips) {
         List<Departure> departures = const [];
         try {
-          departures = await _metroRepository.getDepartures(
-            stationId: trip.originStopId,
-            destinationStopId: trip.destStopId,
-            limit: 8,
-          );
+          if (_transitRepository != null) {
+            departures = await _transitRepository.getDepartures(
+              stopId: trip.originStopId,
+              destinationStopId: trip.destStopId,
+              operatorId: trip.operator.id,
+            );
+          } else {
+            departures = await _metroRepository.getDepartures(
+              stationId: trip.originStopId,
+              destinationStopId: trip.destStopId,
+              limit: 8,
+            );
+          }
         } catch (e) {
           debugPrint(
               'Error fetching departures for widget trip ${trip.id}: $e');
         }
 
+        final lineCode = departures.isNotEmpty
+            ? departures.first.lineCode
+            : (trip.routeId ?? trip.operator.name);
+
+        final opColorHex =
+            '#${(trip.operator.colorHex & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+
         tripsPayload.add({
           'id': trip.id,
           'name': trip.name,
+          'operator': trip.operator.id,
+          'operator_name': trip.operator.name,
+          'operator_color': opColorHex,
           'origin_id': trip.originStopId,
           'origin_name': trip.originStopName,
           'dest_id': trip.destStopId,
           'dest_name': trip.destStopName,
-          'line': departures.isNotEmpty
-              ? departures.first.line.name.toUpperCase()
-              : 'METRO',
+          'line': lineCode,
           'departures': departures
               .map(
                 (d) => {
@@ -61,7 +81,7 @@ class WidgetUpdateService {
                   'sched': d.scheduledTime.toUtc().toIso8601String(),
                   'formatted': d.scheduledTimeFormatted,
                   'mins': d.minutesRemaining,
-                  'line': d.line.name.toUpperCase(),
+                  'line': d.lineCode.isNotEmpty ? d.lineCode : d.line.name,
                   'headsign': d.headsign,
                 },
               )
@@ -91,6 +111,8 @@ class WidgetUpdateService {
             'top_trip_dest', firstTrip['dest_name'] as String);
         await HomeWidget.saveWidgetData<String>(
             'top_trip_line', firstTrip['line'] as String);
+        await HomeWidget.saveWidgetData<String>(
+            'top_trip_color', firstTrip['operator_color'] as String);
 
         if (departures.isNotEmpty) {
           final firstDep = departures.first as Map<String, dynamic>;
@@ -113,7 +135,8 @@ class WidgetUpdateService {
             'top_trip_name', 'Sin viajes activos');
         await HomeWidget.saveWidgetData<String>('top_trip_origin', '');
         await HomeWidget.saveWidgetData<String>('top_trip_dest', '');
-        await HomeWidget.saveWidgetData<String>('top_trip_line', 'METRO');
+        await HomeWidget.saveWidgetData<String>('top_trip_line', 'NOIZ');
+        await HomeWidget.saveWidgetData<String>('top_trip_color', '#025DA9');
         await HomeWidget.saveWidgetData<String>('top_trip_time', '--:--');
         await HomeWidget.saveWidgetData<String>(
             'top_trip_countdown', 'Añadir en app');

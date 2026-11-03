@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.widget.RemoteViews
@@ -63,9 +64,10 @@ class TransitWidgetProvider : AppWidgetProvider() {
         var tripName = widgetData.getString("top_trip_name", "Mis viajes") ?: "Mis viajes"
         var originName = widgetData.getString("top_trip_origin", "") ?: ""
         var destName = widgetData.getString("top_trip_dest", "") ?: ""
-        var lineBadge = widgetData.getString("top_trip_line", "METRO") ?: "METRO"
-        var depTime = widgetData.getString("top_trip_time", "--:--") ?: "--:-- voice"
+        var lineBadge = widgetData.getString("top_trip_line", "NOIZ") ?: "NOIZ"
+        var depTime = widgetData.getString("top_trip_time", "--:--") ?: "--:--"
         var countdown = widgetData.getString("top_trip_countdown", "Añadir en app") ?: "Añadir en app"
+        var opColorHex = widgetData.getString("top_trip_color", "#025DA9") ?: "#025DA9"
         var nextDepsSummary = "Sin salidas próximas"
 
         if (!rawJson.isNullOrEmpty()) {
@@ -79,6 +81,7 @@ class TransitWidgetProvider : AppWidgetProvider() {
                     originName = trip.optString("origin_name", originName)
                     destName = trip.optString("dest_name", destName)
                     lineBadge = trip.optString("line", lineBadge)
+                    opColorHex = trip.optString("operator_color", opColorHex)
 
                     val departures = trip.optJSONArray("departures")
                     if (departures != null && departures.length() > 0) {
@@ -88,7 +91,11 @@ class TransitWidgetProvider : AppWidgetProvider() {
                         val mins = calculateMinutesRemaining(schedIso, firstDep.optInt("mins", 0))
 
                         depTime = formattedTime
-                        countdown = if (mins <= 0) "Ahora" else "$mins min"
+                        countdown = when {
+                            mins <= 0 -> "Ahora"
+                            mins > 60 -> "${mins / 60}h ${mins % 60}m"
+                            else -> "$mins min"
+                        }
 
                         // Build secondary summary for medium layout
                         if (departures.length() > 1) {
@@ -97,7 +104,8 @@ class TransitWidgetProvider : AppWidgetProvider() {
                                 val d = departures.getJSONObject(i)
                                 val m = calculateMinutesRemaining(d.optString("sched"), d.optInt("mins", 0))
                                 val t = d.optString("formatted")
-                                nextList.add("$t (${m}m)")
+                                val formattedMins = if (m <= 0) "ahora" else "${m}m"
+                                nextList.add("$t ($formattedMins)")
                             }
                             nextDepsSummary = "Próximas: " + nextList.joinToString(" • ")
                         }

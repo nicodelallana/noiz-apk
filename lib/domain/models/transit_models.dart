@@ -113,3 +113,39 @@ class Departure {
   String toString() =>
       'Departure($line to $headsign at $scheduledTimeFormatted, in ${minutesRemaining}m)';
 }
+
+/// Pure domain model for a transit route / line.
+class TransitRoute {
+  const TransitRoute({
+    required this.id,
+    required this.operatorId,
+    required this.shortName,
+    required this.longName,
+    required this.type,
+    this.colorHex,
+    required this.territory,
+  });
+
+  final String id;
+  final String operatorId;
+  final String shortName;
+  final String longName;
+  final int type;
+  final String? colorHex;
+  final String territory;
+
+  String get displayName => shortName.isNotEmpty ? shortName : longName;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TransitRoute &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => 'TransitRoute(id: $id, name: $displayName)';
+}

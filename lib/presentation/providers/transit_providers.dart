@@ -317,3 +317,62 @@ final rankedServiceAlertsProvider =
   );
   return ranked;
 });
+
+// ── Map Hierarchy Providers (Modo → Operador → Línea) ──────────────────────
+
+/// Active transit mode on the map: null = all modes
+final mapSelectedModeProvider = StateProvider<TransitModeType?>((ref) => null);
+
+/// Active operator filter on the map: null = all operators for current mode
+final mapSelectedOperatorProvider =
+    StateProvider<TransitOperator?>((ref) => null);
+
+/// Active selected route on the map: null = no specific route selected
+final mapSelectedRouteProvider = StateProvider<TransitRoute?>((ref) => null);
+
+/// Operators matching the actively selected mode and territory
+final mapFilteredOperatorsProvider = Provider<List<TransitOperator>>((ref) {
+  final mode = ref.watch(mapSelectedModeProvider);
+  final territory = ref.watch(selectedTerritoryProvider);
+
+  var ops = TransitOperator.values;
+  if (territory != TransitTerritory.all) {
+    ops = ops.where((o) => o.territory == territory).toList();
+  }
+  if (mode != null) {
+    ops = ops.where((o) => o.mode == mode).toList();
+  }
+  return ops;
+});
+
+/// Available routes for the actively selected operator / mode
+final mapAvailableRoutesProvider =
+    FutureProvider<List<TransitRoute>>((ref) async {
+  final op = ref.watch(mapSelectedOperatorProvider);
+  final mode = ref.watch(mapSelectedModeProvider);
+  final territory = ref.watch(selectedTerritoryProvider);
+  final repo = ref.watch(transitRepositoryProvider);
+
+  return repo.getRoutes(
+    operatorId: op?.id,
+    mode: mode?.id,
+    territory: territory,
+  );
+});
+
+/// Shape coordinates [lon, lat] for the actively selected route
+final mapRouteShapeProvider =
+    FutureProvider<List<List<double>>>((ref) async {
+  final route = ref.watch(mapSelectedRouteProvider);
+  if (route == null) return [];
+  final repo = ref.watch(transitRepositoryProvider);
+  return repo.getRouteShape(route.id);
+});
+
+/// Stops along the actively selected route
+final mapRouteStopsProvider = FutureProvider<List<Stop>>((ref) async {
+  final route = ref.watch(mapSelectedRouteProvider);
+  if (route == null) return [];
+  final repo = ref.watch(transitRepositoryProvider);
+  return repo.getStopsForRoute(route.id);
+});

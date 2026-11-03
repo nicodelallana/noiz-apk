@@ -76,7 +76,49 @@ class LiveVehiclesController {
   bool _active = false;
   bool _fetching = false;
   Map<String, LiveVehicle> _vehicles = const {};
+  Map<String, LiveVehicle> _allFresh = const {};
   Map<String, LatLng> _shown = const {};
+  String? _filterLine;
+  String? _filterOperator;
+
+  /// Filters drawn vehicles by route/line and/or operator.
+  void setFilter({String? line, String? operatorId}) {
+    _filterLine = line?.trim().toLowerCase();
+    _filterOperator = operatorId?.trim().toLowerCase();
+    if (_allFresh.isNotEmpty) {
+      final filtered = _filterVehicles(_allFresh);
+      state.value = state.value.copyWith(
+        status: filtered.isEmpty ? LiveStatus.unavailable : LiveStatus.live,
+        count: filtered.length,
+      );
+      _apply(filtered);
+    }
+  }
+
+  Map<String, LiveVehicle> _filterVehicles(Map<String, LiveVehicle> input) {
+    if ((_filterLine == null || _filterLine!.isEmpty) &&
+        (_filterOperator == null || _filterOperator!.isEmpty)) {
+      return input;
+    }
+    final result = <String, LiveVehicle>{};
+    for (final entry in input.entries) {
+      final v = entry.value;
+      if (_filterOperator != null && _filterOperator!.isNotEmpty) {
+        final matchesOp = v.operatorName.toLowerCase().contains(_filterOperator!) ||
+            _filterOperator!.contains(v.operatorName.toLowerCase());
+        if (!matchesOp) continue;
+      }
+      if (_filterLine != null && _filterLine!.isNotEmpty) {
+        final vLine = v.line.toLowerCase().trim();
+        final matchesLine = vLine == _filterLine ||
+            vLine.contains(_filterLine!) ||
+            _filterLine!.contains(vLine);
+        if (!matchesLine) continue;
+      }
+      result[entry.key] = entry.value;
+    }
+    return result;
+  }
 
   /// Adds the source and layers. Call once the style has loaded.
   Future<void> attach(MapLibreMapController map) async {
@@ -178,12 +220,14 @@ class LiveVehiclesController {
         for (final v in snap.vehicles)
           if (DateTime.now().difference(v.reportedAt) < _staleAfter) v.id: v,
       };
+      _allFresh = fresh;
+      final filtered = _filterVehicles(fresh);
       state.value = state.value.copyWith(
-        status: fresh.isEmpty ? LiveStatus.unavailable : LiveStatus.live,
-        count: fresh.length,
+        status: filtered.isEmpty ? LiveStatus.unavailable : LiveStatus.live,
+        count: filtered.length,
         snapshot: snap,
       );
-      _apply(fresh);
+      _apply(filtered);
     } catch (_) {
       // Keep what is drawn only while it is still fresh; then clear it.
       final last = state.value.snapshot;

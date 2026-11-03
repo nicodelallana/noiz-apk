@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -130,6 +131,9 @@ class RawStopRecord {
     required this.stopLon,
     this.zoneId,
     this.parentStation,
+    this.territory = 'bizkaia',
+    this.mode = 'bus',
+    this.locationType = 0,
   });
 
   factory RawStopRecord.fromMap(Map<String, Object?> map) {
@@ -141,6 +145,9 @@ class RawStopRecord {
       stopLon: (map['stop_lon']! as num).toDouble(),
       zoneId: map['zone_id'] as String?,
       parentStation: map['parent_station'] as String?,
+      territory: (map['territory'] as String?) ?? 'bizkaia',
+      mode: (map['mode'] as String?) ?? 'bus',
+      locationType: (map['location_type'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -151,6 +158,42 @@ class RawStopRecord {
   final double stopLon;
   final String? zoneId;
   final String? parentStation;
+  final String territory;
+  final String mode;
+  final int locationType;
+}
+
+/// Raw record representation of a transit route in SQLite.
+class RawRouteRecord {
+  const RawRouteRecord({
+    required this.routeId,
+    required this.operatorId,
+    required this.routeShortName,
+    required this.routeLongName,
+    required this.routeType,
+    this.routeColor,
+    required this.territory,
+  });
+
+  factory RawRouteRecord.fromMap(Map<String, Object?> map) {
+    return RawRouteRecord(
+      routeId: map['route_id']! as String,
+      operatorId: map['operator_id']! as String,
+      routeShortName: (map['route_short_name'] as String?) ?? '',
+      routeLongName: (map['route_long_name'] as String?) ?? '',
+      routeType: (map['route_type'] as num?)?.toInt() ?? 3,
+      routeColor: map['route_color'] as String?,
+      territory: (map['territory'] as String?) ?? 'bizkaia',
+    );
+  }
+
+  final String routeId;
+  final String operatorId;
+  final String routeShortName;
+  final String routeLongName;
+  final int routeType;
+  final String? routeColor;
+  final String territory;
 }
 
 /// Raw record representation of a departure query result.
@@ -343,18 +386,35 @@ class AppDatabase {
 
   /// Retrieves stations for an operator. Parent stations or stops without parent.
   Future<List<RawStopRecord>> getStations({
-    String operatorId = 'metro',
+    String? operatorId = 'metro',
+    String? mode,
+    String? territory,
     String? searchQuery,
   }) async {
     await _ensureOpen();
 
     final sql = StringBuffer('''
-      SELECT stop_id, operator_id, stop_name, stop_lat, stop_lon, zone_id, parent_station
+      SELECT stop_id, operator_id, stop_name, stop_lat, stop_lon, zone_id,
+             parent_station, territory, mode, location_type
       FROM stops
-      WHERE operator_id = ?
-        AND (parent_station IS NULL OR parent_station = '')
+      WHERE (location_type = 1 OR parent_station IS NULL OR parent_station = '')
     ''');
-    final args = <Object?>[operatorId];
+    final args = <Object?>[];
+
+    if (operatorId != null && operatorId.isNotEmpty) {
+      sql.write(' AND operator_id = ?');
+      args.add(operatorId);
+    }
+
+    if (mode != null && mode.isNotEmpty) {
+      sql.write(' AND mode = ?');
+      args.add(mode);
+    }
+
+    if (territory != null && territory.isNotEmpty && territory != 'all') {
+      sql.write(' AND territory = ?');
+      args.add(territory);
+    }
 
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       sql.write(' AND LOWER(stop_name) LIKE ?');
@@ -367,26 +427,69 @@ class AppDatabase {
     return rows.map(RawStopRecord.fromMap).toList();
   }
 
-  /// Stations of every operator inside a lat/lon bounding box (map viewport).
+  /// Stations and stops inside a lat/lon bounding box (map viewport).
+  ///
+  /// Can optionally filter by [operatorId], [mode], or [routeId].
+  /// When filtering by [routeId], returns only stops serving that route.
   Future<List<RawStopRecord>> getStationsInBounds({
     required double minLat,
     required double maxLat,
     required double minLon,
     required double maxLon,
-    int limit = 300,
+    String? operatorId,
+    String? mode,
+    String? routeId,
+    bool includePlatforms = false,
+    int? limit,
   }) async {
     await _ensureOpen();
 
-    const sql = '''
-      SELECT stop_id, operator_id, stop_name, stop_lat, stop_lon, zone_id, parent_station
-      FROM stops
-      WHERE stop_lat BETWEEN ? AND ?
-        AND stop_lon BETWEEN ? AND ?
-        AND (parent_station IS NULL OR parent_station = '')
-      LIMIT ?
-    ''';
-    final rows = await _executor
-        .runSelect(sql, [minLat, maxLat, minLon, maxLon, limit]);
+    final sql = StringBuffer();
+    final args = <Object?>[];
+
+    if (routeId != null && routeId.isNotEmpty) {
+      sql.write('''
+        SELECT DISTINCT s.stop_id, s.operator_id, s.stop_name, s.stop_lat, s.stop_lon,
+               s.zone_id, s.parent_station, s.territory, s.mode, s.location_type
+        FROM stops s
+        JOIN stop_times st ON s.stop_id = st.stop_id
+        JOIN trips t ON st.trip_id = t.trip_id
+        WHERE t.route_id = ?
+          AND s.stop_lat BETWEEN ? AND ?
+          AND s.stop_lon BETWEEN ? AND ?
+      ''');
+      args.addAll([routeId, minLat, maxLat, minLon, maxLon]);
+    } else {
+      sql.write('''
+        SELECT stop_id, operator_id, stop_name, stop_lat, stop_lon,
+               zone_id, parent_station, territory, mode, location_type
+        FROM stops
+        WHERE stop_lat BETWEEN ? AND ?
+          AND stop_lon BETWEEN ? AND ?
+      ''');
+      args.addAll([minLat, maxLat, minLon, maxLon]);
+
+      if (!includePlatforms) {
+        sql.write(" AND (location_type = 1 OR parent_station IS NULL OR parent_station = '')");
+      }
+
+      if (operatorId != null && operatorId.isNotEmpty) {
+        sql.write(' AND operator_id = ?');
+        args.add(operatorId);
+      }
+
+      if (mode != null && mode.isNotEmpty) {
+        sql.write(' AND mode = ?');
+        args.add(mode);
+      }
+    }
+
+    if (limit != null && limit > 0) {
+      sql.write(' LIMIT ?');
+      args.add(limit);
+    }
+
+    final rows = await _executor.runSelect(sql.toString(), args);
     return rows.map(RawStopRecord.fromMap).toList();
   }
 
@@ -395,7 +498,8 @@ class AppDatabase {
     await _ensureOpen();
 
     const sql = '''
-      SELECT stop_id, operator_id, stop_name, stop_lat, stop_lon, zone_id, parent_station
+      SELECT stop_id, operator_id, stop_name, stop_lat, stop_lon,
+             zone_id, parent_station, territory, mode, location_type
       FROM stops
       WHERE stop_id = ?
       LIMIT 1
@@ -403,6 +507,138 @@ class AppDatabase {
     final rows = await _executor.runSelect(sql, [stopId]);
     if (rows.isEmpty) return null;
     return RawStopRecord.fromMap(rows.first);
+  }
+
+  /// Retrieves the geographic shape (ordered list of [lon, lat] points) for a given [routeId].
+  /// If [directionId] is provided, selects the shape corresponding to that direction.
+  Future<List<List<double>>> getRouteShape(
+    String routeId, {
+    int? directionId,
+  }) async {
+    await _ensureOpen();
+
+    final sql = StringBuffer('''
+      SELECT s.points_json
+      FROM trips t
+      JOIN shapes s ON t.shape_id = s.shape_id
+      WHERE t.route_id = ?
+    ''');
+    final args = <Object?>[routeId];
+
+    if (directionId != null) {
+      sql.write(' AND t.direction_id = ?');
+      args.add(directionId);
+    }
+
+    sql.write(' LIMIT 1');
+
+    final rows = await _executor.runSelect(sql.toString(), args);
+    if (rows.isEmpty) return [];
+
+    final rawJson = rows.first['points_json'] as String?;
+    if (rawJson == null || rawJson.isEmpty) return [];
+
+    try {
+      final decoded = jsonDecode(rawJson) as List<dynamic>;
+      return decoded.map<List<double>>((pt) {
+        final pair = pt as List<dynamic>;
+        return [
+          (pair[0] as num).toDouble(),
+          (pair[1] as num).toDouble(),
+        ];
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Retrieves transit routes, with optional filtering by [operatorId], [mode], or [territory].
+  Future<List<RawRouteRecord>> getRoutes({
+    String? operatorId,
+    String? mode,
+    String? territory,
+  }) async {
+    await _ensureOpen();
+
+    final sql = StringBuffer('''
+      SELECT r.route_id, r.operator_id, r.route_short_name, r.route_long_name,
+             r.route_type, r.route_color, r.territory
+      FROM routes r
+    ''');
+    final conditions = <String>[];
+    final args = <Object?>[];
+
+    if (operatorId != null && operatorId.isNotEmpty) {
+      conditions.add('r.operator_id = ?');
+      args.add(operatorId);
+    }
+
+    if (territory != null && territory.isNotEmpty && territory != 'all') {
+      conditions.add('r.territory = ?');
+      args.add(territory);
+    }
+
+    if (mode != null && mode.isNotEmpty) {
+      // In GTFS: 0=tram, 1=metro, 2=rail, 3=bus, 7=funicular
+      final routeType = switch (mode.toLowerCase()) {
+        'tram' => 0,
+        'metro' => 1,
+        'train' || 'rail' => 2,
+        'bus' => 3,
+        'funicular' => 7,
+        _ => null,
+      };
+      if (routeType != null) {
+        conditions.add('r.route_type = ?');
+        args.add(routeType);
+      }
+    }
+
+    if (conditions.isNotEmpty) {
+      sql.write(' WHERE ${conditions.join(' AND ')}');
+    }
+
+    sql.write(' ORDER BY r.route_short_name ASC, r.route_long_name ASC');
+
+    final rows = await _executor.runSelect(sql.toString(), args);
+    return rows.map(RawRouteRecord.fromMap).toList();
+  }
+
+  /// Retrieves ordered stops along a specific route and direction.
+  Future<List<RawStopRecord>> getStopsForRoute(
+    String routeId, {
+    int? directionId,
+  }) async {
+    await _ensureOpen();
+
+    final sql = StringBuffer('''
+      SELECT DISTINCT s.stop_id, s.operator_id, s.stop_name, s.stop_lat, s.stop_lon,
+             s.zone_id, s.parent_station, s.territory, s.mode, s.location_type,
+             st.stop_sequence
+      FROM stops s
+      JOIN stop_times st ON s.stop_id = st.stop_id
+      JOIN trips t ON st.trip_id = t.trip_id
+      WHERE t.route_id = ?
+    ''');
+    final args = <Object?>[routeId];
+
+    if (directionId != null) {
+      sql.write(' AND t.direction_id = ?');
+      args.add(directionId);
+    }
+
+    sql.write(' ORDER BY st.stop_sequence ASC');
+
+    final rows = await _executor.runSelect(sql.toString(), args);
+    final seen = <String>{};
+    final result = <RawStopRecord>[];
+    for (final row in rows) {
+      final stop = RawStopRecord.fromMap(row);
+      if (seen.add(stop.stopId)) {
+        result.add(stop);
+      }
+    }
+    return result;
   }
 
   /// Resolves which lines (L1, L2) serve a specific station.

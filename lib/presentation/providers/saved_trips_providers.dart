@@ -9,6 +9,7 @@ import '../../domain/repositories/saved_trips_repository.dart';
 import '../widgets/home_widget/widget_update_service.dart';
 import 'auth_providers.dart';
 import 'metro_providers.dart';
+import 'transit_providers.dart';
 
 /// Provider exposing the saved trips repository.
 final savedTripsRepositoryProvider = Provider<SavedTripsRepository>((ref) {
@@ -31,9 +32,11 @@ final savedTripsRepositoryProvider = Provider<SavedTripsRepository>((ref) {
 final widgetUpdateServiceProvider = Provider<WidgetUpdateService>((ref) {
   final metroRepo = ref.watch(metroRepositoryProvider);
   final savedTripsRepo = ref.watch(savedTripsRepositoryProvider);
+  final transitRepo = ref.watch(transitRepositoryProvider);
   return WidgetUpdateService(
     metroRepository: metroRepo,
     savedTripsRepository: savedTripsRepo,
+    transitRepository: transitRepo,
   );
 });
 

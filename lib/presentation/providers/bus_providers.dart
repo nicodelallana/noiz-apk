@@ -1,126 +1,61 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../domain/models/transit_models.dart';
 
-/// Pre-populated reference bus stops across Bizkaibus & Bilbobus network.
-final busStopsProvider = Provider<List<Stop>>((ref) {
-  return const [
-    Stop(
-      id: 'bus_bide_onera',
-      name: 'Barakaldo (Bide Onera)',
-      latitude: 43.2974,
-      longitude: -2.9912,
-      isParent: true,
-    ),
-    Stop(
-      id: 'bus_moyua',
-      name: 'Bilbao (Gran Vía / Moyua)',
-      latitude: 43.2628,
-      longitude: -2.9352,
-      isParent: true,
-    ),
-    Stop(
-      id: 'bus_termibus',
-      name: 'Bilbao Intermodal (Termibus)',
-      latitude: 43.2612,
-      longitude: -2.9501,
-      isParent: true,
-    ),
-    Stop(
-      id: 'bus_cruces',
-      name: 'Cruces Ospitalea (Gurutzeta)',
-      latitude: 43.2825,
-      longitude: -2.9818,
-      isParent: true,
-    ),
-    Stop(
-      id: 'bus_santurtzi',
-      name: 'Santurtzi (Parkea)',
-      latitude: 43.3298,
-      longitude: -3.0315,
-      isParent: true,
-    ),
-    Stop(
-      id: 'bus_getxo',
-      name: 'Getxo (Algorta)',
-      latitude: 43.3512,
-      longitude: -3.0118,
-      isParent: true,
-    ),
-  ];
+import '../../domain/models/transit_models.dart';
+import 'transit_providers.dart';
+
+/// Bus stops across Bizkaibus & Bilbobus network loaded from official GTFS database.
+final busStopsProvider = FutureProvider<List<Stop>>((ref) async {
+  final repo = ref.watch(transitRepositoryProvider);
+  final bizkaibusStops = await repo.getStops(operatorId: 'bizkaibus');
+  final bilbobusStops = await repo.getStops(operatorId: 'bilbobus');
+  return [...bizkaibusStops, ...bilbobusStops];
 });
 
 /// Currently selected Bus stop.
-final selectedBusStopProvider = StateProvider<Stop>((ref) {
-  final stops = ref.watch(busStopsProvider);
-  return stops.first;
-});
+final selectedBusStopProvider = StateProvider<Stop?>((ref) => null);
 
 /// Selected Bus line filter (null = all lines).
 final selectedBusLineFilterProvider = StateProvider<String?>((ref) => null);
 
-/// Auto-refreshing Bus departures stream.
+/// Auto-refreshing Bus departures stream powered by official GTFS schedules.
 final busDeparturesStreamProvider =
     StreamProvider.autoDispose<List<BusDeparture>>((ref) async* {
   final stop = ref.watch(selectedBusStopProvider);
   final lineFilter = ref.watch(selectedBusLineFilterProvider);
+  final repo = ref.watch(transitRepositoryProvider);
 
-  // Generates real-time calculated departures relative to current time
-  List<BusDeparture> generateDepartures() {
-    final now = DateTime.now();
-
-    final all = [
-      BusDeparture(
-        routeNumber: 'A3115',
-        destination: 'Santurtzi (desde ${stop.name})',
-        operatorName: 'Bizkaibus',
-        minutesRemaining: 3, // Imminent -> shows pulse!
-        scheduledTime: now.add(const Duration(minutes: 3)),
-        isRealtime: true,
-      ),
-      BusDeparture(
-        routeNumber: 'A3336',
-        destination: 'Muskiz (por Ortuella)',
-        operatorName: 'Bizkaibus',
-        minutesRemaining: 8,
-        scheduledTime: now.add(const Duration(minutes: 8)),
-        isRealtime: true,
-      ),
-      BusDeparture(
-        routeNumber: 'A3411',
-        destination: 'Bilbao (Intermodal Termibus)',
-        operatorName: 'Bizkaibus',
-        minutesRemaining: 14,
-        scheduledTime: now.add(const Duration(minutes: 14)),
-        isRealtime: false,
-      ),
-      BusDeparture(
-        routeNumber: 'A3136',
-        destination: 'Cruces / Gurutzeta Ospitalea',
-        operatorName: 'Bizkaibus',
-        minutesRemaining: 21,
-        scheduledTime: now.add(const Duration(minutes: 21)),
-        isRealtime: true,
-      ),
-      BusDeparture(
-        routeNumber: '01',
-        destination: 'Arangoiti (Bilbobus)',
-        operatorName: 'Bilbobus',
-        minutesRemaining: 29,
-        scheduledTime: now.add(const Duration(minutes: 29)),
-        isRealtime: false,
-      ),
-    ];
-
-    if (lineFilter == null) return all;
-    return all.where((d) => d.routeNumber == lineFilter).toList();
+  if (stop == null) {
+    yield [];
+    return;
   }
 
-  yield generateDepartures();
+  Future<List<BusDeparture>> fetchDepartures() async {
+    final departures = await repo.getDepartures(
+      stopId: stop.id,
+      operatorId: stop.operatorId,
+    );
+
+    final mapped = departures.map((d) {
+      return BusDeparture(
+        routeNumber: d.lineCode.isNotEmpty ? d.lineCode : d.line.name,
+        destination: d.headsign,
+        operatorName: stop.operatorId == 'bilbobus' ? 'Bilbobus' : 'Bizkaibus',
+        minutesRemaining: d.minutesRemaining,
+        scheduledTime: d.scheduledTime,
+        isRealtime: d.isRealtime,
+      );
+    }).toList();
+
+    if (lineFilter == null) return mapped;
+    return mapped.where((d) => d.routeNumber == lineFilter).toList();
+  }
+
+  yield await fetchDepartures();
 
   final ticker = Stream<void>.periodic(const Duration(seconds: 30));
   await for (final _ in ticker) {
-    yield generateDepartures();
+    yield await fetchDepartures();
   }
 });
 
@@ -132,7 +67,7 @@ class BusDeparture {
     required this.operatorName,
     required this.minutesRemaining,
     required this.scheduledTime,
-    this.isRealtime = true,
+    this.isRealtime = false,
   });
 
   final String routeNumber;
