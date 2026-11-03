@@ -2,8 +2,9 @@ name: Moveuskadi Public Transport Data Sync
 
 on:
   schedule:
-    # Run every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
-    - cron: '0 */6 * * *'
+    # Optimal cadence: Once daily at 03:30 UTC (madrugada, off-peak, instantaneous runner start).
+    # Uses < 15 min/month of GitHub Actions free quota (0.75% of 2,000 min).
+    - cron: '30 3 * * *'
   workflow_dispatch:
 
 jobs:
