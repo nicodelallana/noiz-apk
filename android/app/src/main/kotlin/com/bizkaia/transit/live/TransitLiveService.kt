@@ -13,6 +13,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.view.View
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.bizkaia.transit.MainActivity
 import com.bizkaia.transit.R
@@ -227,15 +229,24 @@ class TransitLiveService : Service() {
             else -> "$lineName $destination"
         }
 
+        val mins = minutesUntil(departureMs)
+        val countdownText = when {
+            status == "ended" -> "Llegada"
+            mins == 0L -> "Ahora"
+            else -> "$mins min"
+        }
+
+        val clockTimeText = clock.format(Date(departureMs))
+
+        val originAndPlatform = listOfNotNull(
+            currentStop.takeIf { it.isNotBlank() },
+            platform?.takeIf { it.isNotBlank() }?.let { "Andén $it" }
+        ).joinToString(" · ").ifBlank { "Salida" }
+
         val contentText = when {
             status == "ended" -> "Viaje finalizado"
             isWaiting -> {
-                val mins = minutesUntil(departureMs)
-                val main = if (mins == 0L) {
-                    "Sale ahora (${clock.format(Date(departureMs))})"
-                } else {
-                    "Próxima salida en $mins min (${clock.format(Date(departureMs))})"
-                }
+                val main = if (mins == 0L) "Sale ahora ($clockTimeText)" else "Próxima salida en $mins min ($clockTimeText)"
                 val delay = if (isRealtime && delaySeconds >= 60) " · +${delaySeconds / 60} min" else ""
                 val following = if (followingMs > System.currentTimeMillis()) {
                     " • Siguiente: ${minutesUntil(followingMs)} min"
@@ -276,11 +287,69 @@ class TransitLiveService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // 1. Build custom collapsed layout
+        val collapsedView = RemoteViews(packageName, R.layout.notification_transit_collapsed).apply {
+            setTextViewText(R.id.notif_line_badge, lineName)
+            setInt(R.id.notif_line_badge, "setBackgroundColor", parsedColor)
+            setTextViewText(R.id.notif_title, destination)
+            setTextViewText(R.id.notif_subtext, originAndPlatform)
+            setTextViewText(R.id.notif_countdown, countdownText)
+            setTextViewText(R.id.notif_time, clockTimeText)
+            setViewVisibility(R.id.notif_realtime_container, if (isRealtime) View.VISIBLE else View.GONE)
+        }
+
+        // 2. Build custom expanded layout
+        val expandedView = RemoteViews(packageName, R.layout.notification_transit_expanded).apply {
+            setTextViewText(R.id.notif_exp_line_badge, lineName)
+            setInt(R.id.notif_exp_line_badge, "setBackgroundColor", parsedColor)
+            setTextViewText(R.id.notif_exp_operator, operatorName ?: "Transporte Público")
+            setTextViewText(R.id.notif_exp_title, destination)
+            setTextViewText(R.id.notif_exp_subtext, originAndPlatform)
+            setTextViewText(R.id.notif_exp_countdown, countdownText)
+            setTextViewText(R.id.notif_exp_clock, "Sale a las $clockTimeText")
+            setViewVisibility(R.id.notif_exp_realtime_container, if (isRealtime) View.VISIBLE else View.GONE)
+
+            // Delay tag
+            if (isRealtime && delaySeconds >= 60) {
+                setViewVisibility(R.id.notif_exp_delay, View.VISIBLE)
+                setTextViewText(R.id.notif_exp_delay, "+${delaySeconds / 60} min retraso")
+            } else {
+                setViewVisibility(R.id.notif_exp_delay, View.GONE)
+            }
+
+            // Following departure
+            if (followingMs > System.currentTimeMillis()) {
+                val fMins = minutesUntil(followingMs)
+                setTextViewText(R.id.notif_exp_following, "Siguiente tren: $fMins min (${clock.format(Date(followingMs))})")
+                setViewVisibility(R.id.notif_exp_following, View.VISIBLE)
+            } else {
+                setViewVisibility(R.id.notif_exp_following, View.GONE)
+            }
+
+            // Progress section
+            if (!isWaiting && status != "ended") {
+                setViewVisibility(R.id.notif_exp_progress_container, View.VISIBLE)
+                setProgressBar(R.id.notif_exp_progress_bar, 100, (progress.coerceIn(0.0, 1.0) * 100).toInt(), false)
+                setTextViewText(
+                    R.id.notif_exp_next_stop,
+                    if (nextStop.isNotBlank()) "Próxima parada: $nextStop · $stopsRemaining restantes" else "$stopsRemaining paradas hasta tu destino"
+                )
+            } else {
+                setViewVisibility(R.id.notif_exp_progress_container, View.GONE)
+            }
+
+            // Wire up interactive action buttons
+            setOnClickPendingIntent(R.id.notif_btn_refresh, refreshIntent)
+            setOnClickPendingIntent(R.id.notif_btn_stop, stopIntent)
+        }
+
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_transit)
             .setContentTitle(title)
             .setContentText(contentText)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
+            .setCustomContentView(collapsedView)
+            .setCustomBigContentView(expandedView)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setSubText(subText.ifBlank { null })
             .setColor(parsedColor)
             .setContentIntent(tapIntent)

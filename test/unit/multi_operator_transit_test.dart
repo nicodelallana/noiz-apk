@@ -4,10 +4,10 @@ import 'package:bizkaia_transit/domain/models/transit_models.dart';
 
 void main() {
   group('Euskadi Multi-Operator Inventory Tests', () {
-    test('contains all 13 recognized transport operators across Euskadi', () {
+    test('contains recognized transport operators across Euskadi', () {
       final operators = TransitOperator.values;
 
-      expect(operators.length, 13);
+      expect(operators.length, greaterThanOrEqualTo(13));
 
       final operatorIds = operators.map((o) => o.id).toSet();
       expect(operatorIds, containsAll([

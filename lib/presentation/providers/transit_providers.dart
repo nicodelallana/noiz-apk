@@ -19,9 +19,9 @@ final transitRepositoryProvider = Provider<TransitRepository>((ref) {
   return TransitRepositoryImpl(database: db);
 });
 
-/// Active territory filter: Euskadi (all) | Bizkaia | Gipuzkoa | Araba
+/// Active territory filter: Bizkaia | Gipuzkoa | Araba
 final selectedTerritoryProvider =
-    StateProvider<TransitTerritory>((ref) => TransitTerritory.all);
+    StateProvider<TransitTerritory>((ref) => TransitTerritory.bizkaia);
 
 /// Active operator filter within territory
 final selectedOperatorProvider =
@@ -30,12 +30,7 @@ final selectedOperatorProvider =
 /// List of operators available under current territory
 final operatorListProvider = Provider<List<TransitOperator>>((ref) {
   final territory = ref.watch(selectedTerritoryProvider);
-  if (territory == TransitTerritory.all) {
-    return TransitOperator.values;
-  }
-  return TransitOperator.values
-      .where((op) => op.territory == territory)
-      .toList();
+  return TransitOperator.byTerritory(territory);
 });
 
 /// User's current GPS location if location permission is granted
@@ -320,12 +315,13 @@ final rankedServiceAlertsProvider =
 
 // ── Map Hierarchy Providers (Modo → Operador → Línea) ──────────────────────
 
-/// Active transit mode on the map: null = all modes
-final mapSelectedModeProvider = StateProvider<TransitModeType?>((ref) => null);
+/// Active transit mode on the map: defaults to metro (fast load, no heavy 'all' query)
+final mapSelectedModeProvider =
+    StateProvider<TransitModeType?>((ref) => TransitModeType.metro);
 
-/// Active operator filter on the map: null = all operators for current mode
+/// Active operator filter on the map
 final mapSelectedOperatorProvider =
-    StateProvider<TransitOperator?>((ref) => null);
+    StateProvider<TransitOperator?>((ref) => TransitOperator.metro);
 
 /// Active selected route on the map: null = no specific route selected
 final mapSelectedRouteProvider = StateProvider<TransitRoute?>((ref) => null);
@@ -335,10 +331,7 @@ final mapFilteredOperatorsProvider = Provider<List<TransitOperator>>((ref) {
   final mode = ref.watch(mapSelectedModeProvider);
   final territory = ref.watch(selectedTerritoryProvider);
 
-  var ops = TransitOperator.values;
-  if (territory != TransitTerritory.all) {
-    ops = ops.where((o) => o.territory == territory).toList();
-  }
+  var ops = TransitOperator.byTerritory(territory);
   if (mode != null) {
     ops = ops.where((o) => o.mode == mode).toList();
   }

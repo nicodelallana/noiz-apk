@@ -19,7 +19,6 @@ void main() {
         ),
       );
 
-      expect(find.text('Todos'), findsOneWidget);
       expect(find.text('Metro'), findsOneWidget);
       expect(find.text('Tren'), findsOneWidget);
       expect(find.text('Tranvía'), findsOneWidget);
@@ -98,7 +97,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(mapSelectedOperatorProvider), TransitOperator.metro);
-      expect(find.text('Seleccionar Línea ▾'), findsOneWidget);
+      expect(find.text('Ver rutas / líneas ▾'), findsOneWidget);
     });
   });
 }

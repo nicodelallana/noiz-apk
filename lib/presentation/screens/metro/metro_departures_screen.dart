@@ -50,26 +50,50 @@ class _MetroDeparturesScreenState
 
   Future<void> _requestLocationAndDetectNearby() async {
     final loc = await ref.read(resolvedUserLocationProvider.future);
-    // Only jump to the nearest stop on a real GPS fix, not on the fallback.
-    if (!mounted || ref.read(userLocationProvider) == null) return;
-    final stops = await ref.read(stopsForActiveOperatorProvider.future);
-    if (stops.isEmpty || !mounted) return;
-    final nearest = stops.reduce((a, b) {
-      final da = haversineKm(
-        loc.latitude,
-        loc.longitude,
-        a.latitude ?? 0,
-        a.longitude ?? 0,
+    if (!mounted) return;
+
+    // Detect closest available public transport operator and stop for user's GPS
+    final repo = ref.read(transitRepositoryProvider);
+    var nearby = await repo.getNearbyStops(
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      radiusKm: 2.5,
+    );
+    if (nearby.isEmpty) {
+      nearby = await repo.getNearbyStops(
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        radiusKm: 8.0,
       );
-      final db = haversineKm(
-        loc.latitude,
-        loc.longitude,
-        b.latitude ?? 0,
-        b.longitude ?? 0,
-      );
-      return da < db ? a : b;
-    });
-    ref.read(selectedTransitStopProvider.notifier).state = nearest;
+    }
+
+    if (nearby.isNotEmpty && mounted) {
+      final closestStop = nearby.first;
+      final closestOp = TransitOperator.fromId(closestStop.operatorId);
+      ref.read(selectedTerritoryProvider.notifier).state = closestOp.territory;
+      ref.read(selectedOperatorProvider.notifier).state = closestOp;
+      ref.read(selectedTransitStopProvider.notifier).state = closestStop;
+    } else {
+      final stops = await ref.read(stopsForActiveOperatorProvider.future);
+      if (stops.isNotEmpty && mounted) {
+        final nearest = stops.reduce((a, b) {
+          final da = haversineKm(
+            loc.latitude,
+            loc.longitude,
+            a.latitude ?? 0,
+            a.longitude ?? 0,
+          );
+          final db = haversineKm(
+            loc.latitude,
+            loc.longitude,
+            b.latitude ?? 0,
+            b.longitude ?? 0,
+          );
+          return da < db ? a : b;
+        });
+        ref.read(selectedTransitStopProvider.notifier).state = nearest;
+      }
+    }
   }
 
   @override

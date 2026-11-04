@@ -24,6 +24,13 @@ class LiveDeparturesService {
     'euskotren': 'euskotren',
     'tranbia_bilbao': 'euskotren',
     'tranbia_gasteiz': 'euskotren',
+    'bizkaibus': 'bizkaibus',
+    'dbus': 'dbus',
+    'tuvisa': 'tuvisa',
+    'lurraldebus': 'lurraldebus',
+    'bilbobus': 'bilbobus',
+    'alavabus': 'alavabus',
+    'kbus': 'kbus',
   };
 
   static bool supports(String operatorId) => _feedFor.containsKey(operatorId);

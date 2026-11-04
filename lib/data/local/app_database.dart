@@ -704,12 +704,13 @@ class AppDatabase {
       sql.write('''
         AND EXISTS (
           SELECT 1 FROM stop_times dest_st
+          JOIN stops dest_s ON dest_st.stop_id = dest_s.stop_id
           WHERE dest_st.trip_id = st.trip_id
-            AND dest_st.stop_id = ?
+            AND (dest_s.stop_id = ? OR dest_s.parent_station = ?)
             AND dest_st.stop_sequence > st.stop_sequence
         )
       ''');
-      args.add(destinationStopId);
+      args.addAll([destinationStopId, destinationStopId]);
     }
 
     if (maxDepartureTime != null) {
@@ -740,13 +741,15 @@ class AppDatabase {
         r.operator_id,
         r.route_color
       FROM stop_times s1
+      JOIN stops st1 ON s1.stop_id = st1.stop_id
       JOIN stop_times s2 ON s1.trip_id = s2.trip_id AND s1.stop_sequence < s2.stop_sequence
+      JOIN stops st2 ON s2.stop_id = st2.stop_id
       JOIN trips t ON s1.trip_id = t.trip_id
       JOIN routes r ON t.route_id = r.route_id
-      WHERE (s1.stop_id = ? OR s1.stop_id LIKE ?)
-        AND (s2.stop_id = ? OR s2.stop_id LIKE ?)
+      WHERE (st1.stop_id = ? OR st1.parent_station = ?)
+        AND (st2.stop_id = ? OR st2.parent_station = ?)
       LIMIT 1;
-    ''', [originStopId, '%$originStopId%', destStopId, '%$destStopId%']);
+    ''', [originStopId, originStopId, destStopId, destStopId]);
     if (rows.isEmpty) return null;
     return DirectRouteRecord.fromMap(rows.first);
   }

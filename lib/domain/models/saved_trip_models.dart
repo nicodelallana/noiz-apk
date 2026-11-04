@@ -142,6 +142,150 @@ enum TransitOperator {
     mode: TransitModeType.bus,
     colorHex: 0xFF30609D,
     hasRealtime: false,
+  ),
+  renfeMedia(
+    id: 'renfe_media',
+    name: 'Renfe Media Distancia',
+    territory: TransitTerritory.araba,
+    mode: TransitModeType.train,
+    colorHex: 0xFF7B1FA2,
+    hasRealtime: false,
+  ),
+  kbus(
+    id: 'kbus',
+    name: 'Kbus (Barakaldo)',
+    territory: TransitTerritory.bizkaia,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF2B5B84,
+    hasRealtime: true,
+  ),
+  etxebarribus(
+    id: 'etxebarribus',
+    name: 'EtxeBarriBus',
+    territory: TransitTerritory.bizkaia,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF007A3D,
+    hasRealtime: true,
+  ),
+  erandioBusa(
+    id: 'erandio_busa',
+    name: 'Erandio! busa',
+    territory: TransitTerritory.bizkaia,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF00897B,
+    hasRealtime: true,
+  ),
+  lejoanBusa(
+    id: 'lejoan_busa',
+    name: 'Lejoan busa',
+    territory: TransitTerritory.bizkaia,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF5C6BC0,
+    hasRealtime: true,
+  ),
+  sopelbus(
+    id: 'sopelbus',
+    name: 'Sopelbus',
+    territory: TransitTerritory.bizkaia,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF00ACC1,
+    hasRealtime: true,
+  ),
+  bermibusa(
+    id: 'bermibusa',
+    name: 'Bermibusa',
+    territory: TransitTerritory.bizkaia,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF1E88E5,
+    hasRealtime: true,
+  ),
+  pteColgante(
+    id: 'pte_colgante',
+    name: 'Puente Colgante',
+    territory: TransitTerritory.bizkaia,
+    mode: TransitModeType.funicular,
+    colorHex: 0xFF8D6E63,
+    hasRealtime: false,
+  ),
+  irunbus(
+    id: 'irunbus',
+    name: 'Irunbus',
+    territory: TransitTerritory.gipuzkoa,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF0072CE,
+    hasRealtime: false,
+  ),
+  errenteria(
+    id: 'errenteria',
+    name: 'Errenteria Urbanoa',
+    territory: TransitTerritory.gipuzkoa,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF3949AB,
+    hasRealtime: true,
+  ),
+  zarauzkoHiribusa(
+    id: 'zarauzko_hiribusa',
+    name: 'Zarauzko hiribusa',
+    territory: TransitTerritory.gipuzkoa,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF0097A7,
+    hasRealtime: true,
+  ),
+  hernanikoHiribusa(
+    id: 'hernaniko_hiribusa',
+    name: 'Hernaniko hiribusa',
+    territory: TransitTerritory.gipuzkoa,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF43A047,
+    hasRealtime: true,
+  ),
+  tolosa(
+    id: 'tolosa',
+    name: 'Urbano de Tolosa',
+    territory: TransitTerritory.gipuzkoa,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF7CB342,
+    hasRealtime: true,
+  ),
+  eibar(
+    id: 'eibar',
+    name: 'Udalbus (Eibar)',
+    territory: TransitTerritory.gipuzkoa,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF8E24AA,
+    hasRealtime: true,
+  ),
+  arrasate(
+    id: 'arrasate',
+    name: 'Arrasate',
+    territory: TransitTerritory.gipuzkoa,
+    mode: TransitModeType.bus,
+    colorHex: 0xFFD81B60,
+    hasRealtime: true,
+  ),
+  onati(
+    id: 'onati',
+    name: 'Oñati',
+    territory: TransitTerritory.gipuzkoa,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF546E7A,
+    hasRealtime: true,
+  ),
+  lasarte(
+    id: 'lasarte',
+    name: 'Lasarte (Manttangorri)',
+    territory: TransitTerritory.gipuzkoa,
+    mode: TransitModeType.bus,
+    colorHex: 0xFFE65100,
+    hasRealtime: false,
+  ),
+  oiartzun(
+    id: 'oiartzun',
+    name: 'Xorrola (Oiartzun)',
+    territory: TransitTerritory.gipuzkoa,
+    mode: TransitModeType.bus,
+    colorHex: 0xFF6D4C41,
+    hasRealtime: true,
   );
 
   const TransitOperator({
@@ -161,17 +305,34 @@ enum TransitOperator {
   final bool hasRealtime;
 
   static TransitOperator fromId(String id) {
+    final clean = id.toLowerCase().trim();
+    if (clean == 'renfe_cercanias') return TransitOperator.renfe;
+    if (clean == 'renfe_media') return TransitOperator.renfeMedia;
     return TransitOperator.values.firstWhere(
-      (op) => op.id == id,
+      (op) => op.id == clean,
       orElse: () => TransitOperator.metro,
     );
   }
 
   static List<TransitOperator> byTerritory(TransitTerritory territory) {
     if (territory == TransitTerritory.all) return TransitOperator.values;
-    return TransitOperator.values
-        .where((op) => op.territory == territory)
-        .toList();
+    return TransitOperator.values.where((op) {
+      if (op.territory == territory) return true;
+      // Renfe Cercanías serves both Bizkaia and Gipuzkoa (Cercanías Donostia)
+      if (op == TransitOperator.renfe &&
+          (territory == TransitTerritory.bizkaia ||
+              territory == TransitTerritory.gipuzkoa)) {
+        return true;
+      }
+      // Renfe Media Distancia connects across Araba, Gipuzkoa and Bizkaia
+      if (op == TransitOperator.renfeMedia &&
+          (territory == TransitTerritory.araba ||
+              territory == TransitTerritory.gipuzkoa ||
+              territory == TransitTerritory.bizkaia)) {
+        return true;
+      }
+      return false;
+    }).toList();
   }
 }
 

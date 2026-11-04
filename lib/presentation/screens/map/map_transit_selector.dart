@@ -29,29 +29,33 @@ class MapTransitSelector extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 1. Row: Mode pills
+        // 1. Row: Mode pills (No "Todos" mode: loads instantly per transport type)
         _ModeSelectorRow(
           activeMode: activeMode,
           onSelectMode: (mode) {
             HapticFeedback.selectionClick();
             ref.read(mapSelectedModeProvider.notifier).state = mode;
-            // Reset downstream route/operator if incompatible
             ref.read(mapSelectedRouteProvider.notifier).state = null;
-            if (mode == null) {
-              ref.read(mapSelectedOperatorProvider.notifier).state = null;
-            } else {
-              final opsForMode = TransitOperator.values.where((o) => o.mode == mode).toList();
-              if (activeOperator != null && !opsForMode.contains(activeOperator)) {
-                ref.read(mapSelectedOperatorProvider.notifier).state = opsForMode.firstOrNull;
+
+            final territory = ref.read(selectedTerritoryProvider);
+            final opsForMode = TransitOperator.byTerritory(territory)
+                .where((o) => o.mode == mode)
+                .toList();
+
+            if (opsForMode.isNotEmpty) {
+              if (activeOperator == null || !opsForMode.contains(activeOperator)) {
+                ref.read(mapSelectedOperatorProvider.notifier).state = opsForMode.first;
               }
+            } else {
+              ref.read(mapSelectedOperatorProvider.notifier).state = null;
             }
           },
         ),
 
         const SizedBox(height: 8),
 
-        // 2. Row: Operator & Line pill (visible when a mode or operator is selected)
-        if (activeMode != null || activeOperator != null || activeRoute != null) ...[
+        // 2. Row: Operator & Line pill (prominent route visibility)
+        if (operators.isNotEmpty || activeOperator != null || activeRoute != null) ...[
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -64,9 +68,7 @@ class MapTransitSelector extends ConsumerWidget {
                     isSelected: activeOperator == op,
                     onTap: () {
                       HapticFeedback.selectionClick();
-                      if (activeOperator == op) {
-                        ref.read(mapSelectedOperatorProvider.notifier).state = null;
-                      } else {
+                      if (activeOperator != op) {
                         ref.read(mapSelectedOperatorProvider.notifier).state = op;
                       }
                       ref.read(mapSelectedRouteProvider.notifier).state = null;
@@ -75,9 +77,10 @@ class MapTransitSelector extends ConsumerWidget {
                   const SizedBox(width: 8),
                 ],
 
-                // Line picker pill
+                // Line picker pill: prominently allows viewing routes/shapes
                 if (activeOperator != null) ...[
                   _RoutePickerPill(
+                    operator: activeOperator,
                     activeRoute: activeRoute,
                     onOpenPicker: () => _openRoutePicker(context, ref, activeOperator),
                     onClearRoute: () {
@@ -121,7 +124,7 @@ class _ModeSelectorRow extends StatelessWidget {
   });
 
   final TransitModeType? activeMode;
-  final ValueChanged<TransitModeType?> onSelectMode;
+  final ValueChanged<TransitModeType> onSelectMode;
 
   @override
   Widget build(BuildContext context) {
@@ -130,13 +133,6 @@ class _ModeSelectorRow extends StatelessWidget {
       physics: const BouncingScrollPhysics(),
       child: Row(
         children: [
-          _ModeChip(
-            label: 'Todos',
-            icon: Icons.map_outlined,
-            isSelected: activeMode == null,
-            onTap: () => onSelectMode(null),
-          ),
-          const SizedBox(width: 8),
           _ModeChip(
             label: 'Metro',
             icon: Icons.subway_rounded,
@@ -274,11 +270,13 @@ class _OperatorChip extends StatelessWidget {
 
 class _RoutePickerPill extends StatelessWidget {
   const _RoutePickerPill({
+    required this.operator,
     required this.activeRoute,
     required this.onOpenPicker,
     required this.onClearRoute,
   });
 
+  final TransitOperator? operator;
   final TransitRoute? activeRoute;
   final VoidCallback onOpenPicker;
   final VoidCallback onClearRoute;
@@ -286,27 +284,43 @@ class _RoutePickerPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = AppTypography.textTheme();
+    final opColor = operator != null ? Color(operator!.colorHex) : AppColors.accent;
 
     if (activeRoute == null) {
-      return GlassButton(
-        blur: true,
-        kind: GlassKind.overMap,
-        radius: 999,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        onPressed: onOpenPicker,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.route_rounded, size: 16, color: AppColors.accent),
-            const SizedBox(width: 6),
-            Text(
-              'Seleccionar Línea ▾',
-              style: t.labelMedium!.copyWith(
-                color: AppColors.accent,
-                fontWeight: FontWeight.w600,
-              ),
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: opColor.withValues(alpha: 0.6), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: opColor.withValues(alpha: 0.25),
+              blurRadius: 8,
+              spreadRadius: 1,
             ),
           ],
+        ),
+        child: GlassButton(
+          blur: true,
+          kind: GlassKind.overMap,
+          radius: 999,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          tint: opColor.withValues(alpha: 0.2),
+          onPressed: onOpenPicker,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.alt_route_rounded, size: 16, color: opColor),
+              const SizedBox(width: 6),
+              Text(
+                'Ver rutas / líneas ▾',
+                style: t.labelMedium!.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -314,50 +328,63 @@ class _RoutePickerPill extends StatelessWidget {
     final colorHex = activeRoute!.colorHex ?? '#025DA9';
     final color = Color(int.tryParse('FF${colorHex.replaceFirst('#', '')}', radix: 16) ?? 0xFF025DA9);
 
-    return GlassSurface(
-      blur: true,
-      kind: GlassKind.overMap,
-      radius: 999,
-      padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              activeRoute!.shortName.isNotEmpty ? activeRoute!.shortName : 'Línea',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 160),
-            child: Text(
-              activeRoute!.longName.isNotEmpty ? activeRoute!.longName : activeRoute!.shortName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: t.labelMedium!.copyWith(
-                color: AppColors.darkTextPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 16, color: AppColors.darkTextSecondary),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-            onPressed: onClearRoute,
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.8), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.3),
+            blurRadius: 10,
           ),
         ],
+      ),
+      child: GlassSurface(
+        blur: true,
+        kind: GlassKind.overMap,
+        radius: 999,
+        padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                activeRoute!.shortName.isNotEmpty ? activeRoute!.shortName : 'Línea',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Text(
+                activeRoute!.longName.isNotEmpty ? activeRoute!.longName : activeRoute!.shortName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.labelMedium!.copyWith(
+                  color: AppColors.darkTextPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+              onPressed: onClearRoute,
+              tooltip: 'Quitar ruta del mapa',
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -72,13 +72,18 @@ class TransitRepositoryImpl implements TransitRepository {
       }
       final remaining = sched.difference(time).inMinutes;
 
+      final cleanLine = _resolveLineCode(raw.inferredLine, raw.headsign, operatorId);
+      final metroLine = cleanLine == 'L2'
+          ? MetroLine.l2
+          : (cleanLine == 'L3' ? MetroLine.l3 : MetroLine.l1);
+
       return Departure(
         tripId: raw.tripId,
         stationId: raw.stopId,
         stationName: raw.stopName,
         headsign: raw.headsign ?? 'Destino',
-        line: raw.inferredLine == 'L2' ? MetroLine.l2 : MetroLine.l1,
-        lineCode: raw.inferredLine ?? 'L1',
+        line: metroLine,
+        lineCode: cleanLine,
         scheduledTime: sched,
         // GTFS times run past 24:00 for after-midnight trips; show 00:10.
         scheduledTimeFormatted:
@@ -92,6 +97,27 @@ class TransitRepositoryImpl implements TransitRepository {
         status: 'scheduled',
       );
     }).toList();
+  }
+
+  static String _resolveLineCode(String? rawLine, String? headsign, String? opId) {
+    final line = rawLine?.trim() ?? '';
+    final dest = (headsign ?? '').toLowerCase();
+    if (opId == 'metro' || opId == null) {
+      if (line == 'L1' || line == 'L2' || line == 'L3') return line;
+      if (dest.contains('kabiezes') || dest.contains('santurtzi') || dest.contains('basauri')) {
+        return 'L2';
+      }
+      if (dest.contains('plentzia') ||
+          dest.contains('bidezabal') ||
+          dest.contains('larrabasterra') ||
+          dest.contains('sopela') ||
+          dest.contains('etxebarri')) {
+        return 'L1';
+      }
+      return 'L1';
+    }
+    if (line.isNotEmpty && line.length <= 6) return line;
+    return line.isNotEmpty ? line.split(' ').first : 'BUS';
   }
 
   @override
@@ -218,47 +244,53 @@ class TransitRepositoryImpl implements TransitRepository {
     final originClean = origin.trim().toLowerCase();
     final destClean = destination.trim().toLowerCase();
 
-    // 1. Search if stops exist in database
+    // 1. Search if stops exist in database (with aliases e.g. Moyua <-> Eliptikoa)
     final allStops = await getStops();
-    final originStop = allStops.where((s) =>
-        s.name.toLowerCase().contains(originClean) ||
-        originClean.contains(s.name.toLowerCase())).firstOrNull;
-    final destStop = allStops.where((s) =>
-        s.name.toLowerCase().contains(destClean) ||
-        destClean.contains(s.name.toLowerCase())).firstOrNull;
+    bool matches(Stop s, String query) {
+      if (query.isEmpty) return false;
+      final name = s.name.toLowerCase();
+      if (name.contains(query) || query.contains(name)) return true;
+      if (query.contains('moyu') && (name.contains('eliptik') || name.contains('moyu'))) return true;
+      if (query.contains('eliptik') && (name.contains('moyu') || name.contains('eliptik'))) return true;
+      return false;
+    }
 
-    if (originStop != null && destStop != null) {
-      final directRoute =
-          await _db.findDirectRoute(originStop.id, destStop.id);
-      if (directRoute != null) {
-        final duration = (directRoute.stopsCount * 2.5).round().clamp(3, 120);
-        final dep = now.add(const Duration(minutes: 3));
-        final arr = dep.add(Duration(minutes: duration));
+    final originCandidates = allStops.where((s) => matches(s, originClean)).toList();
+    final destCandidates = allStops.where((s) => matches(s, destClean)).toList();
 
-        return [
-          TransitItinerary(
-            origin: originStop.name,
-            destination: destStop.name,
-            totalDurationMinutes: duration,
-            transfersCount: 0,
-            departureTime: dep,
-            arrivalTime: arr,
-            legs: [
-              TransitLeg(
-                type: TransitLegType.transit,
-                instruction:
-                    'Sube en ${originStop.name} (${directRoute.lineName} hacia ${directRoute.tripHeadsign})',
-                originStopName: originStop.name,
-                destStopName: destStop.name,
-                durationMinutes: duration,
-                lineName: directRoute.lineName,
-                lineColorHex: directRoute.routeColorHex ?? '#E8590C',
-                operatorId: directRoute.operatorId,
-                stopsCount: directRoute.stopsCount,
-              ),
-            ],
-          ),
-        ];
+    for (final oStop in originCandidates) {
+      for (final dStop in destCandidates) {
+        final directRoute = await _db.findDirectRoute(oStop.id, dStop.id);
+        if (directRoute != null) {
+          final duration = (directRoute.stopsCount * 2.5).round().clamp(3, 120);
+          final dep = now.add(const Duration(minutes: 3));
+          final arr = dep.add(Duration(minutes: duration));
+
+          return [
+            TransitItinerary(
+              origin: oStop.name,
+              destination: dStop.name,
+              totalDurationMinutes: duration,
+              transfersCount: 0,
+              departureTime: dep,
+              arrivalTime: arr,
+              legs: [
+                TransitLeg(
+                  type: TransitLegType.transit,
+                  instruction:
+                      'Sube en ${oStop.name} (${directRoute.lineName} hacia ${directRoute.tripHeadsign})',
+                  originStopName: oStop.name,
+                  destStopName: dStop.name,
+                  durationMinutes: duration,
+                  lineName: directRoute.lineName,
+                  lineColorHex: directRoute.routeColorHex ?? '#E8590C',
+                  operatorId: directRoute.operatorId,
+                  stopsCount: directRoute.stopsCount,
+                ),
+              ],
+            ),
+          ];
+        }
       }
     }
 

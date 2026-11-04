@@ -2,9 +2,10 @@ name: Moveuskadi Public Transport Data Sync
 
 on:
   schedule:
-    # Moveuskadi regenerates all 35 GTFS feeds daily at 06:01 UTC (07:01 CET).
-    # Running at 06:15 UTC (07:15 CET) guarantees catching today's new timetables immediately.
-    - cron: '15 6 * * *'
+    # Moveuskadi regenerates GTFS feeds daily around 06:01 UTC (07:01 CET).
+    # Scheduled on minute 27 to avoid GitHub Actions global runner congestion at :00 and :15.
+    # Note: GitHub Actions scheduled cron jobs execute exclusively on the repository's default branch.
+    - cron: '27 6 * * *'
   workflow_dispatch:
 
 jobs:
