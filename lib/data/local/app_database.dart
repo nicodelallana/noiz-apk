@@ -848,10 +848,11 @@ class AppDatabase {
     return rows.map(RawDepartureRecord.fromMap).toList();
   }
 
-  /// Retrieves all reachable destination stops from a given [originStopId]
+  /// Retrieves all reachable destination stops from a given [originStopId] (and optional [siblingStationIds])
   /// that can be reached on a direct trip (same line and trip with stop_sequence > origin).
   Future<List<RawStopRecord>> getReachableDestinations(
     String originStopId, {
+    List<String> siblingStationIds = const [],
     String? searchQuery,
   }) async {
     await _ensureOpen();
@@ -873,11 +874,30 @@ class AppDatabase {
       JOIN stops s1 ON st1.stop_id = s1.stop_id
       JOIN stops s2 ON st2.stop_id = s2.stop_id
       LEFT JOIN stops parent ON s2.parent_station = parent.stop_id
+    ''');
+
+    final args = <Object?>[];
+
+    if (siblingStationIds.isEmpty) {
+      sql.write('''
       WHERE (s1.stop_id = ? OR s1.parent_station = ?)
         AND (parent.stop_id IS NULL OR (parent.stop_id != s1.stop_id AND parent.stop_id != s1.parent_station))
         AND (s2.stop_id != s1.stop_id AND (s1.parent_station IS NULL OR s2.stop_id != s1.parent_station))
-    ''');
-    final args = <Object?>[originStopId, originStopId];
+      ''');
+      args.addAll([originStopId, originStopId]);
+    } else {
+      final allOriginIds = {originStopId, ...siblingStationIds}.toList();
+      final inPlaceholders = List.filled(allOriginIds.length, '?').join(', ');
+      sql.write('''
+      WHERE (s1.stop_id IN ($inPlaceholders) OR s1.parent_station IN ($inPlaceholders))
+        AND s2.stop_id NOT IN ($inPlaceholders)
+        AND (parent.stop_id IS NULL OR (parent.stop_id NOT IN ($inPlaceholders) AND parent.stop_id != s1.stop_id))
+      ''');
+      args.addAll(allOriginIds);
+      args.addAll(allOriginIds);
+      args.addAll(allOriginIds);
+      args.addAll(allOriginIds);
+    }
 
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       sql.write(' AND LOWER(COALESCE(parent.stop_name, s2.stop_name)) LIKE ?');

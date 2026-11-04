@@ -46,8 +46,10 @@ class TransitRepositoryImpl implements TransitRepository {
     required String originStopId,
     String? searchQuery,
   }) async {
+    final siblingIds = await _db.getSiblingStopIds(originStopId);
     final rawStops = await _db.getReachableDestinations(
       originStopId,
+      siblingStationIds: siblingIds,
       searchQuery: searchQuery,
     );
     return rawStops.map(_toStop).toList();
@@ -164,8 +166,6 @@ class TransitRepositoryImpl implements TransitRepository {
 
       final formattedClock =
           '${(hour % 24).toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
-      final formattedTime =
-          isTomorrow ? 'Mañana $formattedClock' : formattedClock;
 
       return Departure(
         tripId: raw.tripId,
@@ -176,13 +176,14 @@ class TransitRepositoryImpl implements TransitRepository {
         lineCode: cleanLine,
         routeColorHex: colorHex,
         scheduledTime: sched,
-        scheduledTimeFormatted: formattedTime,
+        scheduledTimeFormatted: formattedClock,
         minutesRemaining: remaining > 0 ? remaining : 0,
         platform: platform,
         isTheoretical: true,
         isRealtime: false,
         operatorId: operatorId ?? 'metro',
         status: 'scheduled',
+        isTomorrow: isTomorrow,
       );
     }).toList();
   }

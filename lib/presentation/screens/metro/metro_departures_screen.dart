@@ -162,7 +162,16 @@ class _TransitScreenContent extends ConsumerWidget {
       }
     });
 
-    final stopName = activeStop?.name ?? 'Buscando parada…';
+    // Guard against cross-operator stop mismatch: ensure active stop always matches active operator
+    if (activeStop != null && activeStop.operatorId != activeOperator.id) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        switchOperator(ref, activeOperator);
+      });
+    }
+
+    final stopName = (activeStop != null && activeStop.operatorId == activeOperator.id)
+        ? activeStop.name
+        : 'Buscando parada…';
 
     return CustomScrollView(
       slivers: [

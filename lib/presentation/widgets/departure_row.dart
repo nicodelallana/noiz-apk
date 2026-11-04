@@ -90,9 +90,11 @@ class DepartureRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  departure.minutesRemaining >= 60
-                      ? 'en ${formatWait(departure.minutesRemaining)} · $status'
-                      : '${departure.scheduledTimeFormatted} · $status',
+                  departure.isTomorrow
+                      ? 'Mañana ${departure.scheduledTimeFormatted} · $status'
+                      : departure.minutesRemaining >= 60
+                          ? 'en ${formatWait(departure.minutesRemaining)} · $status'
+                          : '${departure.scheduledTimeFormatted} · $status',
                   style: AppTypography.time.copyWith(
                     color: cancelled
                         ? AppColors.disruptedRed
@@ -100,6 +102,8 @@ class DepartureRow extends StatelessWidget {
                             ? AppColors.delayedAmber
                             : AppColors.darkTextSecondary,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

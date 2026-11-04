@@ -213,6 +213,9 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
       }
       await _reloadViewportStops();
     }
+
+    // Auto-center user position automatically upon map load
+    unawaited(_recenterUser(silent: true));
   }
 
   Map<String, dynamic> _emptyLineCollection() => const {
@@ -457,6 +460,7 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
 
   Future<void> _openStop(Stop stop) async {
     unawaited(_setSelected(stop.id));
+    selectStopAsOrigin(ref, stop);
     await _StopSheet.show(
       context,
       stop,
@@ -488,13 +492,32 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
     if (mounted) unawaited(_setSelected(null));
   }
 
-  Future<void> _recenterUser() async {
-    HapticFeedback.lightImpact();
+  Future<void> _recenterUser({bool silent = false}) async {
+    if (!silent) HapticFeedback.lightImpact();
+
+    // 1. If location is already known, immediately move with zero lag
+    final cached = ref.read(userLocationProvider);
+    if (cached != null && _controller != null) {
+      final immediateUpdate = CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(cached.latitude, cached.longitude),
+          zoom: _walkingZoom,
+          bearing: 0.0,
+          tilt: 0.0,
+        ),
+      );
+      if (Motion.reduced(context)) {
+        await _controller?.moveCamera(immediateUpdate);
+      } else {
+        await _controller?.animateCamera(immediateUpdate);
+      }
+    }
+
     final service = ref.read(locationServiceProvider);
     final granted =
         await service.hasPermission() || await service.requestPermission();
     if (!granted) {
-      if (mounted) {
+      if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content:
@@ -507,7 +530,7 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
     }
 
     final freshLoc = await service.getCurrentLocation();
-    if (freshLoc != null) {
+    if (freshLoc != null && mounted) {
       ref.read(userLocationProvider.notifier).state = freshLoc;
       final update = CameraUpdate.newCameraPosition(
         CameraPosition(
@@ -529,6 +552,18 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<UserLocation?>(userLocationProvider, (prev, next) {
+      if (prev == null && next != null && _controller != null) {
+        final update = CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(next.latitude, next.longitude),
+            zoom: _walkingZoom,
+          ),
+        );
+        _controller?.animateCamera(update);
+      }
+    });
+
     final location = ref.watch(resolvedUserLocationProvider);
     // A real GPS fix (not the Moyúa fallback) is the only case where the
     // blue "you are here" dot is truthful.

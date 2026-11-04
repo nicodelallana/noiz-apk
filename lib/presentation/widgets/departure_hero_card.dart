@@ -113,6 +113,35 @@ class DepartureHeroCard extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 18),
+                if (departure.isTomorrow) ...[
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: AppColors.accent.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          'MAÑANA',
+                          style: t.labelSmall!.copyWith(
+                            color: AppColors.accent,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -132,6 +161,7 @@ class DepartureHeroCard extends ConsumerWidget {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Column(
@@ -142,7 +172,7 @@ class DepartureHeroCard extends ConsumerWidget {
                                 ? 'en ${formatWait(departure.minutesRemaining)}'
                                 : departure.scheduledTimeFormatted,
                             style: AppTypography.time.copyWith(
-                              fontSize: 17,
+                              fontSize: 16,
                               fontWeight: FontWeight.w600,
                               color: AppColors.darkTextPrimary,
                             ),
@@ -167,11 +197,15 @@ class DepartureHeroCard extends ConsumerWidget {
                         color: AppColors.darkTextTertiary,
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        'Después: ${next.scheduledTimeFormatted}'
-                        ' (en ${formatWait(next.minutesRemaining)})',
-                        style: AppTypography.time.copyWith(
-                          color: AppColors.darkTextSecondary,
+                      Expanded(
+                        child: Text(
+                          'Después: ${next.isTomorrow ? "Mañana " : ""}${next.scheduledTimeFormatted}'
+                          ' (en ${formatWait(next.minutesRemaining)})',
+                          style: AppTypography.time.copyWith(
+                            color: AppColors.darkTextSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],

@@ -76,6 +76,7 @@ class Departure {
     this.delaySeconds = 0,
     this.progress = 0.0,
     this.status = 'scheduled',
+    this.isTomorrow = false,
   });
 
   final String tripId;
@@ -95,6 +96,7 @@ class Departure {
   final int delaySeconds;
   final double progress;
   final String status;
+  final bool isTomorrow;
 
   @override
   bool operator ==(Object other) =>

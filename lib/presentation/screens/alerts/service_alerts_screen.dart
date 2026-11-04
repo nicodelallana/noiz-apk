@@ -502,22 +502,25 @@ class _OperatorFilterBarState extends State<_OperatorFilterBar> {
                             ),
                           ),
                         ),
-                        Row(
-                          children: [
-                            for (var i = 0; i < _options.length; i++)
-                              _FilterChip(
-                                operator: _options[i],
-                                width: widths[i],
-                                selected: i == selectedIndex,
-                                onTap: () {
-                                  if (i == selectedIndex) return;
-                                  HapticFeedback.selectionClick();
-                                  widget.onSelected(_options[i]);
-                                  _reveal(
-                                      lefts[i], widths[i], viewport, reduced);
-                                },
-                              ),
-                          ],
+                        Positioned.fill(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              for (var i = 0; i < _options.length; i++)
+                                _FilterChip(
+                                  operator: _options[i],
+                                  width: widths[i],
+                                  selected: i == selectedIndex,
+                                  onTap: () {
+                                    if (i == selectedIndex) return;
+                                    HapticFeedback.selectionClick();
+                                    widget.onSelected(_options[i]);
+                                    _reveal(
+                                        lefts[i], widths[i], viewport, reduced);
+                                  },
+                                ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -559,35 +562,40 @@ class _FilterChip extends StatelessWidget {
         onTap: onTap,
         child: SizedBox(
           width: width,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (operator != null) ...[
-                Container(
-                  width: _OperatorFilterBarState._dot,
-                  height: _OperatorFilterBarState._dot,
-                  decoration: ShapeDecoration(
-                    color: Color(operator!.colorHex),
-                    shape: const CircleBorder(),
+          height: double.infinity,
+          child: Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (operator != null) ...[
+                  Container(
+                    width: _OperatorFilterBarState._dot,
+                    height: _OperatorFilterBarState._dot,
+                    decoration: ShapeDecoration(
+                      color: Color(operator!.colorHex),
+                      shape: const CircleBorder(),
+                    ),
+                  ),
+                  const SizedBox(width: _OperatorFilterBarState._dotGap),
+                ],
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
+                    style: _text.labelLarge!.copyWith(
+                      color: selected
+                          ? AppColors.darkTextPrimary
+                          : AppColors.darkTextSecondary,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                      height: 1.0,
+                    ),
                   ),
                 ),
-                const SizedBox(width: _OperatorFilterBarState._dotGap),
               ],
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.fade,
-                  softWrap: false,
-                  style: _text.labelLarge!.copyWith(
-                    color: selected
-                        ? AppColors.darkTextPrimary
-                        : AppColors.darkTextSecondary,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

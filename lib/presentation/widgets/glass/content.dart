@@ -341,10 +341,16 @@ class CountdownText extends StatelessWidget {
     final reduced = Motion.reduced(context);
     final now = minutes <= 0;
     final asClock = minutes >= 60 && clockTime != null;
+    final effectiveStyle = asClock
+        ? style.copyWith(
+            fontSize: ((style.fontSize ?? 56) * 0.72).clamp(22.0, 38.0),
+            letterSpacing: -0.5,
+          )
+        : style;
     final number = Text(
       now ? 'Ya' : (asClock ? clockTime! : '$minutes'),
       key: ValueKey(now ? -1 : (asClock ? clockTime : minutes)),
-      style: style.copyWith(color: color),
+      style: effectiveStyle.copyWith(color: color),
     );
     return Semantics(
       label: now

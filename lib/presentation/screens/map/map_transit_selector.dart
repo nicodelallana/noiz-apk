@@ -81,7 +81,6 @@ class MapTransitSelector extends ConsumerWidget {
             ),
             const SizedBox(width: 6),
             Flexible(
-              flex: 3,
               child: Text(
                 activeOperator.name,
                 style: t.labelLarge!.copyWith(
@@ -101,13 +100,11 @@ class MapTransitSelector extends ConsumerWidget {
             ),
             const SizedBox(width: 8),
 
-            // 3. Line badge / label with chevron
-            Flexible(
-              flex: 4,
+            // 3. Line badge / label with chevron spanning the full remaining width
+            Expanded(
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Flexible(
+                  Expanded(
                     child: Text(
                       lineLabel,
                       style: t.labelMedium!.copyWith(
@@ -257,9 +254,9 @@ class _TransitSelectionModalSheetState
                             TransitTerritory.bizkaia;
                         final defOp = TransitOperator.metro;
                         ref.read(mapSelectedOperatorProvider.notifier).state = defOp;
-                        ref.read(selectedOperatorProvider.notifier).state = defOp;
                         ref.read(mapSelectedModeProvider.notifier).state = defOp.mode;
                         ref.read(mapSelectedRouteProvider.notifier).state = null;
+                        switchOperator(ref, defOp);
                       },
                     ),
                     const SizedBox(width: 8),
@@ -272,9 +269,9 @@ class _TransitSelectionModalSheetState
                             TransitTerritory.gipuzkoa;
                         final defOp = TransitOperator.dbus;
                         ref.read(mapSelectedOperatorProvider.notifier).state = defOp;
-                        ref.read(selectedOperatorProvider.notifier).state = defOp;
                         ref.read(mapSelectedModeProvider.notifier).state = defOp.mode;
                         ref.read(mapSelectedRouteProvider.notifier).state = null;
+                        switchOperator(ref, defOp);
                       },
                     ),
                     const SizedBox(width: 8),
@@ -287,9 +284,9 @@ class _TransitSelectionModalSheetState
                             TransitTerritory.araba;
                         final defOp = TransitOperator.tuvisa;
                         ref.read(mapSelectedOperatorProvider.notifier).state = defOp;
-                        ref.read(selectedOperatorProvider.notifier).state = defOp;
                         ref.read(mapSelectedModeProvider.notifier).state = defOp.mode;
                         ref.read(mapSelectedRouteProvider.notifier).state = null;
+                        switchOperator(ref, defOp);
                       },
                     ),
                   ],
@@ -363,8 +360,8 @@ class _TransitSelectionModalSheetState
                           onTap: () {
                             HapticFeedback.selectionClick();
                             ref.read(mapSelectedOperatorProvider.notifier).state = op;
-                            ref.read(selectedOperatorProvider.notifier).state = op;
                             ref.read(mapSelectedRouteProvider.notifier).state = null;
+                            switchOperator(ref, op);
                           },
                         ),
                     ],
@@ -529,8 +526,9 @@ class _TransitSelectionModalSheetState
         .toList();
 
     if (opsForMode.isNotEmpty) {
-      ref.read(mapSelectedOperatorProvider.notifier).state = opsForMode.first;
-      ref.read(selectedOperatorProvider.notifier).state = opsForMode.first;
+      final firstOp = opsForMode.first;
+      ref.read(mapSelectedOperatorProvider.notifier).state = firstOp;
+      switchOperator(ref, firstOp);
     }
   }
 
