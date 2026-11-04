@@ -5,6 +5,7 @@ import '../../../domain/models/saved_trip_models.dart';
 import '../../../domain/models/transit_models.dart';
 import '../../providers/metro_providers.dart';
 import '../../providers/saved_trips_providers.dart';
+import '../../providers/transit_providers.dart';
 import '../../widgets/animations/save_trip_success_dialog.dart';
 
 /// Modal dialog for bookmarking a new transit journey.
@@ -98,30 +99,49 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
             ),
             const SizedBox(height: 12),
 
-            // Destination Picker
-            stationsAsync.when(
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-              data: (stations) => DropdownButtonFormField<Stop>(
-                value: _destination,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Estación de destino',
-                  prefixIcon: Icon(Icons.location_on, color: Colors.red),
-                ),
-                items: stations
-                    .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(s.name, overflow: TextOverflow.ellipsis),
-                        ))
-                    .toList(),
-                onChanged: (val) {
-                  setState(() {
-                    _destination = val;
-                    _updateDefaultName();
-                  });
-                },
-              ),
+            // Destination Picker (Smart Reachable Only)
+            FutureBuilder<List<Stop>>(
+              future: _origin != null
+                  ? ref
+                      .read(transitRepositoryProvider)
+                      .getReachableDestinations(originStopId: _origin!.id)
+                  : Future.value(<Stop>[]),
+              builder: (context, snapshot) {
+                final reachable = snapshot.data ?? [];
+                final currentValid =
+                    reachable.any((s) => s.id == _destination?.id);
+                final selectedDest = currentValid ? _destination : null;
+
+                return DropdownButtonFormField<Stop>(
+                  value: selectedDest,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: _origin == null
+                        ? 'Selecciona origen primero'
+                        : 'Estación de destino (directa)',
+                    prefixIcon:
+                        const Icon(Icons.location_on, color: Colors.red),
+                    helperText: _origin != null && reachable.isEmpty
+                        ? 'No hay destinos directos sin transbordo'
+                        : null,
+                  ),
+                  items: reachable
+                      .map((s) => DropdownMenuItem(
+                            value: s,
+                            child:
+                                Text(s.name, overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: _origin == null
+                      ? null
+                      : (val) {
+                          setState(() {
+                            _destination = val;
+                            _updateDefaultName();
+                          });
+                        },
+                );
+              },
             ),
             const SizedBox(height: 16),
 

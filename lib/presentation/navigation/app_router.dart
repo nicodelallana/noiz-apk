@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:bizkaia_transit/presentation/navigation/app_shell.dart';
-import 'package:bizkaia_transit/presentation/providers/auth_providers.dart';
 import 'package:bizkaia_transit/presentation/screens/alerts/service_alerts_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/auth/profile_settings_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/legal/licenses_screen.dart';
@@ -12,42 +11,23 @@ import 'package:bizkaia_transit/presentation/screens/nearby/nearby_transit_scree
 import 'package:bizkaia_transit/presentation/screens/onboarding/onboarding_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/planner/route_planner_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/saved_trips/saved_trips_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/splash/splash_screen.dart';
 
-/// Application router using GoRouter with auth-based redirects.
-///
-/// - Unauthenticated users are redirected to `/onboarding`.
-/// - Authenticated users land on the main shell at `/`.
+/// Application router using GoRouter with sleek animated splash startup.
 final goRouterProvider = Provider<GoRouter>((ref) {
-  // Watch auth state and guest onboarding skip flag for redirect recalculation
-  final authState = ref.watch(authStateStreamProvider);
-  final onboardingCompleted = ref.watch(onboardingCompletedProvider);
-
   return GoRouter(
-    initialLocation: '/',
+    initialLocation: '/splash',
     debugLogDiagnostics: false,
-
-    // ── Auth redirect ──────────────────────────────────────────────────
-    redirect: (context, state) {
-      final isAuthenticated =
-          authState.whenData((user) => user != null).value ?? false;
-      final isOnboarding = state.matchedLocation == '/onboarding';
-
-      // Not authenticated, has not completed/skipped onboarding, not on onboarding → redirect
-      if (!isAuthenticated && !onboardingCompleted && !isOnboarding) {
-        return '/onboarding';
-      }
-
-      // Authenticated but still on onboarding → go home
-      if (isAuthenticated && isOnboarding) {
-        return '/';
-      }
-
-      return null; // No redirect
-    },
 
     // ── Routes ─────────────────────────────────────────────────────────
     routes: [
-      // Onboarding (no shell)
+      // Animated splash screen
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
+
+      // Onboarding (optional secondary flow)
       GoRoute(
         path: '/onboarding',
         builder: (context, state) => const OnboardingScreen(),

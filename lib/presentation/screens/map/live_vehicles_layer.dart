@@ -122,6 +122,52 @@ class LiveVehiclesController {
     return result;
   }
 
+  /// On-demand: queries and displays a single vehicle for a queried line
+  /// only if real GPS is available, avoiding streaming all vehicles across Euskadi.
+  Future<LiveVehicle?> trackLineVehicle({
+    required String line,
+    required String operatorId,
+  }) async {
+    try {
+      final snap = await _service.fetch();
+      final lineNorm = line.trim().toLowerCase();
+      final opNorm = operatorId.trim().toLowerCase();
+
+      // Look for a matching vehicle
+      LiveVehicle? match;
+      for (final v in snap.vehicles) {
+        final vOp = v.operatorId.toLowerCase();
+        final vLine = v.line.toLowerCase();
+        if ((vOp == opNorm || v.operatorName.toLowerCase() == opNorm) &&
+            (vLine == lineNorm || vLine.contains(lineNorm) || lineNorm.contains(vLine))) {
+          match = v;
+          break;
+        }
+      }
+
+      if (match != null) {
+        final single = {match.id: match};
+        _vehicles = single;
+        _shown = {match.id: LatLng(match.latitude, match.longitude)};
+        _apply(single);
+        return match;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Clears on-demand tracked vehicle
+  Future<void> clearTrackedVehicle() async {
+    _vehicles = const {};
+    _shown = const {};
+    final map = _map;
+    if (map != null) {
+      await map.setGeoJsonSource(sourceId, _collection(const {}, const {}));
+    }
+  }
+
   /// Adds the source and layers. Call once the style has loaded.
   Future<void> attach(MapLibreMapController map) async {
     _map = map;

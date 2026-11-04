@@ -37,6 +37,18 @@ class TransitRepositoryImpl implements TransitRepository {
   }
 
   @override
+  Future<List<Stop>> getReachableDestinations({
+    required String originStopId,
+    String? searchQuery,
+  }) async {
+    final rawStops = await _db.getReachableDestinations(
+      originStopId,
+      searchQuery: searchQuery,
+    );
+    return rawStops.map(_toStop).toList();
+  }
+
+  @override
   Future<List<Departure>> getDepartures({
     required String stopId,
     String? destinationStopId,
@@ -78,6 +90,14 @@ class TransitRepositoryImpl implements TransitRepository {
           ? MetroLine.l2
           : (cleanLine == 'L3' ? MetroLine.l3 : MetroLine.l1);
 
+      int? colorHex;
+      if (raw.routeColor != null && raw.routeColor!.isNotEmpty) {
+        final cleanHex = raw.routeColor!.replaceAll('#', '');
+        if (cleanHex.length == 6) {
+          colorHex = int.tryParse('FF$cleanHex', radix: 16);
+        }
+      }
+
       return Departure(
         tripId: raw.tripId,
         stationId: raw.stopId,
@@ -85,6 +105,7 @@ class TransitRepositoryImpl implements TransitRepository {
         headsign: raw.headsign ?? 'Destino',
         line: metroLine,
         lineCode: cleanLine,
+        routeColorHex: colorHex,
         scheduledTime: sched,
         // GTFS times run past 24:00 for after-midnight trips; show 00:10.
         scheduledTimeFormatted:
@@ -120,8 +141,13 @@ class TransitRepositoryImpl implements TransitRepository {
       }
       return 'L1';
     }
-    if (line.isNotEmpty && line.length <= 6) return line;
-    return line.isNotEmpty ? line.split(' ').first : 'BUS';
+    if (line.isNotEmpty) {
+      // Official GTFS line code (e.g. A3338, 01, C-1, E1, BEI).
+      // If line contains spaces (e.g. "A3338 MUSKIZ"), keep only the route identifier.
+      final parts = line.split(' ');
+      return parts.first;
+    }
+    return 'BUS';
   }
 
   @override

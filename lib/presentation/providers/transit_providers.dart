@@ -47,6 +47,26 @@ final resolvedUserLocationProvider = FutureProvider<UserLocation>((ref) async {
     final loc = await service.getCurrentLocation();
     if (loc != null) {
       ref.read(userLocationProvider.notifier).state = loc;
+      final current = ref.read(selectedTransitStopProvider);
+      if (current == null) {
+        final op = ref.read(selectedOperatorProvider);
+        final repo = ref.read(transitRepositoryProvider);
+        final stops = await repo.getStops(operatorId: op.id);
+        if (stops.isNotEmpty) {
+          final best = stops.reduce((a, b) {
+            final aLat = a.latitude ?? 0.0;
+            final aLon = a.longitude ?? 0.0;
+            final bLat = b.latitude ?? 0.0;
+            final bLon = b.longitude ?? 0.0;
+            final da = (aLat - loc.latitude) * (aLat - loc.latitude) +
+                (aLon - loc.longitude) * (aLon - loc.longitude);
+            final db = (bLat - loc.latitude) * (bLat - loc.latitude) +
+                (bLon - loc.longitude) * (bLon - loc.longitude);
+            return da < db ? a : b;
+          });
+          ref.read(selectedTransitStopProvider.notifier).state = best;
+        }
+      }
       return loc;
     }
   }
@@ -93,19 +113,60 @@ final stopsForActiveOperatorProvider = FutureProvider<List<Stop>>((ref) async {
   final operator = ref.watch(selectedOperatorProvider);
   final territory = ref.watch(selectedTerritoryProvider);
 
-  final stops = await repo.getStops(
+  return repo.getStops(
     operatorId: operator.id,
     territory: territory,
   );
+});
 
-  final current = ref.read(selectedTransitStopProvider);
-  final userLoc = ref.read(userLocationProvider);
+/// Reachable destination stops from the active origin stop.
+/// Only returns stops that can be reached on a direct trip on the same line.
+final reachableDestinationsProvider = FutureProvider<List<Stop>>((ref) async {
+  final origin = ref.watch(selectedTransitStopProvider);
+  if (origin == null) return [];
+  final repo = ref.watch(transitRepositoryProvider);
+  return repo.getReachableDestinations(originStopId: origin.id);
+});
 
-  if (stops.isNotEmpty &&
-      (current == null || current.operatorId != operator.id)) {
-    Stop bestStop = stops.first;
-    if (userLoc != null) {
-      bestStop = stops.reduce((a, b) {
+/// Switches the active operator and resets selections according to business rules:
+/// - Destination is always reset to null ("Todas las direcciones").
+/// - If user GPS location is known, resolves and selects the closest stop of [newOperator].
+/// - If no GPS location, resets origin stop to null so the user picks their stop cleanly.
+Future<void> switchOperator(WidgetRef ref, TransitOperator newOperator) async {
+  await _switchOperatorInternal(
+    read: ref.read,
+    newOperator: newOperator,
+  );
+}
+
+Future<void> switchOperatorWithRef(Ref ref, TransitOperator newOperator) async {
+  await _switchOperatorInternal(
+    read: ref.read,
+    newOperator: newOperator,
+  );
+}
+
+Future<void> switchOperatorWithContainer(
+    ProviderContainer container, TransitOperator newOperator) async {
+  await _switchOperatorInternal(
+    read: container.read,
+    newOperator: newOperator,
+  );
+}
+
+Future<void> _switchOperatorInternal({
+  required T Function<T>(ProviderListenable<T>) read,
+  required TransitOperator newOperator,
+}) async {
+  read(selectedOperatorProvider.notifier).state = newOperator;
+  read(selectedDestinationStopProvider.notifier).state = null;
+
+  final userLoc = read(userLocationProvider);
+  if (userLoc != null) {
+    final repo = read(transitRepositoryProvider);
+    final stops = await repo.getStops(operatorId: newOperator.id);
+    if (stops.isNotEmpty) {
+      final best = stops.reduce((a, b) {
         final aLat = a.latitude ?? 0.0;
         final aLon = a.longitude ?? 0.0;
         final bLat = b.latitude ?? 0.0;
@@ -116,14 +177,12 @@ final stopsForActiveOperatorProvider = FutureProvider<List<Stop>>((ref) async {
             (bLon - userLoc.longitude) * (bLon - userLoc.longitude);
         return da < db ? a : b;
       });
+      read(selectedTransitStopProvider.notifier).state = best;
+      return;
     }
-    ref.read(selectedTransitStopProvider.notifier).state = bestStop;
-    // Clear destination filter if switching operator
-    ref.read(selectedDestinationStopProvider.notifier).state = null;
   }
-
-  return stops;
-});
+  read(selectedTransitStopProvider.notifier).state = null;
+}
 
 /// Live departures for the actively selected stop, with optional destination filter
 /// Emits at every wall-clock minute, so countdowns stay true while a screen
@@ -178,18 +237,13 @@ Future<List<Departure>> _departuresFor(
 final departuresForActiveStopProvider =
     FutureProvider<List<Departure>>((ref) async {
   ref.watch(minuteTickProvider);
-  var stop = ref.watch(selectedTransitStopProvider);
+  final stop = ref.watch(selectedTransitStopProvider);
   final destStop = ref.watch(selectedDestinationStopProvider);
   ref.watch(transitRepositoryProvider);
   final op = ref.watch(selectedOperatorProvider);
 
   if (stop == null || stop.operatorId != op.id) {
-    final stops = await ref.watch(stopsForActiveOperatorProvider.future);
-    if (stops.isEmpty) return [];
-    stop = stops.first;
-    Future.microtask(() {
-      ref.read(selectedTransitStopProvider.notifier).state = stops.first;
-    });
+    return [];
   }
 
   return _departuresFor(ref, stop, operatorId: op.id, destination: destStop);

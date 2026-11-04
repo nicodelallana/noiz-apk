@@ -206,6 +206,7 @@ class RawDepartureRecord {
     this.headsign,
     this.inferredLine,
     this.parentStation,
+    this.routeColor,
   });
 
   factory RawDepartureRecord.fromMap(Map<String, Object?> map) {
@@ -217,6 +218,7 @@ class RawDepartureRecord {
       headsign: map['trip_headsign'] as String?,
       inferredLine: map['inferred_line'] as String?,
       parentStation: map['parent_station'] as String?,
+      routeColor: map['route_color'] as String?,
     );
   }
 
@@ -227,6 +229,7 @@ class RawDepartureRecord {
   final String? headsign;
   final String? inferredLine;
   final String? parentStation;
+  final String? routeColor;
 }
 
 /// Raw record representation of a saved journey in SQLite.
@@ -684,10 +687,12 @@ class AppDatabase {
         s.stop_id,
         s.stop_name,
         t.trip_headsign,
-        t.inferred_line,
+        COALESCE(NULLIF(r.route_short_name, ''), t.inferred_line, 'BUS') AS inferred_line,
+        r.route_color,
         s.parent_station
       FROM stop_times st
       JOIN trips t ON st.trip_id = t.trip_id
+      JOIN routes r ON t.route_id = r.route_id
       JOIN stops s ON st.stop_id = s.stop_id
       WHERE (s.stop_id = ? OR s.parent_station = ?)
         AND t.service_id IN ($servicePlaceholders)
@@ -720,8 +725,13 @@ class AppDatabase {
     }
 
     if (lineFilter != null && lineFilter.isNotEmpty) {
-      sql.write(' AND t.inferred_line = ?');
-      args.add(lineFilter);
+      sql.write('''
+        AND (
+          t.inferred_line = ? OR
+          r.route_short_name = ?
+        )
+      ''');
+      args.addAll([lineFilter, lineFilter]);
     }
 
     sql.write(' ORDER BY st.departure_time ASC LIMIT ?');
@@ -729,6 +739,48 @@ class AppDatabase {
 
     final rows = await _executor.runSelect(sql.toString(), args);
     return rows.map(RawDepartureRecord.fromMap).toList();
+  }
+
+  /// Retrieves all reachable destination stops from a given [originStopId]
+  /// that can be reached on a direct trip (same line and trip with stop_sequence > origin).
+  Future<List<RawStopRecord>> getReachableDestinations(
+    String originStopId, {
+    String? searchQuery,
+  }) async {
+    await _ensureOpen();
+
+    final sql = StringBuffer('''
+      SELECT DISTINCT 
+        COALESCE(parent.stop_id, s2.stop_id) AS stop_id,
+        COALESCE(parent.operator_id, s2.operator_id) AS operator_id,
+        COALESCE(parent.stop_name, s2.stop_name) AS stop_name,
+        COALESCE(parent.stop_lat, s2.stop_lat) AS stop_lat,
+        COALESCE(parent.stop_lon, s2.stop_lon) AS stop_lon,
+        COALESCE(parent.zone_id, s2.zone_id) AS zone_id,
+        parent.parent_station,
+        COALESCE(parent.territory, s2.territory) AS territory,
+        COALESCE(parent.mode, s2.mode) AS mode,
+        COALESCE(parent.location_type, s2.location_type) AS location_type
+      FROM stop_times st1
+      JOIN stop_times st2 ON st1.trip_id = st2.trip_id AND st2.stop_sequence > st1.stop_sequence
+      JOIN stops s1 ON st1.stop_id = s1.stop_id
+      JOIN stops s2 ON st2.stop_id = s2.stop_id
+      LEFT JOIN stops parent ON s2.parent_station = parent.stop_id
+      WHERE (s1.stop_id = ? OR s1.parent_station = ?)
+        AND (parent.stop_id IS NULL OR (parent.stop_id != s1.stop_id AND parent.stop_id != s1.parent_station))
+        AND (s2.stop_id != s1.stop_id AND (s1.parent_station IS NULL OR s2.stop_id != s1.parent_station))
+    ''');
+    final args = <Object?>[originStopId, originStopId];
+
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      sql.write(' AND LOWER(COALESCE(parent.stop_name, s2.stop_name)) LIKE ?');
+      args.add('%${searchQuery.trim().toLowerCase()}%');
+    }
+
+    sql.write(' ORDER BY stop_name COLLATE NOCASE ASC');
+
+    final rows = await _executor.runSelect(sql.toString(), args);
+    return rows.map(RawStopRecord.fromMap).toList();
   }
 
   /// Searches for a direct transit connection between two stops.

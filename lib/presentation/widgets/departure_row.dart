@@ -66,16 +66,13 @@ class DepartureRow extends StatelessWidget {
           : null,
       child: Row(
         children: [
-          SizedBox(
-            width: 52,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: LineBadge(
-                label: departure.lineCode.isNotEmpty
-                    ? departure.lineCode
-                    : departure.line.id,
-                color: lineColor,
-              ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: LineBadge(
+              label: departure.lineCode.isNotEmpty
+                  ? departure.lineCode
+                  : departure.line.id,
+              color: lineColor,
             ),
           ),
           Expanded(

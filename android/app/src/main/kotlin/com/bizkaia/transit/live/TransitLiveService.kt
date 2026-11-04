@@ -290,7 +290,7 @@ class TransitLiveService : Service() {
         // 1. Build custom collapsed layout
         val collapsedView = RemoteViews(packageName, R.layout.notification_transit_collapsed).apply {
             setTextViewText(R.id.notif_line_badge, lineName)
-            setInt(R.id.notif_line_badge, "setBackgroundColor", parsedColor)
+            setInt(R.id.notif_line_badge_bg, "setColorFilter", parsedColor)
             setTextViewText(R.id.notif_title, destination)
             setTextViewText(R.id.notif_subtext, originAndPlatform)
             setTextViewText(R.id.notif_countdown, countdownText)
@@ -301,7 +301,7 @@ class TransitLiveService : Service() {
         // 2. Build custom expanded layout
         val expandedView = RemoteViews(packageName, R.layout.notification_transit_expanded).apply {
             setTextViewText(R.id.notif_exp_line_badge, lineName)
-            setInt(R.id.notif_exp_line_badge, "setBackgroundColor", parsedColor)
+            setInt(R.id.notif_exp_line_badge_bg, "setColorFilter", parsedColor)
             setTextViewText(R.id.notif_exp_operator, operatorName ?: "Transporte Público")
             setTextViewText(R.id.notif_exp_title, destination)
             setTextViewText(R.id.notif_exp_subtext, originAndPlatform)

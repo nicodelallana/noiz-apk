@@ -110,6 +110,13 @@ abstract class TransitRepository {
     String? searchQuery,
   });
 
+  /// Retrieves reachable destination stops from a given [originStopId]
+  /// connected directly on the same line and trip.
+  Future<List<Stop>> getReachableDestinations({
+    required String originStopId,
+    String? searchQuery,
+  });
+
   Future<List<Departure>> getDepartures({
     required String stopId,
     String? destinationStopId,

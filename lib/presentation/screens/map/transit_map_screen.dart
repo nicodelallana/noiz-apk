@@ -19,6 +19,7 @@ import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
 import 'package:bizkaia_transit/presentation/screens/map/live_vehicles_layer.dart';
 import 'package:bizkaia_transit/presentation/screens/map/map_transit_selector.dart';
 import 'package:bizkaia_transit/presentation/screens/stop/stop_departures_screen.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/content.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
 
@@ -67,28 +68,11 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
   late final LiveVehiclesController _live = LiveVehiclesController(
     reduceMotion: () => mounted && Motion.reduced(context),
   );
-  bool _tabVisible = true;
-  bool _foreground = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-  }
-
-  // Poll live vehicles only while this tab is on screen (the shell keeps
-  // hidden tabs alive with tickers off) and the app is in the foreground.
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _tabVisible = TickerMode.of(context);
-    _live.setActive(_tabVisible && _foreground);
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    _foreground = state == AppLifecycleState.resumed;
-    _live.setActive(_tabVisible && _foreground);
   }
 
   @override
@@ -447,15 +431,45 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
 
   Future<void> _openStop(Stop stop) async {
     unawaited(_setSelected(stop.id));
-    await _StopSheet.show(context, stop);
+    await _StopSheet.show(
+      context,
+      stop,
+      onTrackLine: (lineCode) async {
+        final v = await _live.trackLineVehicle(
+          line: lineCode,
+          operatorId: stop.operatorId,
+        );
+        if (v != null && _controller != null) {
+          final update = CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: LatLng(v.latitude, v.longitude),
+              zoom: 16.0,
+              bearing: 0.0,
+              tilt: 0.0,
+            ),
+          );
+          if (Motion.reduced(context)) {
+            await _controller?.moveCamera(update);
+          } else {
+            await _controller?.animateCamera(update);
+          }
+          return true;
+        }
+        return false;
+      },
+    );
+    await _live.clearTrackedVehicle();
     if (mounted) unawaited(_setSelected(null));
   }
 
   Future<void> _recenter(UserLocation here) async {
-    // The glass button already gives the haptic tick.
-    final update = CameraUpdate.newLatLngZoom(
-      LatLng(here.latitude, here.longitude),
-      _walkingZoom,
+    final update = CameraUpdate.newCameraPosition(
+      CameraPosition(
+        target: LatLng(here.latitude, here.longitude),
+        zoom: _walkingZoom,
+        bearing: 0.0,
+        tilt: 0.0,
+      ),
     );
     if (Motion.reduced(context)) {
       await _controller?.moveCamera(update);
@@ -506,7 +520,14 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
               initialCameraPosition: CameraPosition(
                 target: LatLng(here.latitude, here.longitude),
                 zoom: _walkingZoom,
+                bearing: 0.0,
+                tilt: 0.0,
               ),
+              rotateGesturesEnabled: false,
+              tiltGesturesEnabled: false,
+              scrollGesturesEnabled: true,
+              zoomGesturesEnabled: true,
+              doubleClickZoomEnabled: true,
               myLocationEnabled: hasRealFix,
               compassEnabled: false,
               onMapCreated: _onMapCreated,
@@ -532,14 +553,6 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
                     const SizedBox(height: 8),
                   ],
                   const MapTransitSelector(),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: LiveVehiclesChip(
-                      state: _live.state,
-                      onToggle: _live.toggleVisible,
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -696,12 +709,21 @@ class _MapAttribution extends StatelessWidget {
 /// Draggable glass sheet with a stop's next departures and one-tap origin /
 /// destination selection. It floats 8 px off the screen edges, iOS-style.
 class _StopSheet extends ConsumerWidget {
-  const _StopSheet({required this.stop, required this.scrollController});
+  const _StopSheet({
+    required this.stop,
+    required this.scrollController,
+    this.onTrackLine,
+  });
 
   final Stop stop;
   final ScrollController scrollController;
+  final Future<bool> Function(String lineCode)? onTrackLine;
 
-  static Future<void> show(BuildContext context, Stop stop) {
+  static Future<void> show(
+    BuildContext context,
+    Stop stop, {
+    Future<bool> Function(String lineCode)? onTrackLine,
+  }) {
     return showModalBottomSheet<void>(
       context: context,
       // Above the shell, so the tab bar and the mode button don't cover the
@@ -716,13 +738,17 @@ class _StopSheet extends ConsumerWidget {
       builder: (sheetContext) {
         final inset = math.max(8.0, MediaQuery.paddingOf(sheetContext).bottom);
         return DraggableScrollableSheet(
-          initialChildSize: 0.45,
+          initialChildSize: 0.50,
           minChildSize: 0.25,
           maxChildSize: 0.9,
           expand: false,
           builder: (_, controller) => Padding(
             padding: EdgeInsets.fromLTRB(8, 0, 8, inset),
-            child: _StopSheet(stop: stop, scrollController: controller),
+            child: _StopSheet(
+              stop: stop,
+              scrollController: controller,
+              onTrackLine: onTrackLine,
+            ),
           ),
         );
       },
@@ -782,7 +808,71 @@ class _StopSheet extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  departures.maybeWhen(
+                    data: (list) {
+                      final lineCodes =
+                          list.map((d) => d.lineCode).toSet().toList();
+                      if (lineCodes.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 4),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: lineCodes.map((code) {
+                            return InkWell(
+                              onTap: () async {
+                                HapticFeedback.lightImpact();
+                                if (onTrackLine != null) {
+                                  final found = await onTrackLine!(code);
+                                  if (context.mounted) {
+                                    if (found) {
+                                      Navigator.of(context).pop();
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                              'Siguiendo $code en tiempo real en el mapa'),
+                                          duration: const Duration(seconds: 3),
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                              'Línea $code: Horario programado (sin señal GPS activa)'),
+                                          duration: const Duration(seconds: 2),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: LineBadge(label: code, color: opColor),
+                            );
+                          }).toList(),
+                        ),
+                      );
+                    },
+                    orElse: () => const SizedBox.shrink(),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, bottom: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.access_time_rounded,
+                            size: 14, color: AppColors.darkTextTertiary),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Frecuencia: cada 8-15 min · Horarios oficiales GTFS',
+                          style: t.labelSmall!
+                              .copyWith(color: AppColors.darkTextTertiary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(

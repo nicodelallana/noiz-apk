@@ -115,9 +115,19 @@ IconData _iconForMode(TransitModeType mode) {
 }
 
 void _openStopPicker(
-  BuildContext context, {
+  BuildContext context,
+  WidgetRef ref, {
   bool isDestination = false,
 }) {
+  if (isDestination && ref.read(selectedTransitStopProvider) == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Selecciona primero una parada de origen'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    return;
+  }
   showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
@@ -169,17 +179,23 @@ class _TransitScreenContent extends ConsumerWidget {
                 originStopName: stopName,
                 destStopName: destinationStop?.name,
                 operatorColor: primaryColor,
-                onTapOrigin: () => _openStopPicker(context),
+                onTapOrigin: () => _openStopPicker(context, ref),
                 onTapDestination: () =>
-                    _openStopPicker(context, isDestination: true),
-                onSwap: () {
+                    _openStopPicker(context, ref, isDestination: true),
+                onSwap: () async {
                   if (activeStop != null && destinationStop != null) {
+                    final repo = ref.read(transitRepositoryProvider);
+                    final reachable = await repo.getReachableDestinations(
+                      originStopId: destinationStop.id,
+                    );
+                    final canReverse =
+                        reachable.any((s) => s.id == activeStop.id);
                     ref.read(selectedTransitStopProvider.notifier).state =
                         destinationStop;
                     ref.read(selectedDestinationStopProvider.notifier).state =
-                        activeStop;
+                        canReverse ? activeStop : null;
                   } else if (activeStop != null) {
-                    _openStopPicker(context, isDestination: true);
+                    _openStopPicker(context, ref, isDestination: true);
                   }
                 },
                 onClearDestination: () {
@@ -258,10 +274,10 @@ class _HomeHeader extends ConsumerWidget {
               Semantics(
                 button: true,
                 label: 'Parada: $stopName. Cambiar parada',
-                onTap: () => _openStopPicker(context),
+                onTap: () => _openStopPicker(context, ref),
                 excludeSemantics: true,
                 child: GestureDetector(
-                  onTap: () => _openStopPicker(context),
+                  onTap: () => _openStopPicker(context, ref),
                   behavior: HitTestBehavior.opaque,
                   child: AnimatedSwitcher(
                     duration: Motion.reduced(context)
@@ -848,7 +864,9 @@ class _MultiOperatorStopSearchModalState
   @override
   Widget build(BuildContext context) {
     final activeOperator = ref.watch(selectedOperatorProvider);
-    final stopsAsync = ref.watch(stopsForActiveOperatorProvider);
+    final stopsAsync = widget.isDestination
+        ? ref.watch(reachableDestinationsProvider)
+        : ref.watch(stopsForActiveOperatorProvider);
     final opColor = Color(activeOperator.colorHex);
     final isDest = widget.isDestination;
     final t = AppTypography.textTheme();
@@ -885,7 +903,7 @@ class _MultiOperatorStopSearchModalState
               const SizedBox(height: 2),
               Text(
                 isDest
-                    ? 'Filtra las salidas por destino · ${activeOperator.name}'
+                    ? 'Destinos directos en la misma línea · ${activeOperator.name}'
                     : 'Toca una parada para ver sus salidas · ${activeOperator.name}',
                 style:
                     t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
@@ -955,13 +973,39 @@ class _MultiOperatorStopSearchModalState
 
                     if (filtered.isEmpty && !showAll) {
                       return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 28),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 28, horizontal: 16),
                         child: Center(
-                          child: Text(
-                            'Ninguna parada coincide',
-                            style: t.bodyMedium!.copyWith(
-                              color: AppColors.darkTextSecondary,
-                            ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isDest
+                                    ? Icons.alt_route_rounded
+                                    : BarikIcons.magnifyingGlass,
+                                size: 36,
+                                color: AppColors.darkTextTertiary,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                isDest
+                                    ? 'Sin destinos directos'
+                                    : 'Ninguna parada coincide',
+                                style: t.titleMedium!.copyWith(
+                                  color: AppColors.darkTextPrimary,
+                                ),
+                              ),
+                              if (isDest) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'No hay paradas en la misma línea sin transbordo.',
+                                  textAlign: TextAlign.center,
+                                  style: t.bodySmall!.copyWith(
+                                    color: AppColors.darkTextSecondary,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       );
@@ -1020,7 +1064,7 @@ class _MultiOperatorStopSearchModalState
                               : null,
                           selected: isSelected,
                           selectedColor: opColor,
-                          onTap: () {
+                          onTap: () async {
                             if (isDest) {
                               ref
                                   .read(
@@ -1030,14 +1074,32 @@ class _MultiOperatorStopSearchModalState
                               ref
                                   .read(selectedTransitStopProvider.notifier)
                                   .state = stop;
-                              if (currentDest?.id == stop.id) {
-                                ref
-                                    .read(selectedDestinationStopProvider
-                                        .notifier)
-                                    .state = null;
+                              if (currentDest != null) {
+                                if (currentDest.id == stop.id) {
+                                  ref
+                                      .read(selectedDestinationStopProvider
+                                          .notifier)
+                                      .state = null;
+                                } else {
+                                  final repo =
+                                      ref.read(transitRepositoryProvider);
+                                  final reachable =
+                                      await repo.getReachableDestinations(
+                                    originStopId: stop.id,
+                                  );
+                                  if (!reachable
+                                      .any((s) => s.id == currentDest.id)) {
+                                    ref
+                                        .read(selectedDestinationStopProvider
+                                            .notifier)
+                                        .state = null;
+                                  }
+                                }
                               }
                             }
-                            Navigator.of(context).pop();
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                            }
                           },
                         );
                       },

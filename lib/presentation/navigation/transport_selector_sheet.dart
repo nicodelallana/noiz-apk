@@ -15,13 +15,12 @@ import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/motion.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
-/// Glass sheet that lets the user pick the transport operator, filtered by
-/// territory (Bizkaia, Gipuzkoa, Araba).
-class TransportSelectorBottomSheet extends ConsumerWidget {
+/// Redesigned two-level transport selector bottom sheet:
+/// - Primary selector: Transport categories (Metro, Autobús, Tren, Tranvía, Funicular).
+/// - Secondary selector: Official operators/services belonging to the selected category.
+class TransportSelectorBottomSheet extends ConsumerStatefulWidget {
   const TransportSelectorBottomSheet({super.key, this.overMap = false});
 
-  /// Opened over the map tab: on the web the map can't be blurred, so the
-  /// sheet uses the denser over-map glass.
   final bool overMap;
 
   static Future<void> show(BuildContext context) {
@@ -31,7 +30,6 @@ class TransportSelectorBottomSheet extends ConsumerWidget {
     final overMap = location?.path == '/map';
     return showModalBottomSheet<void>(
       context: context,
-      // Above the shell, so the sheet covers the floating tab bar.
       useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
@@ -41,43 +39,75 @@ class TransportSelectorBottomSheet extends ConsumerWidget {
     );
   }
 
-  void _selectTerritory(
-    WidgetRef ref,
-    TransitTerritory territory,
-    TransitOperator activeOperator,
-  ) {
+  @override
+  ConsumerState<TransportSelectorBottomSheet> createState() =>
+      _TransportSelectorBottomSheetState();
+}
+
+class _TransportSelectorBottomSheetState
+    extends ConsumerState<TransportSelectorBottomSheet> {
+  TransitModeType? _selectedMode;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedMode = ref.read(selectedOperatorProvider).mode;
+  }
+
+  void _onCategorySelected(TransitModeType mode) {
+    HapticFeedback.selectionClick();
+    setState(() => _selectedMode = mode);
+  }
+
+  void _onTerritorySelected(TransitTerritory territory) {
     ref.read(selectedTerritoryProvider.notifier).state = territory;
-    // Auto-switch to the territory's first operator if the current one is
-    // from another territory.
-    if (activeOperator.territory != territory) {
-      ref.read(selectedOperatorProvider.notifier).state = switch (territory) {
-        TransitTerritory.gipuzkoa => TransitOperator.dbus,
-        TransitTerritory.araba => TransitOperator.tuvisa,
-        _ => TransitOperator.metro,
-      };
+    final currentMode = _selectedMode ?? TransitModeType.metro;
+    final availableInMode = TransitOperator.values
+        .where((op) => op.territory == territory && op.mode == currentMode)
+        .toList();
+
+    // If the currently selected category has no operators in this territory,
+    // switch category to one that has operators.
+    if (availableInMode.isEmpty) {
+      final anyOp = TransitOperator.byTerritory(territory).firstOrNull;
+      if (anyOp != null) {
+        setState(() => _selectedMode = anyOp.mode);
+      }
+    }
+  }
+
+  Future<void> _selectOperator(TransitOperator op) async {
+    HapticFeedback.lightImpact();
+    await switchOperator(ref, op);
+    if (mounted) {
+      Navigator.of(context).pop();
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final territory = ref.watch(selectedTerritoryProvider);
     final activeOperator = ref.watch(selectedOperatorProvider);
 
-    // List operators for the chosen territory (default to Bizkaia if 'all')
     final effectiveTerritory = territory == TransitTerritory.all
         ? TransitTerritory.bizkaia
         : territory;
-    final operators = TransitOperator.byTerritory(effectiveTerritory);
+
+    final currentMode = _selectedMode ?? activeOperator.mode;
+    final operatorsInMode = TransitOperator.values
+        .where((op) =>
+            op.territory == effectiveTerritory && op.mode == currentMode)
+        .toList();
+
     final t = AppTypography.textTheme();
     final reduced = Motion.reduced(context);
     final inset = math.max(8.0, MediaQuery.paddingOf(context).bottom);
 
     return Padding(
-      // Floats off the screen edges, iOS-style.
       padding: EdgeInsets.fromLTRB(8, 0, 8, inset),
       child: GlassSurface(
         blur: true,
-        kind: overMap ? GlassKind.overMap : GlassKind.regular,
+        kind: widget.overMap ? GlassKind.overMap : GlassKind.regular,
         radius: 32,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
@@ -117,7 +147,7 @@ class TransportSelectorBottomSheet extends ConsumerWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Operadores disponibles en ${effectiveTerritory.name}',
+                          'Selecciona tipo de transporte y operador',
                           style: t.bodySmall!.copyWith(
                             color: AppColors.darkTextSecondary,
                           ),
@@ -132,48 +162,209 @@ class TransportSelectorBottomSheet extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
 
-            _TerritorySegmentedControl(
-              selected: effectiveTerritory,
-              onChanged: (value) =>
-                  _selectTerritory(ref, value, activeOperator),
+            // ── Primary Selector: Categories ───────────────────────────────
+            Text(
+              'TIPO DE TRANSPORTE',
+              style: t.labelSmall!.copyWith(
+                color: AppColors.darkTextTertiary,
+                letterSpacing: 0.8,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _ModeCategorySelector(
+              selectedMode: currentMode,
+              territory: effectiveTerritory,
+              onSelected: _onCategorySelected,
             ),
             const SizedBox(height: 14),
 
-            // Operator grid
-            AnimatedSize(
-              duration: reduced ? Duration.zero : Motion.smooth.duration,
-              curve: Motion.smooth.curve,
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(context).height * 0.55,
-                ),
-                child: AnimatedSwitcher(
-                  duration: reduced
-                      ? Motion.reducedFade
-                      : const Duration(milliseconds: 220),
-                  switchInCurve: Curves.easeOut,
-                  switchOutCurve: Curves.easeIn,
-                  layoutBuilder: (current, previous) => Stack(
-                    alignment: Alignment.topCenter,
-                    children: [...previous, if (current != null) current],
-                  ),
-                  child: SingleChildScrollView(
-                    key: ValueKey(effectiveTerritory),
-                    child: _OperatorGrid(
-                      operators: operators,
-                      active: activeOperator,
-                      onSelected: (op) {
-                        HapticFeedback.lightImpact();
-                        ref.read(selectedOperatorProvider.notifier).state = op;
-                        Navigator.of(context).pop();
-                      },
-                    ),
+            // Territory filter
+            _TerritorySegmentedControl(
+              selected: effectiveTerritory,
+              onChanged: _onTerritorySelected,
+            ),
+            const SizedBox(height: 16),
+
+            // ── Secondary Selector: Operators in Category ──────────────────
+            Row(
+              children: [
+                Text(
+                  'OPERADORES (${currentMode.label.toUpperCase()})',
+                  style: t.labelSmall!.copyWith(
+                    color: AppColors.darkTextTertiary,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
+                const Spacer(),
+                Text(
+                  '${operatorsInMode.length} ${operatorsInMode.length == 1 ? 'disponible' : 'disponibles'}',
+                  style: t.labelSmall!.copyWith(
+                    color: AppColors.darkTextSecondary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.42,
+              ),
+              child: AnimatedSwitcher(
+                duration: reduced
+                    ? Motion.reducedFade
+                    : const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: operatorsInMode.isEmpty
+                    ? Padding(
+                        key: const ValueKey('empty_ops'),
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Text(
+                            'No hay servicios de ${currentMode.label.toLowerCase()} en ${effectiveTerritory.name}',
+                            style: t.bodyMedium!.copyWith(
+                              color: AppColors.darkTextSecondary,
+                            ),
+                          ),
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        key: ValueKey('${effectiveTerritory.id}_${currentMode.id}'),
+                        child: _OperatorGrid(
+                          operators: operatorsInMode,
+                          active: activeOperator,
+                          onSelected: _selectOperator,
+                        ),
+                      ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Primary category selector bar with clear visual states (selected, unselected, disabled).
+class _ModeCategorySelector extends StatelessWidget {
+  const _ModeCategorySelector({
+    required this.selectedMode,
+    required this.territory,
+    required this.onSelected,
+  });
+
+  final TransitModeType selectedMode;
+  final TransitTerritory territory;
+  final ValueChanged<TransitModeType> onSelected;
+
+  static const _modes = [
+    TransitModeType.metro,
+    TransitModeType.bus,
+    TransitModeType.train,
+    TransitModeType.tram,
+    TransitModeType.funicular,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: [
+          for (final mode in _modes) ...[
+            _ModeChip(
+              mode: mode,
+              selected: mode == selectedMode,
+              hasOperators: TransitOperator.values
+                  .any((op) => op.territory == territory && op.mode == mode),
+              onTap: () => onSelected(mode),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  const _ModeChip({
+    required this.mode,
+    required this.selected,
+    required this.hasOperators,
+    required this.onTap,
+  });
+
+  final TransitModeType mode;
+  final bool selected;
+  final bool hasOperators;
+  final VoidCallback onTap;
+
+  static IconData _iconFor(TransitModeType mode) => switch (mode) {
+        TransitModeType.metro => BarikIcons.subway,
+        TransitModeType.train => BarikIcons.train,
+        TransitModeType.tram => BarikIcons.tram,
+        TransitModeType.bus => BarikIcons.bus,
+        TransitModeType.funicular => BarikIcons.cableCar,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTypography.textTheme();
+    final enabled = hasOperators;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: enabled,
+      label: mode.label,
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.4,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(16),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: ShapeDecoration(
+              color: selected
+                  ? AppColors.accent.withValues(alpha: 0.18)
+                  : Colors.white.withValues(alpha: 0.06),
+              shape: continuousShape(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: selected
+                      ? AppColors.accent
+                      : Colors.white.withValues(alpha: 0.10),
+                  width: selected ? 1.5 : 1.0,
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _iconFor(mode),
+                  size: 18,
+                  color: selected ? AppColors.accent : AppColors.darkTextSecondary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  mode.label,
+                  style: t.labelLarge!.copyWith(
+                    color: selected
+                        ? AppColors.darkTextPrimary
+                        : AppColors.darkTextSecondary,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -237,9 +428,7 @@ class _ActiveOperatorChip extends StatelessWidget {
   }
 }
 
-/// iOS-style segmented control: a capsule track with a lighter "droplet"
-/// (the same one as the tab bar) that springs to the chosen territory. It
-/// sits on the glass sheet, so it paints no blur of its own.
+/// iOS-style segmented control: a capsule track for territory.
 class _TerritorySegmentedControl extends StatelessWidget {
   const _TerritorySegmentedControl({
     required this.selected,
@@ -257,66 +446,23 @@ class _TerritorySegmentedControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reduced = Motion.reduced(context);
-    final m = Motion.snappy;
-    final index = _territories.indexOf(selected).clamp(0, 2);
-
-    return DecoratedBox(
+    return Container(
       decoration: ShapeDecoration(
         color: Colors.white.withValues(alpha: 0.06),
-        shape: const StadiumBorder(
-          side: BorderSide(color: AppColors.darkBorder),
-        ),
+        shape: const StadiumBorder(),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: AnimatedAlign(
-                alignment: Alignment(
-                  -1 + 2 * index / (_territories.length - 1),
-                  0,
-                ),
-                duration: reduced ? Duration.zero : m.duration,
-                curve: m.curve,
-                child: FractionallySizedBox(
-                  widthFactor: 1 / _territories.length,
-                  heightFactor: 1,
-                  child: DecoratedBox(
-                    decoration: ShapeDecoration(
-                      color: Colors.white.withValues(alpha: 0.13),
-                      shape: StadiumBorder(
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.10),
-                        ),
-                      ),
-                      shadows: const [
-                        BoxShadow(
-                          color: Color(0x33000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          for (final territory in _territories)
+            Expanded(
+              child: _Segment(
+                territory: territory,
+                selected: territory == selected,
+                onTap: () => onChanged(territory),
               ),
             ),
-            Row(
-              children: [
-                for (final territory in _territories)
-                  Expanded(
-                    child: _Segment(
-                      territory: territory,
-                      selected: territory == selected,
-                      onTap: () => onChanged(territory),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -336,10 +482,6 @@ class _Segment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = AppTypography.textTheme();
-    final count = TransitOperator.byTerritory(territory).length;
-    final countLabel = '$count ${count == 1 ? 'transporte' : 'transportes'}';
-    final duration =
-        Motion.reduced(context) ? Motion.reducedFade : Motion.snappy.duration;
     void select() {
       HapticFeedback.selectionClick();
       onTap();
@@ -348,43 +490,33 @@ class _Segment extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${territory.name}, $countLabel',
-      // The excluded subtree takes the detector's tap action with it.
+      label: territory.name,
       onTap: select,
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: select,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedDefaultTextStyle(
-                duration: duration,
-                style: t.labelLarge!.copyWith(
-                  color: selected
-                      ? AppColors.darkTextPrimary
-                      : AppColors.darkTextSecondary,
-                ),
-                child: Text(
-                  territory.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: ShapeDecoration(
+            color: selected
+                ? Colors.white.withValues(alpha: 0.14)
+                : Colors.transparent,
+            shape: const StadiumBorder(),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Center(
+            child: Text(
+              territory.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.labelLarge!.copyWith(
+                color: selected
+                    ? AppColors.darkTextPrimary
+                    : AppColors.darkTextSecondary,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               ),
-              const SizedBox(height: 1),
-              Text(
-                countLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.labelMedium!.copyWith(
-                  color: selected
-                      ? AppColors.darkTextSecondary
-                      : AppColors.darkTextTertiary,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -392,8 +524,7 @@ class _Segment extends StatelessWidget {
   }
 }
 
-/// Two-column grid of solid operator tiles; each row takes the height of
-/// its taller tile.
+/// Two-column grid of solid operator tiles.
 class _OperatorGrid extends StatelessWidget {
   const _OperatorGrid({
     required this.operators,
@@ -459,7 +590,6 @@ class _OperatorTile extends StatelessWidget {
       button: true,
       selected: selected,
       child: SurfaceCard(
-        // Concentric with the sheet: 32 − 16.
         radius: 16,
         padding: const EdgeInsets.all(12),
         accent: selected ? AppColors.accent : null,
@@ -470,7 +600,6 @@ class _OperatorTile extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // The operator's colour as a small glowing badge.
                 Container(
                   width: 36,
                   height: 36,
@@ -520,14 +649,39 @@ class _OperatorTile extends StatelessWidget {
               operator.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: t.titleSmall!.copyWith(color: AppColors.darkTextPrimary),
+              style: t.titleSmall!.copyWith(
+                color: AppColors.darkTextPrimary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              operator.mode.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                if (operator.hasRealtime) ...[
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: AppColors.realtimeGreen,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'En directo',
+                    style: t.labelSmall!.copyWith(
+                      color: AppColors.realtimeGreen,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ] else
+                  Text(
+                    'Horarios oficiales',
+                    style: t.labelSmall!.copyWith(
+                      color: AppColors.darkTextSecondary,
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
