@@ -139,16 +139,22 @@ class ScheduleSyncService {
     final dbFile = File(dbPath);
     final manifestFile = File(manifestPath);
 
-    // If database does not exist or is legacy > 10MB single-operator pack, seed bundled DB
-    if (!dbFile.existsSync() ||
-        dbFile.lengthSync() < 1024 ||
-        dbFile.lengthSync() > 10 * 1024 * 1024) {
+    // If database does not exist, seed bundled DB
+    if (!dbFile.existsSync() || dbFile.lengthSync() < 1024) {
       try {
-        final data = await rootBundle.load('assets/db/transit.sqlite');
-        final bytes =
-            data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-        await dbFile.writeAsBytes(bytes, flush: true);
-      } catch (_) {}
+        final gzData = await rootBundle.load('assets/db/transit.sqlite.gz');
+        final bytes = gzData.buffer
+            .asUint8List(gzData.offsetInBytes, gzData.lengthInBytes);
+        final decompressed = gzip.decode(bytes);
+        await dbFile.writeAsBytes(decompressed, flush: true);
+      } catch (_) {
+        try {
+          final data = await rootBundle.load('assets/db/transit.sqlite');
+          final bytes =
+              data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+          await dbFile.writeAsBytes(bytes, flush: true);
+        } catch (_) {}
+      }
     }
 
     ScheduleManifest? localManifest;
