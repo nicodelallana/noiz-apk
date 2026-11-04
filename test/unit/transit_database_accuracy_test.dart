@@ -52,7 +52,9 @@ class MockQueryExecutor extends QueryExecutor {
 
 void main() {
   group('Transit Database Accuracy & Query Tests', () {
-    test('getStationsInBounds builds query with routeId, operator and mode filters', () async {
+    test(
+        'getStationsInBounds builds query with routeId, operator and mode filters',
+        () async {
       String? capturedSql;
       List<Object?>? capturedArgs;
 
@@ -100,7 +102,8 @@ void main() {
         customSelectHandler: (sql, args) async {
           return [
             {
-              'points_json': '[[-2.935, 43.262], [-2.936, 43.263], [-2.937, 43.264]]',
+              'points_json':
+                  '[[-2.935, 43.262], [-2.936, 43.263], [-2.937, 43.264]]',
             }
           ];
         },
@@ -179,7 +182,9 @@ void main() {
       expect(stops[1].stopName, 'Bolueta');
     });
 
-    test('TransitRepositoryImpl returns empty list without synthetic fallback when no departures exist', () async {
+    test(
+        'TransitRepositoryImpl returns empty list without synthetic fallback when no departures exist',
+        () async {
       final mockExecutor = MockQueryExecutor(
         customSelectHandler: (sql, args) async {
           // Calendar active query

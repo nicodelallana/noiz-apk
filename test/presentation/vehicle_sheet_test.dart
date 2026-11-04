@@ -28,8 +28,10 @@ Future<void> _pump(WidgetTester tester, LiveVehicle v) => tester.pumpWidget(
 
 void main() {
   group('VehicleSheet honesty', () {
-    testWidgets('a train placed by station is never presented as GPS', (tester) async {
-      await _pump(tester, _vehicle(kind: LivePositionKind.station, status: 'in_transit'));
+    testWidgets('a train placed by station is never presented as GPS',
+        (tester) async {
+      await _pump(tester,
+          _vehicle(kind: LivePositionKind.station, status: 'in_transit'));
 
       // GTFS-RT IN_TRANSIT_TO: the stop is the one it is heading to.
       expect(find.text('Camino de Moyua'), findsOneWidget);
@@ -39,10 +41,12 @@ void main() {
     });
 
     testWidgets('stopped and incoming trains read as such', (tester) async {
-      await _pump(tester, _vehicle(kind: LivePositionKind.station, status: 'stopped'));
+      await _pump(
+          tester, _vehicle(kind: LivePositionKind.station, status: 'stopped'));
       expect(find.text('En Moyua'), findsOneWidget);
 
-      await _pump(tester, _vehicle(kind: LivePositionKind.station, status: 'incoming'));
+      await _pump(
+          tester, _vehicle(kind: LivePositionKind.station, status: 'incoming'));
       expect(find.text('Llegando a Moyua'), findsOneWidget);
     });
 

@@ -452,9 +452,8 @@ class _StateButton extends StatelessWidget {
               : AppColors.darkSurfaceElevated,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected
-                ? AppColors.darkTextPrimary
-                : AppColors.darkBorder,
+            color:
+                isSelected ? AppColors.darkTextPrimary : AppColors.darkBorder,
           ),
         ),
         child: Text(
@@ -667,7 +666,8 @@ class _LockScreenCardPreview extends StatelessWidget {
             LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
-                final pos = (width * progress.clamp(0.0, 1.0)).clamp(0.0, width - 24);
+                final pos =
+                    (width * progress.clamp(0.0, 1.0)).clamp(0.0, width - 24);
 
                 return Stack(
                   alignment: Alignment.centerLeft,

@@ -15,11 +15,14 @@ QueryExecutor openTransitDatabase({File? file}) {
     final sqlite3 = await WasmSqlite3.loadFromUrl(Uri.parse('sqlite3.wasm'));
     final fs = InMemoryFileSystem();
     final data = await rootBundle.load('assets/db/transit.sqlite');
-    fs.xOpen(
-      Sqlite3Filename(_dbPath),
-      SqlFlag.SQLITE_OPEN_CREATE | SqlFlag.SQLITE_OPEN_READWRITE,
-    ).file
-      ..xWrite(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), 0)
+    fs
+        .xOpen(
+          Sqlite3Filename(_dbPath),
+          SqlFlag.SQLITE_OPEN_CREATE | SqlFlag.SQLITE_OPEN_READWRITE,
+        )
+        .file
+      ..xWrite(
+          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), 0)
       ..xClose();
     sqlite3.registerVirtualFileSystem(fs, makeDefault: true);
     return WasmDatabase(sqlite3: sqlite3, path: _dbPath);

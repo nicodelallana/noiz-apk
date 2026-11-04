@@ -83,9 +83,7 @@ class LocationServiceImpl implements LocationService {
     try {
       final map =
           await _channel.invokeMapMethod<String, dynamic>('getLocation');
-      if (map != null &&
-          map['latitude'] != null &&
-          map['longitude'] != null) {
+      if (map != null && map['latitude'] != null && map['longitude'] != null) {
         return UserLocation(
           latitude: (map['latitude'] as num).toDouble(),
           longitude: (map['longitude'] as num).toDouble(),

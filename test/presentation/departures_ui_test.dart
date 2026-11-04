@@ -9,15 +9,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Departures UI, Operator Theme & Navigation Tests', () {
-    testWidgets('AppShell renders "Cuenta" tab in navigation bar instead of "Ajustes"',
+    testWidgets(
+        'AppShell renders "Cuenta" tab in navigation bar instead of "Ajustes"',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           // The shell's Alertas badge reads live incidents: no network here.
           overrides: [
             liveAlertsProvider.overrideWith(
-              (ref) async =>
-                  const LiveAlerts(alerts: [], attribution: '', unavailable: []),
+              (ref) async => const LiveAlerts(
+                  alerts: [], attribution: '', unavailable: []),
             ),
           ],
           child: const MaterialApp(
@@ -38,7 +39,8 @@ void main() {
       expect(find.text('Alertas'), findsOneWidget);
     });
 
-    testWidgets('TransportModeFab toggles transport mode provider between Metro and Bus',
+    testWidgets(
+        'TransportModeFab toggles transport mode provider between Metro and Bus',
         (tester) async {
       late WidgetRef capturedRef;
 
@@ -62,13 +64,15 @@ void main() {
       expect(find.text('MODO: metro'), findsOneWidget);
 
       // Programmatically change to bus
-      capturedRef.read(transportModeProvider.notifier).state = TransportMode.bus;
+      capturedRef.read(transportModeProvider.notifier).state =
+          TransportMode.bus;
       await tester.pumpAndSettle();
 
       expect(find.text('MODO: bus'), findsOneWidget);
     });
 
-    testWidgets('Departure card renders ArrivalPulseIndicator and never "horario teórico"',
+    testWidgets(
+        'Departure card renders ArrivalPulseIndicator and never "horario teórico"',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(

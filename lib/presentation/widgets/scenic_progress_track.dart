@@ -149,7 +149,8 @@ class _ScenicProgressTrackState extends State<ScenicProgressTrack>
                     child: AnimatedBuilder(
                       animation: _pulseController,
                       builder: (context, child) {
-                        final pulseScale = 1.0 + (_pulseController.value * 0.06);
+                        final pulseScale =
+                            1.0 + (_pulseController.value * 0.06);
                         return Transform.scale(
                           scale: pulseScale,
                           child: Container(
@@ -164,7 +165,8 @@ class _ScenicProgressTrackState extends State<ScenicProgressTrack>
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: widget.lineColor.withValues(alpha: 0.5),
+                                  color:
+                                      widget.lineColor.withValues(alpha: 0.5),
                                   blurRadius: 8,
                                   spreadRadius: 1,
                                 ),
@@ -185,7 +187,6 @@ class _ScenicProgressTrackState extends State<ScenicProgressTrack>
             },
           ),
         ),
-
         if (widget.showLabels) ...[
           const SizedBox(height: 4),
           Row(

@@ -30,7 +30,9 @@ class LiveVehicle {
   factory LiveVehicle.fromJson(Map<String, dynamic> j) => LiveVehicle(
         id: j['id'] as String,
         operatorId: j['op'] as String,
-        kind: j['kind'] == 'gps' ? LivePositionKind.gps : LivePositionKind.station,
+        kind: j['kind'] == 'gps'
+            ? LivePositionKind.gps
+            : LivePositionKind.station,
         latitude: (j['lat'] as num).toDouble(),
         longitude: (j['lon'] as num).toDouble(),
         line: j['line'] as String? ?? '',

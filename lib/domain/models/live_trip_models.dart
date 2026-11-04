@@ -137,7 +137,8 @@ class LiveTripState {
             )
           : DateTime.tryParse(json['arrivalTime'] as String? ?? '') ??
               DateTime.now(),
-      status: LiveTripStatus.fromString(json['status'] as String? ?? 'tracking'),
+      status:
+          LiveTripStatus.fromString(json['status'] as String? ?? 'tracking'),
       isRealtime: json['isRealtime'] as bool? ?? false,
       delaySeconds: (json['delaySeconds'] as num?)?.toInt() ?? 0,
       transferInfo: json['transferInfo'] as String?,

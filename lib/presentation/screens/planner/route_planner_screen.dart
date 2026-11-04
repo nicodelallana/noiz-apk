@@ -63,7 +63,8 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
             final filtered = query.isEmpty
                 ? stops
                 : stops
-                    .where((s) => s.name.toLowerCase().contains(query.toLowerCase()))
+                    .where((s) =>
+                        s.name.toLowerCase().contains(query.toLowerCase()))
                     .toList();
 
             return Container(
@@ -71,7 +72,8 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                 color: AppColors.darkSurface,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 border: Border(
-                  top: BorderSide(color: AppColors.darkBorderStrong, width: 1.5),
+                  top:
+                      BorderSide(color: AppColors.darkBorderStrong, width: 1.5),
                 ),
               ),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -90,7 +92,9 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      isOrigin ? 'Seleccionar parada de origen' : 'Seleccionar parada de destino',
+                      isOrigin
+                          ? 'Seleccionar parada de origen'
+                          : 'Seleccionar parada de destino',
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
@@ -110,10 +114,12 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                           color: AppColors.darkTextSecondary,
                         ),
                         hintText: 'Buscar parada...',
-                        hintStyle: const TextStyle(color: AppColors.darkTextSecondary),
+                        hintStyle:
+                            const TextStyle(color: AppColors.darkTextSecondary),
                         filled: true,
                         fillColor: AppColors.darkSurfaceElevated,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 16),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none,
@@ -138,7 +144,9 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                             leading: Icon(
                               isOrigin ? BarikIcons.circle : BarikIcons.mapPin,
                               size: 16,
-                              color: isOrigin ? AppColors.opMetroBilbao : AppColors.realtimeGreen,
+                              color: isOrigin
+                                  ? AppColors.opMetroBilbao
+                                  : AppColors.realtimeGreen,
                             ),
                             title: Text(
                               stop.name,
@@ -233,7 +241,8 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                         size: 14,
                       ),
                       suffixIcon: IconButton(
-                        icon: const Icon(Icons.list_alt_rounded, color: AppColors.darkTextSecondary, size: 20),
+                        icon: const Icon(Icons.list_alt_rounded,
+                            color: AppColors.darkTextSecondary, size: 20),
                         tooltip: 'Elegir parada de la lista',
                         onPressed: () => _pickStation(isOrigin: true),
                       ),
@@ -255,7 +264,8 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Center(
                       child: IconButton(
-                        icon: const Icon(Icons.swap_vert_rounded, color: AppColors.darkTextPrimary),
+                        icon: const Icon(Icons.swap_vert_rounded,
+                            color: AppColors.darkTextPrimary),
                         tooltip: 'Intercambiar origen y destino',
                         onPressed: _swapStops,
                       ),
@@ -276,7 +286,8 @@ class _RoutePlannerScreenState extends ConsumerState<RoutePlannerScreen> {
                         size: 16,
                       ),
                       suffixIcon: IconButton(
-                        icon: const Icon(Icons.list_alt_rounded, color: AppColors.darkTextSecondary, size: 20),
+                        icon: const Icon(Icons.list_alt_rounded,
+                            color: AppColors.darkTextSecondary, size: 20),
                         tooltip: 'Elegir parada de la lista',
                         onPressed: () => _pickStation(isOrigin: false),
                       ),
@@ -347,8 +358,7 @@ class _ItineraryResultCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final hours = itinerary.totalDurationMinutes ~/ 60;
     final mins = itinerary.totalDurationMinutes % 60;
-    final durationStr =
-        hours > 0 ? '${hours}h ${mins} min' : '$mins min';
+    final durationStr = hours > 0 ? '${hours}h ${mins} min' : '$mins min';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -374,7 +384,8 @@ class _ItineraryResultCard extends ConsumerWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.darkSurfaceElevated,
                   borderRadius: BorderRadius.circular(999),
@@ -413,9 +424,8 @@ class _ItineraryResultCard extends ConsumerWidget {
               onPressed: () async {
                 HapticFeedback.mediumImpact();
                 final firstLeg = itinerary.legs.first;
-                final hasPerm = await ref
-                    .read(liveTripServiceProvider)
-                    .requestPermission();
+                final hasPerm =
+                    await ref.read(liveTripServiceProvider).requestPermission();
 
                 final liveTrip = LiveTripState(
                   tripId: 'plan_${DateTime.now().millisecondsSinceEpoch}',

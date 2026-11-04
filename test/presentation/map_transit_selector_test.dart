@@ -26,7 +26,9 @@ void main() {
       expect(find.text('Funicular'), findsOneWidget);
     });
 
-    testWidgets('tapping Metro reveals Metro Bilbao operator chip and line picker', (tester) async {
+    testWidgets(
+        'tapping Metro reveals Metro Bilbao operator chip and line picker',
+        (tester) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
@@ -73,7 +75,8 @@ void main() {
       expect(find.text('Bilbobus'), findsOneWidget);
     });
 
-    testWidgets('tapping an operator reveals line picker button', (tester) async {
+    testWidgets('tapping an operator reveals line picker button',
+        (tester) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
@@ -96,7 +99,8 @@ void main() {
       await tester.tap(find.text('Metro Bilbao'));
       await tester.pumpAndSettle();
 
-      expect(container.read(mapSelectedOperatorProvider), TransitOperator.metro);
+      expect(
+          container.read(mapSelectedOperatorProvider), TransitOperator.metro);
       expect(find.text('Ver rutas / líneas ▾'), findsOneWidget);
     });
   });

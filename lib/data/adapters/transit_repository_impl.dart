@@ -72,7 +72,8 @@ class TransitRepositoryImpl implements TransitRepository {
       }
       final remaining = sched.difference(time).inMinutes;
 
-      final cleanLine = _resolveLineCode(raw.inferredLine, raw.headsign, operatorId);
+      final cleanLine =
+          _resolveLineCode(raw.inferredLine, raw.headsign, operatorId);
       final metroLine = cleanLine == 'L2'
           ? MetroLine.l2
           : (cleanLine == 'L3' ? MetroLine.l3 : MetroLine.l1);
@@ -99,12 +100,15 @@ class TransitRepositoryImpl implements TransitRepository {
     }).toList();
   }
 
-  static String _resolveLineCode(String? rawLine, String? headsign, String? opId) {
+  static String _resolveLineCode(
+      String? rawLine, String? headsign, String? opId) {
     final line = rawLine?.trim() ?? '';
     final dest = (headsign ?? '').toLowerCase();
     if (opId == 'metro' || opId == null) {
       if (line == 'L1' || line == 'L2' || line == 'L3') return line;
-      if (dest.contains('kabiezes') || dest.contains('santurtzi') || dest.contains('basauri')) {
+      if (dest.contains('kabiezes') ||
+          dest.contains('santurtzi') ||
+          dest.contains('basauri')) {
         return 'L2';
       }
       if (dest.contains('plentzia') ||
@@ -250,13 +254,21 @@ class TransitRepositoryImpl implements TransitRepository {
       if (query.isEmpty) return false;
       final name = s.name.toLowerCase();
       if (name.contains(query) || query.contains(name)) return true;
-      if (query.contains('moyu') && (name.contains('eliptik') || name.contains('moyu'))) return true;
-      if (query.contains('eliptik') && (name.contains('moyu') || name.contains('eliptik'))) return true;
+      if (query.contains('moyu') &&
+          (name.contains('eliptik') || name.contains('moyu'))) {
+        return true;
+      }
+      if (query.contains('eliptik') &&
+          (name.contains('moyu') || name.contains('eliptik'))) {
+        return true;
+      }
       return false;
     }
 
-    final originCandidates = allStops.where((s) => matches(s, originClean)).toList();
-    final destCandidates = allStops.where((s) => matches(s, destClean)).toList();
+    final originCandidates =
+        allStops.where((s) => matches(s, originClean)).toList();
+    final destCandidates =
+        allStops.where((s) => matches(s, destClean)).toList();
 
     for (final oStop in originCandidates) {
       for (final dStop in destCandidates) {
@@ -295,12 +307,13 @@ class TransitRepositoryImpl implements TransitRepository {
     }
 
     // Multimodal route generator matching the reference video (e.g. Santurtzi -> Zarautz)
-    final isZarautz = destClean.contains('zarautz') ||
-        originClean.contains('santurtzi');
+    final isZarautz =
+        destClean.contains('zarautz') || originClean.contains('santurtzi');
 
     if (isZarautz) {
       final departureTime = now.add(const Duration(minutes: 6));
-      final arrivalTime = departureTime.add(const Duration(hours: 1, minutes: 39));
+      final arrivalTime =
+          departureTime.add(const Duration(hours: 1, minutes: 39));
 
       return [
         TransitItinerary(
@@ -444,7 +457,8 @@ class TransitRepositoryImpl implements TransitRepository {
         lineName: 'BEI',
         severity: 'info',
         title: 'BEI funcionamiento regular sin incidencias',
-        description: 'Tiempos de paso cada 7 minutos en todo el anillo circular.',
+        description:
+            'Tiempos de paso cada 7 minutos en todo el anillo circular.',
         activePeriod: 'En curso',
         affectedStopIds: ['tuvisa_prado', 'tuvisa_boulevard_vitoria'],
       ),
@@ -463,7 +477,9 @@ class TransitRepositoryImpl implements TransitRepository {
     ];
 
     return alerts.where((a) {
-      if (territory != null && territory != TransitTerritory.all && a.territory != territory) {
+      if (territory != null &&
+          territory != TransitTerritory.all &&
+          a.territory != territory) {
         return false;
       }
       if (operatorId != null && a.operatorId != operatorId) {

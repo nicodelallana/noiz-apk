@@ -43,8 +43,10 @@ class MapTransitSelector extends ConsumerWidget {
                 .toList();
 
             if (opsForMode.isNotEmpty) {
-              if (activeOperator == null || !opsForMode.contains(activeOperator)) {
-                ref.read(mapSelectedOperatorProvider.notifier).state = opsForMode.first;
+              if (activeOperator == null ||
+                  !opsForMode.contains(activeOperator)) {
+                ref.read(mapSelectedOperatorProvider.notifier).state =
+                    opsForMode.first;
               }
             } else {
               ref.read(mapSelectedOperatorProvider.notifier).state = null;
@@ -55,7 +57,9 @@ class MapTransitSelector extends ConsumerWidget {
         const SizedBox(height: 8),
 
         // 2. Row: Operator & Line pill (prominent route visibility)
-        if (operators.isNotEmpty || activeOperator != null || activeRoute != null) ...[
+        if (operators.isNotEmpty ||
+            activeOperator != null ||
+            activeRoute != null) ...[
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -69,7 +73,8 @@ class MapTransitSelector extends ConsumerWidget {
                     onTap: () {
                       HapticFeedback.selectionClick();
                       if (activeOperator != op) {
-                        ref.read(mapSelectedOperatorProvider.notifier).state = op;
+                        ref.read(mapSelectedOperatorProvider.notifier).state =
+                            op;
                       }
                       ref.read(mapSelectedRouteProvider.notifier).state = null;
                     },
@@ -82,7 +87,8 @@ class MapTransitSelector extends ConsumerWidget {
                   _RoutePickerPill(
                     operator: activeOperator,
                     activeRoute: activeRoute,
-                    onOpenPicker: () => _openRoutePicker(context, ref, activeOperator),
+                    onOpenPicker: () =>
+                        _openRoutePicker(context, ref, activeOperator),
                     onClearRoute: () {
                       HapticFeedback.selectionClick();
                       ref.read(mapSelectedRouteProvider.notifier).state = null;
@@ -97,7 +103,8 @@ class MapTransitSelector extends ConsumerWidget {
     );
   }
 
-  void _openRoutePicker(BuildContext context, WidgetRef ref, TransitOperator operator) {
+  void _openRoutePicker(
+      BuildContext context, WidgetRef ref, TransitOperator operator) {
     showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -284,7 +291,8 @@ class _RoutePickerPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = AppTypography.textTheme();
-    final opColor = operator != null ? Color(operator!.colorHex) : AppColors.accent;
+    final opColor =
+        operator != null ? Color(operator!.colorHex) : AppColors.accent;
 
     if (activeRoute == null) {
       return Container(
@@ -326,7 +334,9 @@ class _RoutePickerPill extends StatelessWidget {
     }
 
     final colorHex = activeRoute!.colorHex ?? '#025DA9';
-    final color = Color(int.tryParse('FF${colorHex.replaceFirst('#', '')}', radix: 16) ?? 0xFF025DA9);
+    final color = Color(
+        int.tryParse('FF${colorHex.replaceFirst('#', '')}', radix: 16) ??
+            0xFF025DA9);
 
     return Container(
       decoration: BoxDecoration(
@@ -354,7 +364,9 @@ class _RoutePickerPill extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                activeRoute!.shortName.isNotEmpty ? activeRoute!.shortName : 'Línea',
+                activeRoute!.shortName.isNotEmpty
+                    ? activeRoute!.shortName
+                    : 'Línea',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -366,7 +378,9 @@ class _RoutePickerPill extends StatelessWidget {
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 160),
               child: Text(
-                activeRoute!.longName.isNotEmpty ? activeRoute!.longName : activeRoute!.shortName,
+                activeRoute!.longName.isNotEmpty
+                    ? activeRoute!.longName
+                    : activeRoute!.shortName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: t.labelMedium!.copyWith(
@@ -377,7 +391,8 @@ class _RoutePickerPill extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             IconButton(
-              icon: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
+              icon: const Icon(Icons.close_rounded,
+                  size: 16, color: Colors.white),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
               onPressed: onClearRoute,
@@ -419,7 +434,8 @@ class _RoutePickerSheetState extends ConsumerState<_RoutePickerSheet> {
       expand: false,
       builder: (_, controller) {
         return Padding(
-          padding: EdgeInsets.fromLTRB(8, 0, 8, math.max(8.0, MediaQuery.paddingOf(context).bottom)),
+          padding: EdgeInsets.fromLTRB(
+              8, 0, 8, math.max(8.0, MediaQuery.paddingOf(context).bottom)),
           child: GlassSurface(
             blur: true,
             kind: GlassKind.overMap,
@@ -463,15 +479,20 @@ class _RoutePickerSheetState extends ConsumerState<_RoutePickerSheet> {
 
                 // Search field
                 TextField(
-                  onChanged: (val) => setState(() => _search = val.trim().toLowerCase()),
-                  style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 14),
+                  onChanged: (val) =>
+                      setState(() => _search = val.trim().toLowerCase()),
+                  style: const TextStyle(
+                      color: AppColors.darkTextPrimary, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Buscar por número o destino...',
-                    hintStyle: const TextStyle(color: AppColors.darkTextTertiary, fontSize: 14),
-                    prefixIcon: const Icon(Icons.search_rounded, color: AppColors.darkTextSecondary, size: 20),
+                    hintStyle: const TextStyle(
+                        color: AppColors.darkTextTertiary, fontSize: 14),
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        color: AppColors.darkTextSecondary, size: 20),
                     filled: true,
                     fillColor: Colors.black.withValues(alpha: 0.3),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
@@ -484,7 +505,8 @@ class _RoutePickerSheetState extends ConsumerState<_RoutePickerSheet> {
                 Expanded(
                   child: routesAsync.when(
                     loading: () => const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.accent),
                     ),
                     error: (err, _) => Center(
                       child: Text(
@@ -503,7 +525,8 @@ class _RoutePickerSheetState extends ConsumerState<_RoutePickerSheet> {
                         return Center(
                           child: Text(
                             'No se encontraron líneas coincidentes.',
-                            style: t.bodyMedium!.copyWith(color: AppColors.darkTextSecondary),
+                            style: t.bodyMedium!
+                                .copyWith(color: AppColors.darkTextSecondary),
                           ),
                         );
                       }
@@ -519,14 +542,18 @@ class _RoutePickerSheetState extends ConsumerState<_RoutePickerSheet> {
                           final r = filtered[index];
                           final routeColorHex = r.colorHex ?? '#025DA9';
                           final rColor = Color(
-                            int.tryParse('FF${routeColorHex.replaceFirst('#', '')}', radix: 16) ??
+                            int.tryParse(
+                                    'FF${routeColorHex.replaceFirst('#', '')}',
+                                    radix: 16) ??
                                 0xFF025DA9,
                           );
 
                           return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             leading: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
                                 color: rColor,
                                 borderRadius: BorderRadius.circular(8),

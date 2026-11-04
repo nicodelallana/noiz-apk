@@ -227,8 +227,7 @@ final liveAlertsProvider = FutureProvider<LiveAlerts>((ref) async {
   return ref.watch(liveAlertsServiceProvider).fetch();
 });
 
-final serviceAlertsProvider =
-    FutureProvider<List<ServiceAlert>>((ref) async {
+final serviceAlertsProvider = FutureProvider<List<ServiceAlert>>((ref) async {
   return (await ref.watch(liveAlertsProvider.future)).alerts;
 });
 
@@ -354,8 +353,7 @@ final mapAvailableRoutesProvider =
 });
 
 /// Shape coordinates [lon, lat] for the actively selected route
-final mapRouteShapeProvider =
-    FutureProvider<List<List<double>>>((ref) async {
+final mapRouteShapeProvider = FutureProvider<List<List<double>>>((ref) async {
   final route = ref.watch(mapSelectedRouteProvider);
   if (route == null) return [];
   final repo = ref.watch(transitRepositoryProvider);

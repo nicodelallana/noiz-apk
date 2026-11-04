@@ -76,8 +76,9 @@ class LineBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Light line colours (Bizkaibus green, Renfe C3 blue) need dark text.
-    final onColor =
-        color.computeLuminance() > 0.45 ? AppColors.darkBackground : Colors.white;
+    final onColor = color.computeLuminance() > 0.45
+        ? AppColors.darkBackground
+        : Colors.white;
     return Container(
       constraints: BoxConstraints(minWidth: large ? 40 : 32),
       padding: EdgeInsets.symmetric(
@@ -137,13 +138,15 @@ class SectionHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: t.titleLarge!.copyWith(color: AppColors.darkTextPrimary),
+                  style:
+                      t.titleLarge!.copyWith(color: AppColors.darkTextPrimary),
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     subtitle!,
-                    style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                    style: t.bodySmall!
+                        .copyWith(color: AppColors.darkTextSecondary),
                   ),
                 ],
               ],
@@ -192,7 +195,10 @@ class DepartureStatus extends StatelessWidget {
         // A looping pulse keeps the web repainting the whole scene every
         // frame (no raster cache there): measured ~40 % CPU at rest. The web
         // gets a still dot; native pulses inside its own repaint boundary.
-        if (kIsWeb) const _StillLiveDot() else const RepaintBoundary(child: _LiveDot()),
+        if (kIsWeb)
+          const _StillLiveDot()
+        else
+          const RepaintBoundary(child: _LiveDot()),
         const SizedBox(width: 6),
         Text(
           'En directo',
@@ -281,7 +287,8 @@ class _LiveDotState extends State<_LiveDot>
                 height: 6 + 8 * v,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.realtimeGreen.withValues(alpha: 0.45 * (1 - v)),
+                  color:
+                      AppColors.realtimeGreen.withValues(alpha: 0.45 * (1 - v)),
                 ),
               ),
               Container(
@@ -351,7 +358,8 @@ class CountdownText extends StatelessWidget {
         children: [
           ClipRect(
             child: AnimatedSwitcher(
-              duration: reduced ? Duration.zero : const Duration(milliseconds: 280),
+              duration:
+                  reduced ? Duration.zero : const Duration(milliseconds: 280),
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               layoutBuilder: (current, previous) => Stack(

@@ -10,44 +10,64 @@ void main() {
       expect(operators.length, greaterThanOrEqualTo(13));
 
       final operatorIds = operators.map((o) => o.id).toSet();
-      expect(operatorIds, containsAll([
-        'metro',
-        'bizkaibus',
-        'bilbobus',
-        'euskotren',
-        'tranbia_bilbao',
-        'tranbia_gasteiz',
-        'renfe',
-        'dbus',
-        'lurraldebus',
-        'tuvisa',
-        'alavabus',
-        'artxanda',
-        'la_union',
-      ]));
+      expect(
+          operatorIds,
+          containsAll([
+            'metro',
+            'bizkaibus',
+            'bilbobus',
+            'euskotren',
+            'tranbia_bilbao',
+            'tranbia_gasteiz',
+            'renfe',
+            'dbus',
+            'lurraldebus',
+            'tuvisa',
+            'alavabus',
+            'artxanda',
+            'la_union',
+          ]));
     });
 
     test('correctly maps territories (Bizkaia, Gipuzkoa, Araba)', () {
       final bizkaiaOps = TransitOperator.byTerritory(TransitTerritory.bizkaia);
-      final gipuzkoaOps = TransitOperator.byTerritory(TransitTerritory.gipuzkoa);
+      final gipuzkoaOps =
+          TransitOperator.byTerritory(TransitTerritory.gipuzkoa);
       final arabaOps = TransitOperator.byTerritory(TransitTerritory.araba);
 
-      expect(bizkaiaOps.map((o) => o.id), containsAll([
-        'metro', 'bizkaibus', 'bilbobus', 'renfe', 'artxanda', 'tranbia_bilbao',
-      ]));
+      expect(
+          bizkaiaOps.map((o) => o.id),
+          containsAll([
+            'metro',
+            'bizkaibus',
+            'bilbobus',
+            'renfe',
+            'artxanda',
+            'tranbia_bilbao',
+          ]));
 
-      expect(gipuzkoaOps.map((o) => o.id), containsAll([
-        'dbus', 'lurraldebus',
-      ]));
+      expect(
+          gipuzkoaOps.map((o) => o.id),
+          containsAll([
+            'dbus',
+            'lurraldebus',
+          ]));
 
-      expect(arabaOps.map((o) => o.id), containsAll([
-        'tuvisa', 'alavabus', 'tranbia_gasteiz', 'la_union',
-      ]));
+      expect(
+          arabaOps.map((o) => o.id),
+          containsAll([
+            'tuvisa',
+            'alavabus',
+            'tranbia_gasteiz',
+            'la_union',
+          ]));
     });
 
-    test('Departure status adheres to strict real-time vs scheduled classification', () {
+    test(
+        'Departure status adheres to strict real-time vs scheduled classification',
+        () {
       final now = DateTime.now();
-      
+
       // Real-time departure
       final rtDeparture = Departure(
         tripId: 'rt_1',
@@ -83,8 +103,10 @@ void main() {
       expect(schedDeparture.isRealtime, false);
 
       // Verify that neither model text nor status ever mentions "horario teórico"
-      expect(rtDeparture.toString().toLowerCase(), isNot(contains('horario teórico')));
-      expect(schedDeparture.toString().toLowerCase(), isNot(contains('horario teórico')));
+      expect(rtDeparture.toString().toLowerCase(),
+          isNot(contains('horario teórico')));
+      expect(schedDeparture.toString().toLowerCase(),
+          isNot(contains('horario teórico')));
     });
   });
 }

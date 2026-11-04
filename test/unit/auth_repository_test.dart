@@ -23,8 +23,10 @@ class FakePostgrestFilterBuilder<T> extends Fake
   final T? _value;
 
   @override
-  Future<R> then<R>(FutureOr<R> Function(T value) onValue, {Function? onError}) {
-    return Future<T?>.value(_value).then((v) => onValue(v as T), onError: onError);
+  Future<R> then<R>(FutureOr<R> Function(T value) onValue,
+      {Function? onError}) {
+    return Future<T?>.value(_value)
+        .then((v) => onValue(v as T), onError: onError);
   }
 
   @override
@@ -34,7 +36,9 @@ class FakePostgrestFilterBuilder<T> extends Fake
 
   @override
   Future<T> catchError(Function onError, {bool Function(Object error)? test}) {
-    return Future<T?>.value(_value).then((v) => v as T).catchError(onError, test: test);
+    return Future<T?>.value(_value)
+        .then((v) => v as T)
+        .catchError(onError, test: test);
   }
 }
 

@@ -60,7 +60,6 @@ class GlassSurface extends StatelessWidget {
     BoxShadow(color: Color(0x1F000000), blurRadius: 2, offset: Offset(0, 1)),
   ];
 
-
   @override
   Widget build(BuildContext context) {
     final shape = continuousShape(
@@ -89,7 +88,8 @@ class GlassSurface extends StatelessWidget {
 
     // Fill and sheen are painted with the shape itself, so the frosted
     // (no-blur) variant needs no clip layer at all.
-    final sheen = Colors.white.withValues(alpha: kind == GlassKind.clear ? 0.10 : 0.08);
+    final sheen =
+        Colors.white.withValues(alpha: kind == GlassKind.clear ? 0.10 : 0.08);
     final body = DecoratedBox(
       decoration: ShapeDecoration(
         shape: shape,

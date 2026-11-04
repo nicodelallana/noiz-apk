@@ -80,8 +80,7 @@ class _NearbyTransitScreenState extends ConsumerState<NearbyTransitScreen> {
                           color: isSel
                               ? Colors.white
                               : AppColors.darkTextSecondary,
-                          fontWeight:
-                              isSel ? FontWeight.w700 : FontWeight.w500,
+                          fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
                           fontSize: 13,
                         ),
                         backgroundColor: AppColors.darkSurfaceElevated,
@@ -200,7 +199,6 @@ class _NearbyTransitScreenState extends ConsumerState<NearbyTransitScreen> {
                                 });
                               },
                             ),
-
                             if (isExpanded)
                               _StopDeparturesExpandedView(
                                 stop: stop,

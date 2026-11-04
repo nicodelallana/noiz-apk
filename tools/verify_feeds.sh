@@ -46,22 +46,26 @@ test_feed() {
 
   # Fetch headers and probe content
   local http_code
-  http_code=$(curl -sSL --max-time 15 -D "$header_file" -o "$body_file" -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+  http_code=$(curl -sSL --connect-timeout 10 --max-time 30 -D "$header_file" -o "$body_file" -w "%{http_code}" "$url" 2>/dev/null || true)
+  # Keep only the last 3 characters of http_code (handles redirect concatenations)
+  http_code=$(echo "$http_code" | grep -oE '[0-9]{3}' | tail -n 1)
+  http_code="${http_code:-000}"
 
-  local content_type
-  content_type=$(grep -i '^content-type:' "$header_file" | tr -d '\r' | awk '{print $2}' | tail -n 1)
+  local content_type=""
+  local content_length=""
+  local etag=""
+  local last_modified=""
+  if [ -f "$header_file" ]; then
+    content_type=$(grep -i '^content-type:' "$header_file" | tr -d '\r' | awk '{print $2}' | tail -n 1)
+    content_length=$(grep -i '^content-length:' "$header_file" | tr -d '\r' | awk '{print $2}' | tail -n 1)
+    etag=$(grep -i '^etag:' "$header_file" | tr -d '\r' | awk '{print $2}' | tail -n 1)
+    last_modified=$(grep -i '^last-modified:' "$header_file" | tr -d '\r' | cut -d' ' -f2- | tail -n 1)
+  fi
 
-  local content_length
-  content_length=$(grep -i '^content-length:' "$header_file" | tr -d '\r' | awk '{print $2}' | tail -n 1)
-
-  local etag
-  etag=$(grep -i '^etag:' "$header_file" | tr -d '\r' | awk '{print $2}' | tail -n 1)
-
-  local last_modified
-  last_modified=$(grep -i '^last-modified:' "$header_file" | tr -d '\r' | cut -d' ' -f2- | tail -n 1)
-
-  local file_bytes
-  file_bytes=$(wc -c < "$body_file" 2>/dev/null || echo 0)
+  local file_bytes=0
+  if [ -f "$body_file" ]; then
+    file_bytes=$(wc -c < "$body_file" 2>/dev/null || echo 0)
+  fi
 
   if [ "$http_code" = "200" ]; then
     echo -e "  Status: ${GREEN}200 OK${RESET} | Bytes: ${file_bytes} | Content-Type: ${content_type:-unknown}"
@@ -115,7 +119,7 @@ test_feed "Metro Bilbao" "GTFS Static Schedule ZIP" \
   "https://cms.metrobilbao.eus/get/open_data/horarios/es" "zip" "false"
 
 test_feed "Metro Bilbao" "Tariffs CSV" \
-  "https://cms.metrobilbao.eus/get/open_data/tickets/es" "csv" "false"
+  "https://cms.metrobilbao.eus/es/get/open_data/tickets/es" "csv" "false"
 
 test_feed "Metro Bilbao" "Stations JSON" \
   "https://cms.metrobilbao.eus/get/open_data/json/estaciones/es" "json" "false"

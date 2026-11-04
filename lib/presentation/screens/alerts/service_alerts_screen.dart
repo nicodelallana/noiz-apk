@@ -127,7 +127,8 @@ class _ServiceAlertsScreenState extends ConsumerState<ServiceAlertsScreen> {
                   final rest = all
                       .where((r) => !nearby.contains(r))
                       .where(
-                        (r) => filter == null || r.alert.operatorId == filter.id,
+                        (r) =>
+                            filter == null || r.alert.operatorId == filter.id,
                       )
                       .toList();
 
@@ -152,9 +153,8 @@ class _ServiceAlertsScreenState extends ConsumerState<ServiceAlertsScreen> {
                       delegate: _FilterBarDelegate(
                         selected: filter,
                         onSelected: _selectFilter,
-                        textScale: MediaQuery.textScalerOf(context)
-                                .scale(15) /
-                            15,
+                        textScale:
+                            MediaQuery.textScalerOf(context).scale(15) / 15,
                       ),
                     ),
                     if (rest.isEmpty)
@@ -361,7 +361,8 @@ class _FilterBarDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => minExtent;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: _OperatorFilterBar(
@@ -512,7 +513,8 @@ class _OperatorFilterBarState extends State<_OperatorFilterBar> {
                                   if (i == selectedIndex) return;
                                   HapticFeedback.selectionClick();
                                   widget.onSelected(_options[i]);
-                                  _reveal(lefts[i], widths[i], viewport, reduced);
+                                  _reveal(
+                                      lefts[i], widths[i], viewport, reduced);
                                 },
                               ),
                           ],
@@ -822,7 +824,8 @@ class _AlertCard extends StatelessWidget {
                 ),
                 if (alert.activePeriod != null || stop != null) ...[
                   const SizedBox(height: 12),
-                  const Divider(height: 1, thickness: 1, color: AppColors.darkBorder),
+                  const Divider(
+                      height: 1, thickness: 1, color: AppColors.darkBorder),
                   const SizedBox(height: 10),
                   Row(
                     children: [

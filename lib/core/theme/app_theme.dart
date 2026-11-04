@@ -31,8 +31,7 @@ abstract final class AppTheme {
       onSurfaceVariant:
           isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
       outline: isDark ? AppColors.darkBorderStrong : AppColors.lightBorder,
-      outlineVariant:
-          isDark ? AppColors.darkBorder : AppColors.lightBorder,
+      outlineVariant: isDark ? AppColors.darkBorder : AppColors.lightBorder,
     );
 
     return ThemeData(
@@ -55,9 +54,8 @@ abstract final class AppTheme {
       ),
 
       // Tabs are transparent so the shell's aurora shows through.
-      scaffoldBackgroundColor: isDark
-          ? Colors.transparent
-          : AppColors.lightBackground,
+      scaffoldBackgroundColor:
+          isDark ? Colors.transparent : AppColors.lightBackground,
 
       // ── AppBar ──────────────────────────────────────────────────────────
       appBarTheme: AppBarTheme(
@@ -65,13 +63,11 @@ abstract final class AppTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         backgroundColor: Colors.transparent,
-        foregroundColor: isDark
-            ? AppColors.darkTextPrimary
-            : AppColors.lightTextPrimary,
+        foregroundColor:
+            isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
         titleTextStyle: textTheme.titleLarge?.copyWith(
-          color: isDark
-              ? AppColors.darkTextPrimary
-              : AppColors.lightTextPrimary,
+          color:
+              isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
           fontWeight: FontWeight.w700,
           letterSpacing: -0.5,
         ),
@@ -137,9 +133,8 @@ abstract final class AppTheme {
 
       // ── Bottom Sheet ────────────────────────────────────────────────────
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: isDark
-            ? AppColors.darkSurface
-            : AppColors.lightSurface,
+        backgroundColor:
+            isDark ? AppColors.darkSurface : AppColors.lightSurface,
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),

@@ -76,7 +76,9 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     final activeOperator = ref.watch(selectedOperatorProvider);
     final activeTrip = ref.watch(activeLiveTripProvider);
-    final nearbyAlerts = ref.watch(rankedServiceAlertsProvider).valueOrNull
+    final nearbyAlerts = ref
+            .watch(rankedServiceAlertsProvider)
+            .valueOrNull
             ?.where((r) =>
                 r.distanceKm != null &&
                 r.distanceKm! < TransitConstants.nearbyAlertsRadiusKm)
@@ -166,9 +168,11 @@ class _TabSpec {
 }
 
 const _tabs = [
-  _TabSpec('Inicio', Icons.access_time_rounded, Icons.access_time_filled_rounded),
+  _TabSpec(
+      'Inicio', Icons.access_time_rounded, Icons.access_time_filled_rounded),
   _TabSpec('Mapa', Icons.map_outlined, Icons.map_rounded),
-  _TabSpec('Alertas', Icons.notifications_none_rounded, Icons.notifications_rounded),
+  _TabSpec(
+      'Alertas', Icons.notifications_none_rounded, Icons.notifications_rounded),
   _TabSpec('Cuenta', Icons.person_outline_rounded, Icons.person_rounded),
 ];
 
@@ -263,7 +267,8 @@ class _TabItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.darkTextPrimary : AppColors.darkTextSecondary;
+    final color =
+        selected ? AppColors.darkTextPrimary : AppColors.darkTextSecondary;
     final reduced = Motion.reduced(context);
     final m = Motion.snappy;
 

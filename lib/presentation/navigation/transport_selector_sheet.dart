@@ -64,8 +64,9 @@ class TransportSelectorBottomSheet extends ConsumerWidget {
     final activeOperator = ref.watch(selectedOperatorProvider);
 
     // List operators for the chosen territory (default to Bizkaia if 'all')
-    final effectiveTerritory =
-        territory == TransitTerritory.all ? TransitTerritory.bizkaia : territory;
+    final effectiveTerritory = territory == TransitTerritory.all
+        ? TransitTerritory.bizkaia
+        : territory;
     final operators = TransitOperator.byTerritory(effectiveTerritory);
     final t = AppTypography.textTheme();
     final reduced = Motion.reduced(context);

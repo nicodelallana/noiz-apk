@@ -7,7 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Lottie Animation Widgets & Accessibility Tests', () {
-    testWidgets('ArrivalPulseIndicator renders static fallback when animations are disabled',
+    testWidgets(
+        'ArrivalPulseIndicator renders static fallback when animations are disabled',
         (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -25,7 +26,8 @@ void main() {
       expect(find.byType(ArrivalPulseIndicator), findsOneWidget);
     });
 
-    testWidgets('EmptyTransitView renders title, message and triggers onRetry callback',
+    testWidgets(
+        'EmptyTransitView renders title, message and triggers onRetry callback',
         (tester) async {
       var retryCalled = false;
 
@@ -74,7 +76,8 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets('SaveTripSuccessDialog shows dialog and dismisses on button tap',
+    testWidgets(
+        'SaveTripSuccessDialog shows dialog and dismisses on button tap',
         (tester) async {
       await tester.pumpWidget(
         const MaterialApp(

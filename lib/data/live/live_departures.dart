@@ -41,7 +41,9 @@ class LiveDeparturesService {
   Future<List<Departure>?> fetch(Stop stop, String operatorId) {
     final key = '$operatorId|${stop.id}';
     final hit = _cache[key];
-    if (hit != null && DateTime.now().difference(hit.$1) < _fresh) return hit.$2;
+    if (hit != null && DateTime.now().difference(hit.$1) < _fresh) {
+      return hit.$2;
+    }
     final request = _fetch(stop, operatorId);
     _cache[key] = (DateTime.now(), request);
     return request;
@@ -49,7 +51,9 @@ class LiveDeparturesService {
 
   Future<List<Departure>?> _fetch(Stop stop, String operatorId) async {
     final feed = _feedFor[operatorId];
-    if (feed == null || stop.latitude == null || stop.longitude == null) return null;
+    if (feed == null || stop.latitude == null || stop.longitude == null) {
+      return null;
+    }
     try {
       final res = await _dio.get<Map<String, dynamic>>(
         '${LiveApi.base}/departures',

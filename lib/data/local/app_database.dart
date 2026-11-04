@@ -470,7 +470,8 @@ class AppDatabase {
       args.addAll([minLat, maxLat, minLon, maxLon]);
 
       if (!includePlatforms) {
-        sql.write(" AND (location_type = 1 OR parent_station IS NULL OR parent_station = '')");
+        sql.write(
+            " AND (location_type = 1 OR parent_station IS NULL OR parent_station = '')");
       }
 
       if (operatorId != null && operatorId.isNotEmpty) {
@@ -731,7 +732,8 @@ class AppDatabase {
   }
 
   /// Searches for a direct transit connection between two stops.
-  Future<DirectRouteRecord?> findDirectRoute(String originStopId, String destStopId) async {
+  Future<DirectRouteRecord?> findDirectRoute(
+      String originStopId, String destStopId) async {
     await _ensureOpen();
     final rows = await _executor.runSelect('''
       SELECT 

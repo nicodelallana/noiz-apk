@@ -20,14 +20,16 @@ QueryExecutor openTransitDatabase({File? file}) {
     try {
       final data = await rootBundle.load('assets/db/transit.sqlite');
       if (!dbFile.existsSync() || dbFile.lengthSync() != data.lengthInBytes) {
-        final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+        final bytes =
+            data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
         await dbFile.writeAsBytes(bytes, flush: true);
       }
     } catch (_) {
       if (!dbFile.existsSync() || dbFile.lengthSync() < 1024) {
         try {
           final data = await rootBundle.load('assets/db/transit.sqlite');
-          final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+          final bytes =
+              data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
           await dbFile.writeAsBytes(bytes, flush: true);
         } catch (_) {}
       }

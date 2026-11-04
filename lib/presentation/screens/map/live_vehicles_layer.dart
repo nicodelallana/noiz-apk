@@ -50,7 +50,8 @@ class LiveLayerState {
 /// station (Metro, Renfe) are rings in the line colour — they read as
 /// "approximate", which is what they are.
 class LiveVehiclesController {
-  LiveVehiclesController({LiveVehiclesService? service, required this.reduceMotion})
+  LiveVehiclesController(
+      {LiveVehiclesService? service, required this.reduceMotion})
       : _service = service ?? LiveVehiclesService();
 
   static const sourceId = 'live-vehicles';
@@ -104,8 +105,9 @@ class LiveVehiclesController {
     for (final entry in input.entries) {
       final v = entry.value;
       if (_filterOperator != null && _filterOperator!.isNotEmpty) {
-        final matchesOp = v.operatorName.toLowerCase().contains(_filterOperator!) ||
-            _filterOperator!.contains(v.operatorName.toLowerCase());
+        final matchesOp =
+            v.operatorName.toLowerCase().contains(_filterOperator!) ||
+                _filterOperator!.contains(v.operatorName.toLowerCase());
         if (!matchesOp) continue;
       }
       if (_filterLine != null && _filterLine!.isNotEmpty) {
@@ -132,7 +134,11 @@ class LiveVehiclesController {
         circleStrokeColor: [Expressions.get, 'stroke'],
         circleStrokeWidth: [
           Expressions.caseExpression,
-          [Expressions.equal, [Expressions.get, 'kind'], 'gps'],
+          [
+            Expressions.equal,
+            [Expressions.get, 'kind'],
+            'gps'
+          ],
           2,
           3,
         ],
@@ -202,7 +208,8 @@ class LiveVehiclesController {
     var bestKm = double.infinity;
     for (final v in _vehicles.values) {
       final p = _shown[v.id] ?? LatLng(v.latitude, v.longitude);
-      final km = haversineKm(tap.latitude, tap.longitude, p.latitude, p.longitude);
+      final km =
+          haversineKm(tap.latitude, tap.longitude, p.latitude, p.longitude);
       if (km < bestKm) {
         bestKm = km;
         best = v;
@@ -234,7 +241,8 @@ class LiveVehiclesController {
       final stale = last == null ||
           DateTime.now().difference(last.fetchedAt) > _staleAfter;
       if (stale) {
-        state.value = state.value.copyWith(status: LiveStatus.unavailable, count: 0);
+        state.value =
+            state.value.copyWith(status: LiveStatus.unavailable, count: 0);
         _apply(const {});
       }
     } finally {
@@ -266,7 +274,8 @@ class LiveVehiclesController {
       final end = LatLng(v.latitude, v.longitude);
       final start = from[v.id];
       final glide = start != null &&
-          haversineKm(start.latitude, start.longitude, end.latitude, end.longitude) <
+          haversineKm(start.latitude, start.longitude, end.latitude,
+                  end.longitude) <
               _maxGlideKm;
       positions[v.id] = glide
           ? LatLng(
@@ -294,7 +303,8 @@ class LiveVehiclesController {
                 'line': v.line,
                 'kind': v.kind.name,
                 'fill': v.kind == LivePositionKind.gps ? v.colorHex : '#06080C',
-                'stroke': v.kind == LivePositionKind.gps ? '#FFFFFF' : v.colorHex,
+                'stroke':
+                    v.kind == LivePositionKind.gps ? '#FFFFFF' : v.colorHex,
               },
               'geometry': {
                 'type': 'Point',
@@ -317,7 +327,8 @@ class LiveVehiclesController {
 /// Glass chip over the map: "En directo · 297 vehículos", with an eye button
 /// to hide them; tapping the text explains GPS vs. station positions.
 class LiveVehiclesChip extends StatelessWidget {
-  const LiveVehiclesChip({super.key, required this.state, required this.onToggle});
+  const LiveVehiclesChip(
+      {super.key, required this.state, required this.onToggle});
 
   final ValueListenable<LiveLayerState> state;
   final VoidCallback onToggle;
@@ -329,10 +340,18 @@ class LiveVehiclesChip extends StatelessWidget {
       valueListenable: state,
       builder: (context, s, _) {
         final (label, dot) = switch (s.status) {
-          LiveStatus.connecting => ('Conectando con el directo…', AppColors.darkTextTertiary),
-          LiveStatus.unavailable => ('Sin datos en directo ahora', AppColors.darkTextTertiary),
+          LiveStatus.connecting => (
+              'Conectando con el directo…',
+              AppColors.darkTextTertiary
+            ),
+          LiveStatus.unavailable => (
+              'Sin datos en directo ahora',
+              AppColors.darkTextTertiary
+            ),
           LiveStatus.live => (
-              s.visible ? 'En directo · ${s.count} vehículos' : 'Vehículos ocultos',
+              s.visible
+                  ? 'En directo · ${s.count} vehículos'
+                  : 'Vehículos ocultos',
               s.visible ? AppColors.realtimeGreen : AppColors.darkTextTertiary,
             ),
         };
@@ -359,7 +378,8 @@ class LiveVehiclesChip extends StatelessWidget {
                         Container(
                           width: 8,
                           height: 8,
-                          decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                          decoration:
+                              BoxDecoration(color: dot, shape: BoxShape.circle),
                         ),
                         const SizedBox(width: 8),
                         Flexible(
@@ -391,7 +411,9 @@ class LiveVehiclesChip extends StatelessWidget {
                 tooltip: s.visible ? 'Ocultar vehículos' : 'Mostrar vehículos',
                 onPressed: s.status == LiveStatus.live ? onToggle : null,
                 icon: Icon(
-                  s.visible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                  s.visible
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_rounded,
                   size: 18,
                 ),
                 color: AppColors.darkTextSecondary,
@@ -410,7 +432,8 @@ class _LiveInfoSheet extends StatelessWidget {
 
   final LiveVehiclesSnapshot? snapshot;
 
-  static Future<void> show(BuildContext context, LiveVehiclesSnapshot? snapshot) {
+  static Future<void> show(
+      BuildContext context, LiveVehiclesSnapshot? snapshot) {
     return showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -434,9 +457,13 @@ class _LiveInfoSheet extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: t.titleSmall!.copyWith(color: AppColors.darkTextPrimary)),
+                    Text(title,
+                        style: t.titleSmall!
+                            .copyWith(color: AppColors.darkTextPrimary)),
                     const SizedBox(height: 2),
-                    Text(body, style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary)),
+                    Text(body,
+                        style: t.bodySmall!
+                            .copyWith(color: AppColors.darkTextSecondary)),
                   ],
                 ),
               ),
@@ -456,7 +483,9 @@ class _LiveInfoSheet extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Vehículos en directo', style: t.headlineSmall!.copyWith(color: AppColors.darkTextPrimary)),
+              Text('Vehículos en directo',
+                  style: t.headlineSmall!
+                      .copyWith(color: AppColors.darkTextPrimary)),
               const SizedBox(height: 16),
               row(
                 const _Marker(gps: true, color: Color(0xFF9CCD64)),
@@ -471,14 +500,16 @@ class _LiveInfoSheet extends StatelessWidget {
                     'exacta. No es GPS.',
               ),
               row(
-                const Icon(Icons.do_not_disturb_on_outlined, size: 18, color: AppColors.darkTextTertiary),
+                const Icon(Icons.do_not_disturb_on_outlined,
+                    size: 18, color: AppColors.darkTextTertiary),
                 'Sin posiciones en directo',
                 'Bilbobus y Euskotren no publican ahora posiciones de sus vehículos. '
                     'Sus salidas se muestran según horario.',
               ),
               if (failed.isNotEmpty)
                 row(
-                  const Icon(Icons.error_outline_rounded, size: 18, color: AppColors.delayedAmber),
+                  const Icon(Icons.error_outline_rounded,
+                      size: 18, color: AppColors.delayedAmber),
                   'Sin conexión con: ${failed.join(', ')}',
                   'Ese operador no ha respondido en la última consulta.',
                 ),
@@ -488,7 +519,8 @@ class _LiveInfoSheet extends StatelessWidget {
                   (snapshot?.attribution.isNotEmpty ?? false)
                       ? snapshot!.attribution
                       : 'Datos en directo: CTB · Diputación Foral de Bizkaia · Renfe (CC BY 4.0)',
-                  style: t.labelMedium!.copyWith(color: AppColors.darkTextTertiary),
+                  style: t.labelMedium!
+                      .copyWith(color: AppColors.darkTextTertiary),
                 ),
               ),
             ],
@@ -513,7 +545,8 @@ class _Marker extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: gps ? color : AppColors.darkBackground,
-        border: Border.all(color: gps ? Colors.white : color, width: gps ? 2 : 3),
+        border:
+            Border.all(color: gps ? Colors.white : color, width: gps ? 2 : 3),
       ),
     );
   }
@@ -527,7 +560,8 @@ class VehicleSheet extends StatelessWidget {
   final LiveVehicle vehicle;
   final String? attribution;
 
-  static Future<void> show(BuildContext context, LiveVehicle vehicle, {String? attribution}) {
+  static Future<void> show(BuildContext context, LiveVehicle vehicle,
+      {String? attribution}) {
     return showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -536,14 +570,15 @@ class VehicleSheet extends StatelessWidget {
     );
   }
 
-  static Color _color(String hex) =>
-      Color(int.tryParse('FF${hex.replaceFirst('#', '')}', radix: 16) ?? 0xFF0A84FF);
+  static Color _color(String hex) => Color(
+      int.tryParse('FF${hex.replaceFirst('#', '')}', radix: 16) ?? 0xFF0A84FF);
 
   @override
   Widget build(BuildContext context) {
     final t = AppTypography.textTheme();
     final v = vehicle;
-    final ageS = DateTime.now().difference(v.reportedAt).inSeconds.clamp(0, 9999);
+    final ageS =
+        DateTime.now().difference(v.reportedAt).inSeconds.clamp(0, 9999);
     final age = ageS < 60 ? 'hace $ageS s' : 'hace ${ageS ~/ 60} min';
     final gps = v.kind == LivePositionKind.gps;
     final where = v.stopName == null
@@ -573,21 +608,26 @@ class VehicleSheet extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  LineBadge(label: v.line, color: _color(v.colorHex), large: true),
+                  LineBadge(
+                      label: v.line, color: _color(v.colorHex), large: true),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          v.headsign != null ? 'Hacia ${v.headsign}' : v.operatorName,
+                          v.headsign != null
+                              ? 'Hacia ${v.headsign}'
+                              : v.operatorName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: t.titleLarge!.copyWith(color: AppColors.darkTextPrimary),
+                          style: t.titleLarge!
+                              .copyWith(color: AppColors.darkTextPrimary),
                         ),
                         Text(
                           v.operatorName,
-                          style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                          style: t.bodySmall!
+                              .copyWith(color: AppColors.darkTextSecondary),
                         ),
                       ],
                     ),
@@ -596,7 +636,9 @@ class VehicleSheet extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               if (where != null)
-                Text(where, style: t.titleMedium!.copyWith(color: AppColors.darkTextPrimary)),
+                Text(where,
+                    style: t.titleMedium!
+                        .copyWith(color: AppColors.darkTextPrimary)),
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -605,14 +647,20 @@ class VehicleSheet extends StatelessWidget {
                     height: 8,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: gps ? AppColors.realtimeGreen : AppColors.darkTextSecondary,
+                      color: gps
+                          ? AppColors.realtimeGreen
+                          : AppColors.darkTextSecondary,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    gps ? 'GPS en directo · $age' : 'Posición por estación · $age',
+                    gps
+                        ? 'GPS en directo · $age'
+                        : 'Posición por estación · $age',
                     style: AppTypography.time.copyWith(
-                      color: gps ? AppColors.realtimeGreen : AppColors.darkTextSecondary,
+                      color: gps
+                          ? AppColors.realtimeGreen
+                          : AppColors.darkTextSecondary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -623,13 +671,16 @@ class VehicleSheet extends StatelessWidget {
                 Text(
                   'No es GPS: el operador sitúa el tren en una estación de su '
                   'recorrido, no en su posición exacta.',
-                  style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                  style:
+                      t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
                 ),
               ],
               const SizedBox(height: 14),
               Text(
-                attribution ?? 'Datos en directo: CTB · Diputación Foral de Bizkaia · Renfe (CC BY 4.0)',
-                style: t.labelMedium!.copyWith(color: AppColors.darkTextTertiary),
+                attribution ??
+                    'Datos en directo: CTB · Diputación Foral de Bizkaia · Renfe (CC BY 4.0)',
+                style:
+                    t.labelMedium!.copyWith(color: AppColors.darkTextTertiary),
               ),
             ],
           ),

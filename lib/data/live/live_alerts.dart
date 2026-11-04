@@ -52,7 +52,8 @@ class LiveAlertsService {
       description: a['body'] as String? ?? '',
       activePeriod: to == null ? null : _until(to),
       locations: [
-        for (final s in (a['stops'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>())
+        for (final s in (a['stops'] as List<dynamic>? ?? const [])
+            .cast<Map<String, dynamic>>())
           AlertLocation(
             name: s['name'] as String,
             latitude: (s['lat'] as num).toDouble(),
@@ -64,8 +65,18 @@ class LiveAlertsService {
   }
 
   static const _months = [
-    'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-    'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
+    'ene',
+    'feb',
+    'mar',
+    'abr',
+    'may',
+    'jun',
+    'jul',
+    'ago',
+    'sep',
+    'oct',
+    'nov',
+    'dic',
   ];
 
   /// "Hasta las 18:30" today, "Hasta el 12 nov" otherwise. Null for the

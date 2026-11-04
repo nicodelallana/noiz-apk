@@ -90,8 +90,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   alignment: Alignment.centerRight,
                   child: GlassButton(
                     kind: GlassKind.clear,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
                     onPressed: _skip,
                     child: Text(
                       'Saltar',

@@ -44,7 +44,8 @@ class DepartureHeroCard extends ConsumerWidget {
         activeTrip.destination == departure.headsign;
 
     final lineColor = Color(departure.routeColorHex ?? operator.colorHex);
-    final delayMinutes = departure.isRealtime ? departure.delaySeconds ~/ 60 : 0;
+    final delayMinutes =
+        departure.isRealtime ? departure.delaySeconds ~/ 60 : 0;
     final t = AppTypography.textTheme();
     final reduced = Motion.reduced(context);
     final next = followingDeparture;
@@ -252,8 +253,7 @@ class DepartureHeroCard extends ConsumerWidget {
       followingDepartureTime: followingDeparture?.scheduledTime,
     );
 
-    final hasPerm =
-        await ref.read(liveTripServiceProvider).requestPermission();
+    final hasPerm = await ref.read(liveTripServiceProvider).requestPermission();
     await ref.read(activeLiveTripProvider.notifier).startTrip(liveTrip);
 
     if (context.mounted) {
@@ -353,7 +353,9 @@ class _FollowButtonState extends State<_FollowButton> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  following ? BarikIcons.checkCircle : BarikIcons.navigationArrow,
+                  following
+                      ? BarikIcons.checkCircle
+                      : BarikIcons.navigationArrow,
                   size: 18,
                   color: following ? AppColors.realtimeGreen : Colors.white,
                 ),

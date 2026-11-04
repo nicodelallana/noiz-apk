@@ -44,8 +44,7 @@ class LiveTripServiceImpl implements LiveTripService {
   Future<bool> requestPermission() async {
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return true;
     try {
-      final granted =
-          await _channel.invokeMethod<bool>('requestPermission');
+      final granted = await _channel.invokeMethod<bool>('requestPermission');
       return granted ?? false;
     } on Exception {
       return false;
@@ -56,8 +55,7 @@ class LiveTripServiceImpl implements LiveTripService {
   Future<bool> checkPermission() async {
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return true;
     try {
-      final granted =
-          await _channel.invokeMethod<bool>('checkPermission');
+      final granted = await _channel.invokeMethod<bool>('checkPermission');
       return granted ?? false;
     } on Exception {
       return false;

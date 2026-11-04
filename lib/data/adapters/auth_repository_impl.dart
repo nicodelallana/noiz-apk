@@ -83,7 +83,8 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<UserProfile?> signInWithGoogle() async {
     final client = _supabase;
     if (client == null) {
-      throw const AuthException('Supabase no está configurado en este entorno.');
+      throw const AuthException(
+          'Supabase no está configurado en este entorno.');
     }
     try {
       final googleUser = await _googleSignIn.signIn();
@@ -119,7 +120,8 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<UserProfile?> signInWithApple() async {
     final client = _supabase;
     if (client == null) {
-      throw const AuthException('Supabase no está configurado en este entorno.');
+      throw const AuthException(
+          'Supabase no está configurado en este entorno.');
     }
     try {
       final credential = await SignInWithApple.getAppleIDCredential(

@@ -38,8 +38,7 @@ class MetroDeparturesScreen extends ConsumerStatefulWidget {
       _MetroDeparturesScreenState();
 }
 
-class _MetroDeparturesScreenState
-    extends ConsumerState<MetroDeparturesScreen> {
+class _MetroDeparturesScreenState extends ConsumerState<MetroDeparturesScreen> {
   @override
   void initState() {
     super.initState();
@@ -125,7 +124,8 @@ void _openStopPicker(
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black.withValues(alpha: 0.35),
-    builder: (ctx) => _MultiOperatorStopSearchModal(isDestination: isDestination),
+    builder: (ctx) =>
+        _MultiOperatorStopSearchModal(isDestination: isDestination),
   );
 }
 
@@ -358,11 +358,13 @@ class _HomeMenu extends StatelessWidget {
         switch (value) {
           case 'planner':
             Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const RoutePlannerScreen()),
+              MaterialPageRoute<void>(
+                  builder: (_) => const RoutePlannerScreen()),
             );
           case 'nearby':
             Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const NearbyTransitScreen()),
+              MaterialPageRoute<void>(
+                  builder: (_) => const NearbyTransitScreen()),
             );
           case 'saved':
             context.go('/saved-trips');
@@ -381,7 +383,8 @@ class _HomeMenu extends StatelessWidget {
         // Developer tool: never shipped in release builds.
         if (kDebugMode) ...[
           const PopupMenuDivider(height: 1),
-          item('simulator', BarikIcons.broadcast, 'Simulador Live Activity (debug)',
+          item('simulator', BarikIcons.broadcast,
+              'Simulador Live Activity (debug)',
               color: AppColors.delayedAmber),
         ],
       ],
@@ -442,7 +445,8 @@ class _RouteCapsule extends StatelessWidget {
                 ),
                 const Padding(
                   padding: EdgeInsets.only(left: 46),
-                  child: Divider(height: 1, thickness: 0.7, color: AppColors.darkBorder),
+                  child: Divider(
+                      height: 1, thickness: 0.7, color: AppColors.darkBorder),
                 ),
                 _RouteRow(
                   label: 'Hacia',
@@ -485,7 +489,8 @@ class _RouteCapsule extends StatelessWidget {
                   decoration: ShapeDecoration(
                     color: Colors.white.withValues(alpha: 0.10),
                     shape: CircleBorder(
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+                      side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.12)),
                     ),
                   ),
                   child: const Icon(
@@ -540,7 +545,8 @@ class _RouteRow extends StatelessWidget {
                 width: 52,
                 child: Text(
                   label,
-                  style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                  style:
+                      t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
                 ),
               ),
               Expanded(
@@ -611,7 +617,10 @@ class _MapLinkCard extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [color.withValues(alpha: 0.85), color.withValues(alpha: 0.45)],
+                colors: [
+                  color.withValues(alpha: 0.85),
+                  color.withValues(alpha: 0.45)
+                ],
               ),
               shape: continuousShape(
                 borderRadius: BorderRadius.circular(12),
@@ -626,13 +635,15 @@ class _MapLinkCard extends StatelessWidget {
               children: [
                 Text(
                   'Ver en el mapa',
-                  style: t.titleMedium!.copyWith(color: AppColors.darkTextPrimary),
+                  style:
+                      t.titleMedium!.copyWith(color: AppColors.darkTextPrimary),
                 ),
                 Text(
                   'Paradas y salidas alrededor de $stopName',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                  style:
+                      t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
                 ),
               ],
             ),
@@ -688,7 +699,10 @@ class _MultiOperatorDeparturesSliverList extends ConsumerWidget {
           (d) => d.status != 'cancelled',
           orElse: () => departures.first,
         );
-        final rest = [for (final d in departures) if (!identical(d, hero)) d];
+        final rest = [
+          for (final d in departures)
+            if (!identical(d, hero)) d
+        ];
         return SliverMainAxisGroup(
           slivers: [
             SliverPadding(
@@ -865,14 +879,16 @@ class _MultiOperatorStopSearchModalState
               const SizedBox(height: 14),
               Text(
                 isDest ? 'Hacia dónde' : 'Desde qué parada',
-                style: t.headlineSmall!.copyWith(color: AppColors.darkTextPrimary),
+                style:
+                    t.headlineSmall!.copyWith(color: AppColors.darkTextPrimary),
               ),
               const SizedBox(height: 2),
               Text(
                 isDest
                     ? 'Filtra las salidas por destino · ${activeOperator.name}'
                     : 'Toca una parada para ver sus salidas · ${activeOperator.name}',
-                style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                style:
+                    t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
               ),
               const SizedBox(height: 14),
               TextField(
@@ -888,7 +904,8 @@ class _MultiOperatorStopSearchModalState
                     size: 20,
                   ),
                   hintText: 'Buscar parada',
-                  hintStyle: t.bodyLarge!.copyWith(color: AppColors.darkTextTertiary),
+                  hintStyle:
+                      t.bodyLarge!.copyWith(color: AppColors.darkTextTertiary),
                   filled: true,
                   fillColor: Colors.white.withValues(alpha: 0.08),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -908,7 +925,8 @@ class _MultiOperatorStopSearchModalState
               ),
               const SizedBox(height: 8),
               ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: media.size.height * 0.55),
+                constraints:
+                    BoxConstraints(maxHeight: media.size.height * 0.55),
                 child: stopsAsync.when(
                   loading: () => const Padding(
                     padding: EdgeInsets.all(32),
@@ -929,8 +947,10 @@ class _MultiOperatorStopSearchModalState
                         : stops
                             .where((s) => s.name.toLowerCase().contains(_query))
                             .toList();
-                    final currentOrigin = ref.watch(selectedTransitStopProvider);
-                    final currentDest = ref.watch(selectedDestinationStopProvider);
+                    final currentOrigin =
+                        ref.watch(selectedTransitStopProvider);
+                    final currentDest =
+                        ref.watch(selectedDestinationStopProvider);
                     final showAll = isDest && _query.isEmpty;
 
                     if (filtered.isEmpty && !showAll) {
@@ -950,7 +970,8 @@ class _MultiOperatorStopSearchModalState
                     return ListView.separated(
                       shrinkWrap: true,
                       padding: const EdgeInsets.only(top: 4),
-                      itemCount: showAll ? filtered.length + 1 : filtered.length,
+                      itemCount:
+                          showAll ? filtered.length + 1 : filtered.length,
                       separatorBuilder: (_, __) => const Padding(
                         padding: EdgeInsets.only(left: 44),
                         child: Divider(
@@ -970,13 +991,15 @@ class _MultiOperatorStopSearchModalState
                             selectedColor: AppColors.accent,
                             onTap: () {
                               ref
-                                  .read(selectedDestinationStopProvider.notifier)
+                                  .read(
+                                      selectedDestinationStopProvider.notifier)
                                   .state = null;
                               Navigator.of(context).pop();
                             },
                           );
                         }
-                        final stop = showAll ? filtered[index - 1] : filtered[index];
+                        final stop =
+                            showAll ? filtered[index - 1] : filtered[index];
                         final isSelected = isDest
                             ? currentDest?.id == stop.id
                             : currentOrigin?.id == stop.id;
@@ -1000,14 +1023,17 @@ class _MultiOperatorStopSearchModalState
                           onTap: () {
                             if (isDest) {
                               ref
-                                  .read(selectedDestinationStopProvider.notifier)
+                                  .read(
+                                      selectedDestinationStopProvider.notifier)
                                   .state = stop;
                             } else {
-                              ref.read(selectedTransitStopProvider.notifier).state =
-                                  stop;
+                              ref
+                                  .read(selectedTransitStopProvider.notifier)
+                                  .state = stop;
                               if (currentDest?.id == stop.id) {
                                 ref
-                                    .read(selectedDestinationStopProvider.notifier)
+                                    .read(selectedDestinationStopProvider
+                                        .notifier)
                                     .state = null;
                               }
                             }
@@ -1071,7 +1097,8 @@ class _StopOption extends StatelessWidget {
                       title,
                       style: t.bodyLarge!.copyWith(
                         color: AppColors.darkTextPrimary,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
                     if (subtitle != null)
@@ -1088,7 +1115,8 @@ class _StopOption extends StatelessWidget {
             if (selected)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: Icon(Icons.check_rounded, color: selectedColor, size: 22),
+                child:
+                    Icon(Icons.check_rounded, color: selectedColor, size: 22),
               ),
           ],
         ),
