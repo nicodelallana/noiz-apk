@@ -62,6 +62,7 @@ flutter:
   assets:
     - assets/lottie/
     - assets/db/
+    - assets/icon/
 
   fonts:
     # Inter (SIL OFL 1.1, assets/fonts/Inter/OFL.txt): static cuts generated from

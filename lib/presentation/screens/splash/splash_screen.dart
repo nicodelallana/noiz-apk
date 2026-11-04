@@ -3,18 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:bizkaia_transit/core/theme/app_colors.dart';
-import 'package:bizkaia_transit/core/theme/app_typography.dart';
-import 'package:bizkaia_transit/core/theme/barik_icons.dart';
 import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
-/// Professional animated Splash Screen on startup.
-/// - Minimalist, modern branding.
-/// - Centered glowing symbol and typographic lockup.
-/// - Fluid entry animation.
-/// - Concurrent warm-up of local GTFS database & user position.
-/// - Transitions automatically to Home ('/') with zero artificial wait.
+/// Instantaneous animated Splash Screen on startup.
+/// - Centered official app icon with subtle branding glow.
+/// - Minimalist aesthetic without text clutter.
+/// - Snappy entry animation (~350ms) with zero blocking on GPS or database.
+/// - Concurrent background warm-up of GTFS data and location.
+/// - Smooth and immediate transition to Home ('/').
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
@@ -34,51 +31,60 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 350),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.88, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.7, curve: Curves.easeOutCubic),
+        curve: Curves.easeOutCubic,
       ),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+        curve: Curves.easeOut,
       ),
     );
 
     _glowAnimation = Tween<double>(begin: 0.2, end: 0.8).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.3, 1.0, curve: Curves.easeInOut),
+        curve: Curves.easeInOut,
       ),
     );
 
-    _controller.forward();
-    _initializeAndNavigate();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeAndNavigate();
+    });
   }
 
   Future<void> _initializeAndNavigate() async {
-    final stopwatch = Stopwatch()..start();
+    // Warm up database stops & GPS in parallel in background without blocking startup
+    unawaited(
+      ref.read(resolvedUserLocationProvider.future).then<void>(
+        (_) {},
+        onError: (_) {},
+      ),
+    );
+    unawaited(
+      ref.read(stopsForActiveOperatorProvider.future).then<void>(
+        (_) {},
+        onError: (_) {},
+      ),
+    );
 
-    // Warm up database stops & GPS in parallel without blocking UI
-    try {
-      await Future.wait([
-        ref.read(resolvedUserLocationProvider.future),
-        ref.read(stopsForActiveOperatorProvider.future),
-      ]);
-    } catch (_) {
-      // Non-fatal: if permissions or offline, the app handles fallbacks
+    // Respect user's motion preferences
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+      if (mounted) context.go('/');
+      return;
     }
 
-    // Ensure at least minimum entry animation plays so it doesn't flash jarringly
-    final elapsed = stopwatch.elapsedMilliseconds;
-    if (elapsed < 600) {
-      await Future<void>.delayed(Duration(milliseconds: 600 - elapsed));
+    try {
+      await _controller.forward().orCancel;
+    } on TickerCanceled {
+      return;
     }
 
     if (mounted) {
@@ -94,100 +100,55 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    final t = AppTypography.textTheme();
-
     return Scaffold(
       backgroundColor: const Color(0xFF06080C),
       body: Center(
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            return FadeTransition(
-              opacity: _fadeAnimation,
-              child: ScaleTransition(
-                scale: _scaleAnimation,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Glowing logo badge
-                    Container(
-                      width: 88,
-                      height: 88,
-                      decoration: ShapeDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFFE8590C),
-                            Color(0xFFD0142B),
-                          ],
+        child: RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return FadeTransition(
+                opacity: _fadeAnimation,
+                child: ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: Container(
+                    width: 96,
+                    height: 96,
+                    decoration: ShapeDecoration(
+                      color: const Color(0xFF080E1C),
+                      shape: continuousShape(
+                        borderRadius: BorderRadius.circular(24),
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          width: 1.2,
                         ),
-                        shape: continuousShape(
-                          borderRadius: BorderRadius.circular(26),
-                          side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.25),
-                            width: 1.2,
+                      ),
+                      shadows: [
+                        BoxShadow(
+                          color: const Color(0xFF00C8FF).withValues(
+                            alpha: 0.35 * _glowAnimation.value,
                           ),
+                          blurRadius: 36,
+                          spreadRadius: 2,
+                          offset: const Offset(0, 4),
                         ),
-                        shadows: [
-                          BoxShadow(
-                            color: const Color(0xFFE8590C).withValues(
-                              alpha: 0.45 * _glowAnimation.value,
-                            ),
-                            blurRadius: 36,
-                            spreadRadius: 4,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: const Center(
-                        child: Icon(
-                          BarikIcons.subway,
-                          size: 42,
-                          color: Colors.white,
-                        ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(height: 28),
-
-                    // App Title
-                    Text(
-                      'NOIZ',
-                      style: t.displaySmall!.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 3.5,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-
-                    // Subtitle
-                    Text(
-                      'BIZKAIA TRANSIT',
-                      style: t.labelMedium!.copyWith(
-                        color: AppColors.darkTextSecondary,
-                        letterSpacing: 2.0,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 36),
-
-                    // Minimal subtle progress ring
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.accent.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ),
-                  ],
+                    child: child,
+                  ),
                 ),
+              );
+            },
+            child: ContinuousClip(
+              borderRadius: BorderRadius.circular(24),
+              child: Image.asset(
+                'assets/icon/app_icon.png',
+                width: 96,
+                height: 96,
+                fit: BoxFit.cover,
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
