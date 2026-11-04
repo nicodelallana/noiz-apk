@@ -2,8 +2,8 @@ name: Build GTFS & Keep-Alive
 
 on:
   schedule:
-    # Run nightly at 02:00 UTC
-    - cron: '0 2 * * *'
+    # Run daily at 06:30 UTC (right after Moveuskadi publishes new feeds at 06:01 UTC)
+    - cron: '30 6 * * *'
   workflow_dispatch:
 
 jobs:
