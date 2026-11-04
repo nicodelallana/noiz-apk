@@ -389,10 +389,7 @@ def parse_csv_from_zip(zf: zipfile.ZipFile, filename: str) -> List[Dict[str, str
         return rows
 
 def clean_stop_id(raw_id: str) -> str:
-    cleaned = raw_id.strip()
-    if cleaned.endswith(".0"):
-        cleaned = cleaned[:-2]
-    return cleaned
+    return raw_id.strip()
 
 def clean_coord(val: str) -> Optional[float]:
     try:
@@ -644,6 +641,7 @@ def process_operator_feed(conn: sqlite3.Connection, op_id: str, zip_path: str):
                     reader = csv.DictReader(io.TextIOWrapper(st_file, encoding="utf-8-sig", errors="replace"))
                     batch = []
                     inserted_st = 0
+                    trip_seq_counter: Dict[str, int] = {}
 
                     for row in reader:
                         raw_t_id = row.get("trip_id", "").strip()
@@ -659,10 +657,12 @@ def process_operator_feed(conn: sqlite3.Connection, op_id: str, zip_path: str):
                         if scoped_s_id not in valid_stop_ids:
                             continue
 
-                        try:
-                            seq = int(row.get("stop_sequence", "0").strip())
-                        except Exception:
-                            seq = 0
+                        raw_seq = row.get("stop_sequence", "").strip()
+                        if raw_seq and raw_seq.isdigit():
+                            seq = int(raw_seq)
+                        else:
+                            seq = trip_seq_counter.get(scoped_t_id, 0) + 1
+                        trip_seq_counter[scoped_t_id] = seq
 
                         arr = row.get("arrival_time", "").strip()
                         dep = row.get("departure_time", "").strip() or arr
