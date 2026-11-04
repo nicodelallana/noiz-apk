@@ -206,13 +206,14 @@ class TransitLiveService : Service() {
             EXTRA_ARRIVAL_TIME_MS,
             System.currentTimeMillis() + 600_000L
         )
-        val followingMs = extras.getLong(EXTRA_FOLLOWING_MS, 0L)
+        var followingMs = extras.getLong(EXTRA_FOLLOWING_MS, 0L)
         val now = System.currentTimeMillis()
 
         // Auto-advance to the following departure if the current one has passed (>20s)
         if (now > departureMs + 20_000L && followingMs > now) {
             departureMs = followingMs
             extras.putLong(EXTRA_ARRIVAL_TIME_MS, followingMs)
+            followingMs = 0L
             extras.putLong(EXTRA_FOLLOWING_MS, 0L)
         }
 
@@ -222,7 +223,6 @@ class TransitLiveService : Service() {
         val instruction = extras.getString(EXTRA_INSTRUCTION)
         val operatorName = extras.getString(EXTRA_OPERATOR_NAME)
         val platform = extras.getString(EXTRA_PLATFORM)
-        val followingMs = extras.getLong(EXTRA_FOLLOWING_MS, 0L)
 
         val parsedColor = try {
             Color.parseColor(lineColorHex)
