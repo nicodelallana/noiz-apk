@@ -6,175 +6,594 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
 import 'package:bizkaia_transit/core/theme/app_typography.dart';
+import 'package:bizkaia_transit/core/theme/barik_icons.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
-import 'package:bizkaia_transit/domain/models/transit_models.dart';
 import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
+import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
-/// Floating multi-level transit selector over the map:
-/// 1. Modo (Metro, Tren, Tranvía, Autobús, Funicular)
-/// 2. Operador (Metro Bilbao, Euskotren, Bizkaibus, etc.)
-/// 3. Línea/Ruta (L1, A3115, etc.) con búsqueda y trazado geométrico
+/// Clean top selector bar over the map:
+/// Shows active Province, Operator and Route, and opens the Modal Bottom Sheet on tap.
 class MapTransitSelector extends ConsumerWidget {
   const MapTransitSelector({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final activeMode = ref.watch(mapSelectedModeProvider);
-    final activeOperator = ref.watch(mapSelectedOperatorProvider);
+    final territory = ref.watch(selectedTerritoryProvider);
+    final TransitOperator activeOperator =
+        ref.watch(mapSelectedOperatorProvider) ??
+            ref.watch(selectedOperatorProvider);
     final activeRoute = ref.watch(mapSelectedRouteProvider);
-    final operators = ref.watch(mapFilteredOperatorsProvider);
+    final opColor = Color(activeOperator.colorHex);
+    final t = AppTypography.textTheme();
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // 1. Row: Mode pills (No "Todos" mode: loads instantly per transport type)
-        _ModeSelectorRow(
-          activeMode: activeMode,
-          onSelectMode: (mode) {
-            HapticFeedback.selectionClick();
-            ref.read(mapSelectedModeProvider.notifier).state = mode;
-            ref.read(mapSelectedRouteProvider.notifier).state = null;
+    final lineLabel = activeRoute != null
+        ? (activeRoute.shortName.isNotEmpty
+            ? activeRoute.shortName
+            : activeRoute.longName)
+        : 'Todas las líneas';
 
-            final territory = ref.read(selectedTerritoryProvider);
-            final opsForMode = TransitOperator.byTerritory(territory)
-                .where((o) => o.mode == mode)
-                .toList();
-
-            if (opsForMode.isNotEmpty) {
-              if (activeOperator == null ||
-                  !opsForMode.contains(activeOperator)) {
-                ref.read(mapSelectedOperatorProvider.notifier).state =
-                    opsForMode.first;
-              }
-            } else {
-              ref.read(mapSelectedOperatorProvider.notifier).state = null;
-            }
-          },
-        ),
-
-        const SizedBox(height: 8),
-
-        // 2. Row: Operator & Line pill (prominent route visibility)
-        if (operators.isNotEmpty ||
-            activeOperator != null ||
-            activeRoute != null) ...[
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              children: [
-                // Operator chips
-                for (final op in operators) ...[
-                  _OperatorChip(
-                    operator: op,
-                    isSelected: activeOperator == op,
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      if (activeOperator != op) {
-                        ref.read(mapSelectedOperatorProvider.notifier).state =
-                            op;
-                      }
-                      ref.read(mapSelectedRouteProvider.notifier).state = null;
-                    },
+    return GestureDetector(
+      onTap: () => showTransitSelectionSheet(context),
+      child: GlassSurface(
+        blur: true,
+        kind: GlassKind.overMap,
+        radius: 20,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        child: Row(
+          children: [
+            // 1. Territory badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: ShapeDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                shape: continuousShape(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.location_on_rounded,
+                    size: 13,
+                    color: AppColors.accent,
                   ),
-                  const SizedBox(width: 8),
-                ],
-
-                // Line picker pill: prominently allows viewing routes/shapes
-                if (activeOperator != null) ...[
-                  _RoutePickerPill(
-                    operator: activeOperator,
-                    activeRoute: activeRoute,
-                    onOpenPicker: () =>
-                        _openRoutePicker(context, ref, activeOperator),
-                    onClearRoute: () {
-                      HapticFeedback.selectionClick();
-                      ref.read(mapSelectedRouteProvider.notifier).state = null;
-                    },
+                  const SizedBox(width: 4),
+                  Text(
+                    territory.name,
+                    style: t.labelMedium!.copyWith(
+                      color: AppColors.darkTextPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
-      ],
-    );
-  }
+            const SizedBox(width: 10),
 
-  void _openRoutePicker(
-      BuildContext context, WidgetRef ref, TransitOperator operator) {
-    showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return _RoutePickerSheet(
-          operator: operator,
-          onSelectRoute: (route) {
-            HapticFeedback.selectionClick();
-            ref.read(mapSelectedRouteProvider.notifier).state = route;
-            Navigator.of(sheetContext).pop();
-          },
-        );
-      },
+            // 2. Operator dot & name
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: opColor,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              flex: 3,
+              child: Text(
+                activeOperator.name,
+                style: t.labelLarge!.copyWith(
+                  color: AppColors.darkTextPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
+            const SizedBox(width: 8),
+            Container(
+              width: 1,
+              height: 16,
+              color: Colors.white.withValues(alpha: 0.15),
+            ),
+            const SizedBox(width: 8),
+
+            // 3. Line badge / label with chevron
+            Flexible(
+              flex: 4,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      lineLabel,
+                      style: t.labelMedium!.copyWith(
+                        color: activeRoute != null
+                            ? opColor
+                            : AppColors.darkTextSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: AppColors.darkTextSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _ModeSelectorRow extends StatelessWidget {
-  const _ModeSelectorRow({
-    required this.activeMode,
-    required this.onSelectMode,
-  });
+/// Helper to trigger the modal bottom sheet from anywhere
+void showTransitSelectionSheet(BuildContext context) {
+  HapticFeedback.mediumImpact();
+  showModalBottomSheet<void>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    builder: (_) => const TransitSelectionModalSheet(),
+  );
+}
 
-  final TransitModeType? activeMode;
-  final ValueChanged<TransitModeType> onSelectMode;
+/// Complete Modal Bottom Sheet for selecting:
+/// 1. Provincia / Territorio (Bizkaia, Gipuzkoa, Álava)
+/// 2. Tipo de Transporte & Operador (Metro Bilbao, Bizkaibus, Bilbobus, etc.)
+/// 3. Línea / Recorrido (Metro: L1, L2, L3; Bus: código + recorrido)
+class TransitSelectionModalSheet extends ConsumerStatefulWidget {
+  const TransitSelectionModalSheet({super.key});
+
+  @override
+  ConsumerState<TransitSelectionModalSheet> createState() =>
+      _TransitSelectionModalSheetState();
+}
+
+class _TransitSelectionModalSheetState
+    extends ConsumerState<TransitSelectionModalSheet> {
+  String _search = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
-      child: Row(
-        children: [
-          _ModeChip(
-            label: 'Metro',
-            icon: Icons.subway_rounded,
-            isSelected: activeMode == TransitModeType.metro,
-            onTap: () => onSelectMode(TransitModeType.metro),
+    final territory = ref.watch(selectedTerritoryProvider);
+    final TransitOperator activeOperator =
+        ref.watch(mapSelectedOperatorProvider) ??
+            ref.watch(selectedOperatorProvider);
+    final activeMode = ref.watch(mapSelectedModeProvider) ?? activeOperator.mode;
+    final activeRoute = ref.watch(mapSelectedRouteProvider);
+    final routesAsync = ref.watch(mapAvailableRoutesProvider);
+    final operatorsForMode = ref.watch(mapFilteredOperatorsProvider);
+
+    final t = AppTypography.textTheme();
+    final opColor = Color(activeOperator.colorHex);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      minChildSize: 0.40,
+      maxChildSize: 0.94,
+      expand: false,
+      builder: (_, scrollController) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            8,
+            0,
+            8,
+            math.max(8.0, MediaQuery.paddingOf(context).bottom),
           ),
-          const SizedBox(width: 8),
-          _ModeChip(
-            label: 'Tren',
-            icon: Icons.train_rounded,
-            isSelected: activeMode == TransitModeType.train,
-            onTap: () => onSelectMode(TransitModeType.train),
+          child: GlassSurface(
+            blur: true,
+            kind: GlassKind.overMap,
+            radius: 32,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: ListView(
+              controller: scrollController,
+              children: [
+                // ── Grabber ────────────────────────────────────────────────
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 5,
+                    decoration: const ShapeDecoration(
+                      color: AppColors.darkTextTertiary,
+                      shape: StadiumBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // ── Title ──────────────────────────────────────────────────
+                Text(
+                  'Elige transporte y línea',
+                  style: t.headlineSmall!.copyWith(
+                    color: AppColors.darkTextPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Selecciona provincia, operador y trazado en el mapa',
+                  style: t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                ),
+                const SizedBox(height: 16),
+
+                // ── 1. Provincia / Territorio ──────────────────────────────
+                Text(
+                  'PROVINCIA / TERRITORIO',
+                  style: t.labelSmall!.copyWith(
+                    color: AppColors.darkTextTertiary,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _TerritoryTab(
+                      label: 'Bizkaia',
+                      isSelected: territory == TransitTerritory.bizkaia,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        ref.read(selectedTerritoryProvider.notifier).state =
+                            TransitTerritory.bizkaia;
+                        final defOp = TransitOperator.metro;
+                        ref.read(mapSelectedOperatorProvider.notifier).state = defOp;
+                        ref.read(selectedOperatorProvider.notifier).state = defOp;
+                        ref.read(mapSelectedModeProvider.notifier).state = defOp.mode;
+                        ref.read(mapSelectedRouteProvider.notifier).state = null;
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _TerritoryTab(
+                      label: 'Gipuzkoa',
+                      isSelected: territory == TransitTerritory.gipuzkoa,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        ref.read(selectedTerritoryProvider.notifier).state =
+                            TransitTerritory.gipuzkoa;
+                        final defOp = TransitOperator.dbus;
+                        ref.read(mapSelectedOperatorProvider.notifier).state = defOp;
+                        ref.read(selectedOperatorProvider.notifier).state = defOp;
+                        ref.read(mapSelectedModeProvider.notifier).state = defOp.mode;
+                        ref.read(mapSelectedRouteProvider.notifier).state = null;
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _TerritoryTab(
+                      label: 'Álava',
+                      isSelected: territory == TransitTerritory.araba,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        ref.read(selectedTerritoryProvider.notifier).state =
+                            TransitTerritory.araba;
+                        final defOp = TransitOperator.tuvisa;
+                        ref.read(mapSelectedOperatorProvider.notifier).state = defOp;
+                        ref.read(selectedOperatorProvider.notifier).state = defOp;
+                        ref.read(mapSelectedModeProvider.notifier).state = defOp.mode;
+                        ref.read(mapSelectedRouteProvider.notifier).state = null;
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // ── 2. Tipo de Transporte ──────────────────────────────────
+                Text(
+                  'TIPO DE TRANSPORTE',
+                  style: t.labelSmall!.copyWith(
+                    color: AppColors.darkTextTertiary,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: [
+                      _ModeChip(
+                        label: 'Metro',
+                        icon: BarikIcons.subway,
+                        isSelected: activeMode == TransitModeType.metro,
+                        onTap: () => _onSelectMode(TransitModeType.metro),
+                      ),
+                      const SizedBox(width: 8),
+                      _ModeChip(
+                        label: 'Tren',
+                        icon: BarikIcons.train,
+                        isSelected: activeMode == TransitModeType.train,
+                        onTap: () => _onSelectMode(TransitModeType.train),
+                      ),
+                      const SizedBox(width: 8),
+                      _ModeChip(
+                        label: 'Tranvía',
+                        icon: BarikIcons.tram,
+                        isSelected: activeMode == TransitModeType.tram,
+                        onTap: () => _onSelectMode(TransitModeType.tram),
+                      ),
+                      const SizedBox(width: 8),
+                      _ModeChip(
+                        label: 'Autobús',
+                        icon: BarikIcons.bus,
+                        isSelected: activeMode == TransitModeType.bus,
+                        onTap: () => _onSelectMode(TransitModeType.bus),
+                      ),
+                      const SizedBox(width: 8),
+                      _ModeChip(
+                        label: 'Funicular',
+                        icon: BarikIcons.cableCar,
+                        isSelected: activeMode == TransitModeType.funicular,
+                        onTap: () => _onSelectMode(TransitModeType.funicular),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // ── Operadores para el modo seleccionado ────────────────────
+                if (operatorsForMode.isNotEmpty) ...[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final op in operatorsForMode)
+                        _OperatorBadgeChip(
+                          operator: op,
+                          isSelected: activeOperator == op,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            ref.read(mapSelectedOperatorProvider.notifier).state = op;
+                            ref.read(selectedOperatorProvider.notifier).state = op;
+                            ref.read(mapSelectedRouteProvider.notifier).state = null;
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                ],
+
+                // ── 3. Selector de Líneas ──────────────────────────────────
+                Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: opColor,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'LÍNEAS DE ${activeOperator.name.toUpperCase()}',
+                      style: t.labelSmall!.copyWith(
+                        color: AppColors.darkTextTertiary,
+                        letterSpacing: 0.8,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                // Option: "Todas las líneas"
+                _LineOptionTile(
+                  code: 'TODAS',
+                  title: 'Ver red completa en el mapa',
+                  color: opColor,
+                  isSelected: activeRoute == null,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    ref.read(mapSelectedRouteProvider.notifier).state = null;
+                    Navigator.of(context).pop();
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                // Bus Search Bar if there are many routes
+                if (activeOperator.mode == TransitModeType.bus) ...[
+                  TextField(
+                    controller: _searchController,
+                    onChanged: (val) =>
+                        setState(() => _search = val.trim().toLowerCase()),
+                    style: const TextStyle(
+                      color: AppColors.darkTextPrimary,
+                      fontSize: 14,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar por código o destino (ej: A3151)...',
+                      hintStyle: const TextStyle(
+                        color: AppColors.darkTextTertiary,
+                        fontSize: 14,
+                      ),
+                      prefixIcon: const Icon(
+                        BarikIcons.magnifyingGlass,
+                        color: AppColors.darkTextSecondary,
+                        size: 18,
+                      ),
+                      filled: true,
+                      fillColor: Colors.black.withValues(alpha: 0.35),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
+                // Route Items
+                routesAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                  ),
+                  error: (e, _) => Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'Error al cargar líneas: $e',
+                      style: const TextStyle(color: AppColors.delayedAmber),
+                    ),
+                  ),
+                  data: (routes) {
+                    final filtered = routes.where((r) {
+                      if (_search.isEmpty) return true;
+                      return r.shortName.toLowerCase().contains(_search) ||
+                          r.longName.toLowerCase().contains(_search);
+                    }).toList();
+
+                    if (filtered.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Center(
+                          child: Text(
+                            'No se encontraron líneas',
+                            style: t.bodySmall!
+                                .copyWith(color: AppColors.darkTextTertiary),
+                          ),
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        for (final route in filtered) ...[
+                          _LineOptionTile(
+                            code: route.shortName.isNotEmpty
+                                ? route.shortName
+                                : activeOperator.name,
+                            title: route.longName,
+                            color: route.colorHex != null &&
+                                    route.colorHex!.isNotEmpty
+                                ? _parseHexColor(route.colorHex!, opColor)
+                                : opColor,
+                            isSelected: activeRoute?.id == route.id,
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              ref.read(mapSelectedRouteProvider.notifier).state =
+                                  route;
+                              Navigator.of(context).pop();
+                            },
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
-          const SizedBox(width: 8),
-          _ModeChip(
-            label: 'Tranvía',
-            icon: Icons.tram_rounded,
-            isSelected: activeMode == TransitModeType.tram,
-            onTap: () => onSelectMode(TransitModeType.tram),
+        );
+      },
+    );
+  }
+
+  void _onSelectMode(TransitModeType mode) {
+    HapticFeedback.selectionClick();
+    ref.read(mapSelectedModeProvider.notifier).state = mode;
+    ref.read(mapSelectedRouteProvider.notifier).state = null;
+
+    final territory = ref.read(selectedTerritoryProvider);
+    final opsForMode = TransitOperator.byTerritory(territory)
+        .where((o) => o.mode == mode)
+        .toList();
+
+    if (opsForMode.isNotEmpty) {
+      ref.read(mapSelectedOperatorProvider.notifier).state = opsForMode.first;
+      ref.read(selectedOperatorProvider.notifier).state = opsForMode.first;
+    }
+  }
+
+  Color _parseHexColor(String hex, Color fallback) {
+    try {
+      final clean = hex.replaceAll('#', '');
+      if (clean.length == 6) {
+        return Color(int.parse('FF$clean', radix: 16));
+      }
+      if (clean.length == 8) {
+        return Color(int.parse(clean, radix: 16));
+      }
+      return fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+}
+
+class _TerritoryTab extends StatelessWidget {
+  const _TerritoryTab({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: ShapeDecoration(
+            color: isSelected
+                ? AppColors.accent.withValues(alpha: 0.22)
+                : Colors.white.withValues(alpha: 0.06),
+            shape: continuousShape(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(
+                color: isSelected
+                    ? AppColors.accent.withValues(alpha: 0.6)
+                    : Colors.white.withValues(alpha: 0.08),
+                width: isSelected ? 1.4 : 0.8,
+              ),
+            ),
           ),
-          const SizedBox(width: 8),
-          _ModeChip(
-            label: 'Autobús',
-            icon: Icons.directions_bus_rounded,
-            isSelected: activeMode == TransitModeType.bus,
-            onTap: () => onSelectMode(TransitModeType.bus),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : AppColors.darkTextSecondary,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
           ),
-          const SizedBox(width: 8),
-          _ModeChip(
-            label: 'Funicular',
-            icon: Icons.terrain_rounded,
-            isSelected: activeMode == TransitModeType.funicular,
-            onTap: () => onSelectMode(TransitModeType.funicular),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -195,38 +614,50 @@ class _ModeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = AppTypography.textTheme();
-    return GlassButton(
-      blur: true,
-      kind: GlassKind.overMap,
-      radius: 999,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      tint: isSelected ? AppColors.accent : null,
-      onPressed: onTap,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: isSelected ? Colors.white : AppColors.darkTextSecondary,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: t.labelMedium!.copyWith(
-              color: isSelected ? Colors.white : AppColors.darkTextPrimary,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: ShapeDecoration(
+          color: isSelected
+              ? AppColors.accent.withValues(alpha: 0.25)
+              : Colors.white.withValues(alpha: 0.06),
+          shape: continuousShape(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: isSelected
+                  ? AppColors.accent.withValues(alpha: 0.6)
+                  : Colors.white.withValues(alpha: 0.08),
             ),
           ),
-        ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected ? AppColors.accent : AppColors.darkTextSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : AppColors.darkTextSecondary,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _OperatorChip extends StatelessWidget {
-  const _OperatorChip({
+class _OperatorBadgeChip extends StatelessWidget {
+  const _OperatorBadgeChip({
     required this.operator,
     required this.isSelected,
     required this.onTap,
@@ -238,135 +669,93 @@ class _OperatorChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = AppTypography.textTheme();
-    final opColor = Color(operator.colorHex);
-    return GlassButton(
-      blur: true,
-      kind: GlassKind.overMap,
-      radius: 999,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      tint: isSelected ? opColor.withValues(alpha: 0.35) : null,
-      onPressed: onTap,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: opColor,
-              boxShadow: [
-                BoxShadow(color: opColor.withValues(alpha: 0.6), blurRadius: 4),
-              ],
+    final color = Color(operator.colorHex);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: ShapeDecoration(
+          color: isSelected
+              ? color.withValues(alpha: 0.25)
+              : Colors.white.withValues(alpha: 0.06),
+          shape: continuousShape(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: isSelected ? color : Colors.white.withValues(alpha: 0.1),
+              width: isSelected ? 1.4 : 0.8,
             ),
           ),
-          const SizedBox(width: 6),
-          Text(
-            operator.name,
-            style: t.labelMedium!.copyWith(
-              color: isSelected ? Colors.white : AppColors.darkTextPrimary,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
             ),
-          ),
-        ],
+            const SizedBox(width: 6),
+            Text(
+              operator.name,
+              style: TextStyle(
+                color: isSelected ? Colors.white : AppColors.darkTextPrimary,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 12.5,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _RoutePickerPill extends StatelessWidget {
-  const _RoutePickerPill({
-    required this.operator,
-    required this.activeRoute,
-    required this.onOpenPicker,
-    required this.onClearRoute,
+class _LineOptionTile extends StatelessWidget {
+  const _LineOptionTile({
+    required this.code,
+    required this.title,
+    required this.color,
+    required this.isSelected,
+    required this.onTap,
   });
 
-  final TransitOperator? operator;
-  final TransitRoute? activeRoute;
-  final VoidCallback onOpenPicker;
-  final VoidCallback onClearRoute;
+  final String code;
+  final String title;
+  final Color color;
+  final bool isSelected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final t = AppTypography.textTheme();
-    final opColor =
-        operator != null ? Color(operator!.colorHex) : AppColors.accent;
-
-    if (activeRoute == null) {
-      return Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: opColor.withValues(alpha: 0.6), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: opColor.withValues(alpha: 0.25),
-              blurRadius: 8,
-              spreadRadius: 1,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: ShapeDecoration(
+          color: isSelected
+              ? color.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.05),
+          shape: continuousShape(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isSelected ? color : Colors.white.withValues(alpha: 0.08),
+              width: isSelected ? 1.4 : 0.8,
             ),
-          ],
-        ),
-        child: GlassButton(
-          blur: true,
-          kind: GlassKind.overMap,
-          radius: 999,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          tint: opColor.withValues(alpha: 0.2),
-          onPressed: onOpenPicker,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.alt_route_rounded, size: 16, color: opColor),
-              const SizedBox(width: 6),
-              Text(
-                'Ver rutas / líneas ▾',
-                style: t.labelMedium!.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                ),
-              ),
-            ],
           ),
         ),
-      );
-    }
-
-    final colorHex = activeRoute!.colorHex ?? '#025DA9';
-    final color = Color(
-        int.tryParse('FF${colorHex.replaceFirst('#', '')}', radix: 16) ??
-            0xFF025DA9);
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.8), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.3),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: GlassSurface(
-        blur: true,
-        kind: GlassKind.overMap,
-        radius: 999,
-        padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
+            // Line code badge
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: ShapeDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(8),
+                shape: continuousShape(borderRadius: BorderRadius.circular(8)),
               ),
               child: Text(
-                activeRoute!.shortName.isNotEmpty
-                    ? activeRoute!.shortName
-                    : 'Línea',
+                code,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -374,225 +763,27 @@ class _RoutePickerPill extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 160),
+            const SizedBox(width: 12),
+
+            // Route journey description
+            Expanded(
               child: Text(
-                activeRoute!.longName.isNotEmpty
-                    ? activeRoute!.longName
-                    : activeRoute!.shortName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.labelMedium!.copyWith(
-                  color: AppColors.darkTextPrimary,
-                  fontWeight: FontWeight.w600,
+                title,
+                style: t.bodyMedium!.copyWith(
+                  color: isSelected ? Colors.white : AppColors.darkTextPrimary,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                 ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: 4),
-            IconButton(
-              icon: const Icon(Icons.close_rounded,
-                  size: 16, color: Colors.white),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-              onPressed: onClearRoute,
-              tooltip: 'Quitar ruta del mapa',
-            ),
+            if (isSelected) ...[
+              const SizedBox(width: 8),
+              Icon(Icons.check_circle_rounded, color: color, size: 18),
+            ],
           ],
         ),
       ),
-    );
-  }
-}
-
-class _RoutePickerSheet extends ConsumerStatefulWidget {
-  const _RoutePickerSheet({
-    required this.operator,
-    required this.onSelectRoute,
-  });
-
-  final TransitOperator operator;
-  final ValueChanged<TransitRoute> onSelectRoute;
-
-  @override
-  ConsumerState<_RoutePickerSheet> createState() => _RoutePickerSheetState();
-}
-
-class _RoutePickerSheetState extends ConsumerState<_RoutePickerSheet> {
-  String _search = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final routesAsync = ref.watch(mapAvailableRoutesProvider);
-    final t = AppTypography.textTheme();
-    final opColor = Color(widget.operator.colorHex);
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.65,
-      minChildSize: 0.35,
-      maxChildSize: 0.92,
-      expand: false,
-      builder: (_, controller) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-              8, 0, 8, math.max(8.0, MediaQuery.paddingOf(context).bottom)),
-          child: GlassSurface(
-            blur: true,
-            kind: GlassKind.overMap,
-            radius: 32,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              children: [
-                // Grabber
-                Container(
-                  width: 36,
-                  height: 5,
-                  decoration: const ShapeDecoration(
-                    color: AppColors.darkTextTertiary,
-                    shape: StadiumBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Header
-                Row(
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: opColor,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Líneas de ${widget.operator.name}',
-                      style: t.titleMedium!.copyWith(
-                        color: AppColors.darkTextPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Search field
-                TextField(
-                  onChanged: (val) =>
-                      setState(() => _search = val.trim().toLowerCase()),
-                  style: const TextStyle(
-                      color: AppColors.darkTextPrimary, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Buscar por número o destino...',
-                    hintStyle: const TextStyle(
-                        color: AppColors.darkTextTertiary, fontSize: 14),
-                    prefixIcon: const Icon(Icons.search_rounded,
-                        color: AppColors.darkTextSecondary, size: 20),
-                    filled: true,
-                    fillColor: Colors.black.withValues(alpha: 0.3),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Routes list
-                Expanded(
-                  child: routesAsync.when(
-                    loading: () => const Center(
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.accent),
-                    ),
-                    error: (err, _) => Center(
-                      child: Text(
-                        'Error al cargar líneas: $err',
-                        style: const TextStyle(color: AppColors.delayedAmber),
-                      ),
-                    ),
-                    data: (routes) {
-                      final filtered = routes.where((r) {
-                        if (_search.isEmpty) return true;
-                        return r.shortName.toLowerCase().contains(_search) ||
-                            r.longName.toLowerCase().contains(_search);
-                      }).toList();
-
-                      if (filtered.isEmpty) {
-                        return Center(
-                          child: Text(
-                            'No se encontraron líneas coincidentes.',
-                            style: t.bodyMedium!
-                                .copyWith(color: AppColors.darkTextSecondary),
-                          ),
-                        );
-                      }
-
-                      return ListView.separated(
-                        controller: controller,
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const Divider(
-                          height: 1,
-                          color: Color(0x1AFFFFFF),
-                        ),
-                        itemBuilder: (context, index) {
-                          final r = filtered[index];
-                          final routeColorHex = r.colorHex ?? '#025DA9';
-                          final rColor = Color(
-                            int.tryParse(
-                                    'FF${routeColorHex.replaceFirst('#', '')}',
-                                    radix: 16) ??
-                                0xFF025DA9,
-                          );
-
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            leading: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: rColor,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                r.shortName.isNotEmpty ? r.shortName : 'L',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                            title: Text(
-                              r.longName.isNotEmpty ? r.longName : r.shortName,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: t.bodyMedium!.copyWith(
-                                color: AppColors.darkTextPrimary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            trailing: const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14,
-                              color: AppColors.darkTextTertiary,
-                            ),
-                            onTap: () => widget.onSelectRoute(r),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }

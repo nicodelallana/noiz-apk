@@ -8,7 +8,9 @@ import 'package:bizkaia_transit/presentation/screens/map/map_transit_selector.da
 
 void main() {
   group('MapTransitSelector UI Tests', () {
-    testWidgets('renders all transit mode chips', (tester) async {
+    testWidgets(
+        'renders top selector bar with territory, operator, and line label',
+        (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
@@ -19,6 +21,38 @@ void main() {
         ),
       );
 
+      expect(find.text('Bizkaia'), findsOneWidget);
+      expect(find.text('Metro Bilbao'), findsOneWidget);
+      expect(find.text('Todas las líneas'), findsOneWidget);
+    });
+
+    testWidgets('tapping selector bar opens transit selection modal sheet',
+        (tester) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: MapTransitSelector(),
+            ),
+          ),
+        ),
+      );
+
+      // Tap on the top selector bar
+      await tester.tap(find.byType(MapTransitSelector));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Verify modal sheet is opened with title and sections
+      expect(find.text('Elige transporte y línea'), findsOneWidget);
+      expect(find.text('PROVINCIA / TERRITORIO'), findsOneWidget);
+      expect(find.text('TIPO DE TRANSPORTE'), findsOneWidget);
+
+      // Verify transport modes are present in modal sheet
       expect(find.text('Metro'), findsOneWidget);
       expect(find.text('Tren'), findsOneWidget);
       expect(find.text('Tranvía'), findsOneWidget);
@@ -26,8 +60,7 @@ void main() {
       expect(find.text('Funicular'), findsOneWidget);
     });
 
-    testWidgets(
-        'tapping Metro reveals Metro Bilbao operator chip and line picker',
+    testWidgets('tapping Autobús in modal sheet reveals bus operators',
         (tester) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
@@ -43,39 +76,22 @@ void main() {
         ),
       );
 
-      // Tap on 'Metro'
-      await tester.tap(find.text('Metro'));
-      await tester.pumpAndSettle();
-
-      expect(container.read(mapSelectedModeProvider), TransitModeType.metro);
-      expect(find.text('Metro Bilbao'), findsOneWidget);
-    });
-
-    testWidgets('tapping Autobús reveals bus operators', (tester) async {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const MaterialApp(
-            home: Scaffold(
-              body: MapTransitSelector(),
-            ),
-          ),
-        ),
-      );
+      // Tap to open modal
+      await tester.tap(find.byType(MapTransitSelector));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       // Tap on 'Autobús'
       await tester.tap(find.text('Autobús'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(container.read(mapSelectedModeProvider), TransitModeType.bus);
-      expect(find.text('Bizkaibus'), findsOneWidget);
+      expect(find.text('Bizkaibus'), findsAtLeast(1));
       expect(find.text('Bilbobus'), findsOneWidget);
     });
 
-    testWidgets('tapping an operator reveals line picker button',
+    testWidgets('switching territory to Álava sets default operator to Tuvisa',
         (tester) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
@@ -91,17 +107,19 @@ void main() {
         ),
       );
 
-      // Tap on 'Metro'
-      await tester.tap(find.text('Metro'));
-      await tester.pumpAndSettle();
+      // Tap to open modal
+      await tester.tap(find.byType(MapTransitSelector));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-      // Tap on 'Metro Bilbao' operator chip
-      await tester.tap(find.text('Metro Bilbao'));
-      await tester.pumpAndSettle();
+      // Tap on 'Álava'
+      await tester.tap(find.text('Álava'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-      expect(
-          container.read(mapSelectedOperatorProvider), TransitOperator.metro);
-      expect(find.text('Ver rutas / líneas ▾'), findsOneWidget);
+      expect(container.read(selectedTerritoryProvider), TransitTerritory.araba);
+      expect(container.read(mapSelectedOperatorProvider), TransitOperator.tuvisa);
+      expect(find.text('TUVISA'), findsAtLeast(1));
     });
   });
 }

@@ -4,11 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/live_trip_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/barik_icons.dart';
 import '../../../core/utils/geo.dart';
+import '../../../domain/models/live_trip_models.dart';
 import '../../../domain/models/saved_trip_models.dart';
+import '../../../domain/models/transit_models.dart';
 import '../../providers/transit_providers.dart';
 import '../../widgets/animations/empty_transit_view.dart';
 import '../../widgets/departure_hero_card.dart';
@@ -51,47 +54,35 @@ class _MetroDeparturesScreenState extends ConsumerState<MetroDeparturesScreen> {
     final loc = await ref.read(resolvedUserLocationProvider.future);
     if (!mounted) return;
 
-    // Detect closest available public transport operator and stop for user's GPS
-    final repo = ref.read(transitRepositoryProvider);
-    var nearby = await repo.getNearbyStops(
-      latitude: loc.latitude,
-      longitude: loc.longitude,
-      radiusKm: 2.5,
-    );
-    if (nearby.isEmpty) {
-      nearby = await repo.getNearbyStops(
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        radiusKm: 8.0,
-      );
-    }
+    // 1. Determine territory strictly from user GPS coordinates (prevents wrong province from cross-province stops)
+    final territory =
+        TransitTerritory.territoryFromCoordinates(loc.latitude, loc.longitude);
+    ref.read(selectedTerritoryProvider.notifier).state = territory;
 
-    if (nearby.isNotEmpty && mounted) {
-      final closestStop = nearby.first;
-      final closestOp = TransitOperator.fromId(closestStop.operatorId);
-      ref.read(selectedTerritoryProvider.notifier).state = closestOp.territory;
-      ref.read(selectedOperatorProvider.notifier).state = closestOp;
-      ref.read(selectedTransitStopProvider.notifier).state = closestStop;
-    } else {
-      final stops = await ref.read(stopsForActiveOperatorProvider.future);
-      if (stops.isNotEmpty && mounted) {
-        final nearest = stops.reduce((a, b) {
-          final da = haversineKm(
-            loc.latitude,
-            loc.longitude,
-            a.latitude ?? 0,
-            a.longitude ?? 0,
-          );
-          final db = haversineKm(
-            loc.latitude,
-            loc.longitude,
-            b.latitude ?? 0,
-            b.longitude ?? 0,
-          );
-          return da < db ? a : b;
-        });
-        ref.read(selectedTransitStopProvider.notifier).state = nearest;
-      }
+    // 2. Select default operator for territory (Metro Bilbao in Bizkaia)
+    final defaultOp = TransitTerritory.defaultOperatorFor(territory);
+    ref.read(selectedOperatorProvider.notifier).state = defaultOp;
+
+    // 3. Find closest stop belonging to the chosen operator
+    final repo = ref.read(transitRepositoryProvider);
+    final stops = await repo.getStops(operatorId: defaultOp.id);
+    if (stops.isNotEmpty && mounted) {
+      final nearest = stops.reduce((a, b) {
+        final da = haversineKm(
+          loc.latitude,
+          loc.longitude,
+          a.latitude ?? 0,
+          a.longitude ?? 0,
+        );
+        final db = haversineKm(
+          loc.latitude,
+          loc.longitude,
+          b.latitude ?? 0,
+          b.longitude ?? 0,
+        );
+        return da < db ? a : b;
+      });
+      ref.read(selectedTransitStopProvider.notifier).state = nearest;
     }
   }
 
@@ -150,6 +141,26 @@ class _TransitScreenContent extends ConsumerWidget {
     final activeStop = ref.watch(selectedTransitStopProvider);
     final destinationStop = ref.watch(selectedDestinationStopProvider);
     final topInset = MediaQuery.paddingOf(context).top;
+
+    ref.listen<AsyncValue<List<Departure>>>(departuresForActiveStopProvider, (_, next) {
+      final LiveTripState? trip = ref.read(activeLiveTripProvider);
+      final deps = next.value;
+      if (trip != null && deps != null && deps.isNotEmpty) {
+        final hero = deps.firstWhere(
+          (d) => d.status != 'cancelled',
+          orElse: () => deps.first,
+        );
+        final following = deps.length > 1 ? deps[1] : null;
+        if (DateTime.now().isAfter(trip.arrivalTime.add(const Duration(seconds: 20)))) {
+          final updated = trip.copyWith(
+            arrivalTime: hero.scheduledTime,
+            followingDepartureTime: following?.scheduledTime,
+            updatedAt: DateTime.now(),
+          );
+          ref.read(activeLiveTripProvider.notifier).updateTrip(updated);
+        }
+      }
+    });
 
     final stopName = activeStop?.name ?? 'Buscando parada…';
 

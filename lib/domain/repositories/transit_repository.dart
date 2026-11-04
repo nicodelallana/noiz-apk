@@ -148,6 +148,9 @@ abstract class TransitRepository {
     int? directionId,
   });
 
+  /// Retrieves GeoJSON LineString features for all routes of an operator.
+  Future<Map<String, dynamic>> getOperatorNetworkGeoJson(String operatorId);
+
   /// Retrieves routes with optional filtering.
   Future<List<TransitRoute>> getRoutes({
     String? operatorId,

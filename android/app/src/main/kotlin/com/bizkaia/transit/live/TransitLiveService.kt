@@ -202,10 +202,20 @@ class TransitLiveService : Service() {
         val nextStop = extras.getString(EXTRA_NEXT_STOP).orEmpty()
         val stopsRemaining = extras.getInt(EXTRA_STOPS_REMAINING, 0)
         val progress = extras.getDouble(EXTRA_PROGRESS, 0.0)
-        val departureMs = extras.getLong(
+        var departureMs = extras.getLong(
             EXTRA_ARRIVAL_TIME_MS,
             System.currentTimeMillis() + 600_000L
         )
+        val followingMs = extras.getLong(EXTRA_FOLLOWING_MS, 0L)
+        val now = System.currentTimeMillis()
+
+        // Auto-advance to the following departure if the current one has passed (>20s)
+        if (now > departureMs + 20_000L && followingMs > now) {
+            departureMs = followingMs
+            extras.putLong(EXTRA_ARRIVAL_TIME_MS, followingMs)
+            extras.putLong(EXTRA_FOLLOWING_MS, 0L)
+        }
+
         val status = extras.getString(EXTRA_STATUS) ?: "scheduled"
         val isRealtime = extras.getBoolean(EXTRA_IS_REALTIME, false)
         val delaySeconds = extras.getInt(EXTRA_DELAY_SECONDS, 0)

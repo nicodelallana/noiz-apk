@@ -17,6 +17,31 @@ enum TransitTerritory {
       orElse: () => TransitTerritory.all,
     );
   }
+
+  /// Detects the territory from geographic coordinates.
+  /// Falls back to [TransitTerritory.bizkaia] if indeterminate.
+  static TransitTerritory territoryFromCoordinates(double lat, double lon) {
+    if (lat >= 43.02 && lon <= -2.55) {
+      return TransitTerritory.bizkaia;
+    }
+    if (lat >= 43.02 && lon > -2.55) {
+      return TransitTerritory.gipuzkoa;
+    }
+    if (lat < 43.02) {
+      return TransitTerritory.araba;
+    }
+    return TransitTerritory.bizkaia;
+  }
+
+  /// Default operator for a given territory.
+  static TransitOperator defaultOperatorFor(TransitTerritory territory) {
+    return switch (territory) {
+      TransitTerritory.bizkaia => TransitOperator.metro,
+      TransitTerritory.gipuzkoa => TransitOperator.dbus,
+      TransitTerritory.araba => TransitOperator.tuvisa,
+      TransitTerritory.all => TransitOperator.metro,
+    };
+  }
 }
 
 enum TransitModeType {

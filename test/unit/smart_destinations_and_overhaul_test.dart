@@ -89,6 +89,14 @@ class FakeTransitRepository implements TransitRepository {
   Future<Stop?> getStopById(String stopId) async => null;
 
   @override
+  Future<Map<String, dynamic>> getOperatorNetworkGeoJson(
+          String operatorId) async =>
+      {
+        'type': 'FeatureCollection',
+        'features': <Map<String, dynamic>>[],
+      };
+
+  @override
   Future<List<TransitItinerary>> planRoute({
     required String origin,
     required String destination,

@@ -204,6 +204,13 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
     if (selectedRoute != null) {
       await _onRouteFilterChanged(selectedRoute);
     } else {
+      final op = ref.read(mapSelectedOperatorProvider);
+      if (op != null) {
+        final net = await ref
+            .read(transitRepositoryProvider)
+            .getOperatorNetworkGeoJson(op.id);
+        await controller.setGeoJsonSource(_routeSourceId, net);
+      }
       await _reloadViewportStops();
     }
   }
@@ -275,9 +282,17 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
     if (controller == null || !_styleReady || !mounted) return;
 
     if (route == null) {
-      await controller.setGeoJsonSource(_routeSourceId, _emptyLineCollection());
       final op = ref.read(mapSelectedOperatorProvider);
-      _live.setFilter(operatorId: op?.id);
+      if (op != null) {
+        final net = await ref
+            .read(transitRepositoryProvider)
+            .getOperatorNetworkGeoJson(op.id);
+        await controller.setGeoJsonSource(_routeSourceId, net);
+        _live.setFilter(operatorId: op.id);
+      } else {
+        await controller.setGeoJsonSource(_routeSourceId, _emptyLineCollection());
+        _live.setFilter(operatorId: null);
+      }
       await _reloadViewportStops();
       return;
     }
@@ -338,7 +353,18 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
   }
 
   Future<void> _onOperatorFilterChanged(TransitOperator? op) async {
+    final controller = _controller;
     _live.setFilter(operatorId: op?.id);
+    if (controller != null && _styleReady && mounted) {
+      if (op != null) {
+        final net = await ref
+            .read(transitRepositoryProvider)
+            .getOperatorNetworkGeoJson(op.id);
+        await controller.setGeoJsonSource(_routeSourceId, net);
+      } else {
+        await controller.setGeoJsonSource(_routeSourceId, _emptyLineCollection());
+      }
+    }
     await _reloadViewportStops();
   }
 
@@ -462,19 +488,40 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
     if (mounted) unawaited(_setSelected(null));
   }
 
-  Future<void> _recenter(UserLocation here) async {
-    final update = CameraUpdate.newCameraPosition(
-      CameraPosition(
-        target: LatLng(here.latitude, here.longitude),
-        zoom: _walkingZoom,
-        bearing: 0.0,
-        tilt: 0.0,
-      ),
-    );
-    if (Motion.reduced(context)) {
-      await _controller?.moveCamera(update);
-    } else {
-      await _controller?.animateCamera(update);
+  Future<void> _recenterUser() async {
+    HapticFeedback.lightImpact();
+    final service = ref.read(locationServiceProvider);
+    final granted =
+        await service.hasPermission() || await service.requestPermission();
+    if (!granted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Activa los permisos de ubicación para centrar el mapa'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    final freshLoc = await service.getCurrentLocation();
+    if (freshLoc != null) {
+      ref.read(userLocationProvider.notifier).state = freshLoc;
+      final update = CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(freshLoc.latitude, freshLoc.longitude),
+          zoom: _walkingZoom,
+          bearing: 0.0,
+          tilt: 0.0,
+        ),
+      );
+      if (Motion.reduced(context)) {
+        await _controller?.moveCamera(update);
+      } else {
+        await _controller?.animateCamera(update);
+      }
     }
   }
 
@@ -575,7 +622,7 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
               bottom: controlsBottom,
               child: _RecenterButton(
                 located: hasRealFix,
-                onPressed: () => _recenter(here),
+                onPressed: _recenterUser,
               ),
             ),
           ],

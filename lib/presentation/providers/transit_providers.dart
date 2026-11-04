@@ -49,7 +49,13 @@ final resolvedUserLocationProvider = FutureProvider<UserLocation>((ref) async {
       ref.read(userLocationProvider.notifier).state = loc;
       final current = ref.read(selectedTransitStopProvider);
       if (current == null) {
-        final op = ref.read(selectedOperatorProvider);
+        final territory = TransitTerritory.territoryFromCoordinates(
+          loc.latitude,
+          loc.longitude,
+        );
+        ref.read(selectedTerritoryProvider.notifier).state = territory;
+        final op = TransitTerritory.defaultOperatorFor(territory);
+        ref.read(selectedOperatorProvider.notifier).state = op;
         final repo = ref.read(transitRepositoryProvider);
         final stops = await repo.getStops(operatorId: op.id);
         if (stops.isNotEmpty) {

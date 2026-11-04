@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:bizkaia_transit/core/utils/geo.dart';
 import 'package:bizkaia_transit/data/local/app_database.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
@@ -8,6 +10,9 @@ class TransitRepositoryImpl implements TransitRepository {
   TransitRepositoryImpl({required AppDatabase database}) : _db = database;
 
   final AppDatabase _db;
+
+  static String _hex(int argb) =>
+      '#${(argb & 0x00FFFFFF).toRadixString(16).padLeft(6, '0')}';
 
   @override
   Future<List<TransitOperator>> getOperators({
@@ -57,32 +62,83 @@ class TransitRepositoryImpl implements TransitRepository {
   }) async {
     final time = atTime ?? DateTime.now();
     final activeServices = await _db.getActiveServiceIds(time);
-    if (activeServices.isEmpty) return [];
+    final siblingIds = await _db.getSiblingStopIds(stopId);
 
     final minTime = '${time.hour.toString().padLeft(2, '0')}:'
         '${time.minute.toString().padLeft(2, '0')}:00';
 
-    final rawDepartures = await _db.getDepartures(
-      stationId: stopId,
-      destinationStopId: destinationStopId,
-      activeServiceIds: activeServices,
-      minDepartureTime: minTime,
-      limit: 15,
+    final rawDepartures = activeServices.isEmpty
+        ? <RawDepartureRecord>[]
+        : await _db.getDepartures(
+            stationId: stopId,
+            siblingStationIds: siblingIds,
+            destinationStopId: destinationStopId,
+            activeServiceIds: activeServices,
+            minDepartureTime: minTime,
+            limit: 15,
+          );
+
+    final departures = _mapRawToDepartures(
+      rawDepartures,
+      time,
+      operatorId,
+      isTomorrow: false,
+      referenceTime: time,
     );
 
-    // The query includes the current minute (minTime is HH:MM:00), so compare
-    // at minute resolution: 23:05 at 23:05:30 leaves now, not tomorrow.
-    final thisMinute =
-        DateTime(time.year, time.month, time.day, time.hour, time.minute);
-    return rawDepartures.map((raw) {
+    // If no departures remain for today (service ended or late night), look ahead into tomorrow morning (04:00 - 12:00)
+    if (departures.isEmpty) {
+      final tomorrow = time.add(const Duration(days: 1));
+      final tomorrowServices = await _db.getActiveServiceIds(tomorrow);
+      if (tomorrowServices.isNotEmpty) {
+        final tomorrowRows = await _db.getDepartures(
+          stationId: stopId,
+          siblingStationIds: siblingIds,
+          destinationStopId: destinationStopId,
+          activeServiceIds: tomorrowServices,
+          minDepartureTime: '04:00:00',
+          maxDepartureTime: '12:00:00',
+          limit: 15 - departures.length,
+        );
+        departures.addAll(
+          _mapRawToDepartures(
+            tomorrowRows,
+            tomorrow,
+            operatorId,
+            isTomorrow: true,
+            referenceTime: time,
+          ),
+        );
+      }
+    }
+
+    return departures;
+  }
+
+  List<Departure> _mapRawToDepartures(
+    List<RawDepartureRecord> rows,
+    DateTime date,
+    String? operatorId, {
+    required bool isTomorrow,
+    required DateTime referenceTime,
+  }) {
+    final thisMinute = DateTime(
+      referenceTime.year,
+      referenceTime.month,
+      referenceTime.day,
+      referenceTime.hour,
+      referenceTime.minute,
+    );
+
+    return rows.map((raw) {
       final parts = raw.departureTime.split(':');
-      final hour = int.tryParse(parts[0]) ?? time.hour;
-      final minute = int.tryParse(parts[1]) ?? time.minute;
-      var sched = DateTime(time.year, time.month, time.day, hour % 24, minute);
-      if (sched.isBefore(thisMinute)) {
+      final hour = int.tryParse(parts[0]) ?? date.hour;
+      final minute = int.tryParse(parts[1]) ?? date.minute;
+      var sched = DateTime(date.year, date.month, date.day, hour % 24, minute);
+      if (!isTomorrow && sched.isBefore(thisMinute)) {
         sched = sched.add(const Duration(days: 1));
       }
-      final remaining = sched.difference(time).inMinutes;
+      final remaining = sched.difference(referenceTime).inMinutes;
 
       final cleanLine =
           _resolveLineCode(raw.inferredLine, raw.headsign, operatorId);
@@ -98,6 +154,19 @@ class TransitRepositoryImpl implements TransitRepository {
         }
       }
 
+      // Extract pole number from stop name if present (e.g. 'ANTONIO ALZAGA 7 (445)' -> 'Poste 7')
+      String? platform;
+      final poleMatch =
+          RegExp(r'\b(\d+)\s*\(\d+\)').firstMatch(raw.stopName);
+      if (poleMatch != null) {
+        platform = 'Poste ${poleMatch.group(1)}';
+      }
+
+      final formattedClock =
+          '${(hour % 24).toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+      final formattedTime =
+          isTomorrow ? 'Mañana $formattedClock' : formattedClock;
+
       return Departure(
         tripId: raw.tripId,
         stationId: raw.stopId,
@@ -107,12 +176,9 @@ class TransitRepositoryImpl implements TransitRepository {
         lineCode: cleanLine,
         routeColorHex: colorHex,
         scheduledTime: sched,
-        // GTFS times run past 24:00 for after-midnight trips; show 00:10.
-        scheduledTimeFormatted:
-            '${(hour % 24).toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}',
+        scheduledTimeFormatted: formattedTime,
         minutesRemaining: remaining > 0 ? remaining : 0,
-        // No GTFS-RT feed is merged into departures yet, so every time shown
-        // is the theoretical schedule. Flip these once trip updates are fused.
+        platform: platform,
         isTheoretical: true,
         isRealtime: false,
         operatorId: operatorId ?? 'metro',
@@ -206,8 +272,86 @@ class TransitRepositoryImpl implements TransitRepository {
   Future<List<List<double>>> getRouteShape(
     String routeId, {
     int? directionId,
-  }) {
-    return _db.getRouteShape(routeId, directionId: directionId);
+  }) async {
+    if (routeId == 'metro:MB:L1' || routeId == 'L1') {
+      final s = await _db.getShapeById('metro:ETX_PLE');
+      if (s.isNotEmpty) return s;
+      return _db.getRouteShape('metro:MB');
+    }
+    if (routeId == 'metro:MB:L2' || routeId == 'L2') {
+      final s = await _db.getShapeById('metro:BSR_KAB');
+      if (s.isNotEmpty) return s;
+    }
+    if (routeId == 'metro:MB:L3' || routeId == 'L3') {
+      final s = await _db.getRouteShape('euskotren:ES:Euskotren:Line:9:');
+      if (s.isNotEmpty) return s;
+    }
+    final shape = await _db.getRouteShape(routeId, directionId: directionId);
+    if (shape.isNotEmpty) return shape;
+
+    // Fallback: connect stops in sequence
+    final stops = await getStopsForRoute(routeId, directionId: directionId);
+    return stops
+        .where((s) => s.longitude != null && s.latitude != null)
+        .map((s) => [s.longitude!, s.latitude!])
+        .toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>> getOperatorNetworkGeoJson(String operatorId) async {
+    final rows = await _db.getRawOperatorShapes(operatorId);
+    final features = <Map<String, dynamic>>[];
+    final op = TransitOperator.fromId(operatorId);
+    final fallbackColor = _hex(op.colorHex);
+
+    for (final row in rows) {
+      final ptsJson = row['points_json'] as String?;
+      if (ptsJson == null || ptsJson.isEmpty) continue;
+      try {
+        final coords = (jsonDecode(ptsJson) as List<dynamic>)
+            .map((pt) => [
+                  ((pt as List<dynamic>)[0] as num).toDouble(),
+                  (pt[1] as num).toDouble(),
+                ])
+            .toList();
+        if (coords.isEmpty) continue;
+
+        String color = fallbackColor;
+        final rawColor = row['route_color'] as String?;
+        final inferredLine = row['inferred_line'] as String?;
+        final shapeId = row['shape_id'] as String? ?? '';
+        if (operatorId == 'metro') {
+          if (inferredLine == 'L2' || shapeId.contains('KAB') || shapeId.contains('BSR')) {
+            color = '#009E4D';
+          } else if (inferredLine == 'L3' || shapeId.contains('RoutePoints')) {
+            color = '#EA7125';
+          } else {
+            color = '#E8590C';
+          }
+        } else if (rawColor != null && rawColor.isNotEmpty) {
+          final clean = rawColor.replaceAll('#', '');
+          if (clean.length == 6) color = '#$clean';
+        }
+
+        features.add({
+          'type': 'Feature',
+          'properties': {
+            'color': color,
+            'shape_id': shapeId,
+            'line': inferredLine ?? row['route_short_name'] ?? '',
+          },
+          'geometry': {
+            'type': 'LineString',
+            'coordinates': coords,
+          },
+        });
+      } catch (_) {}
+    }
+
+    return {
+      'type': 'FeatureCollection',
+      'features': features,
+    };
   }
 
   @override
@@ -216,6 +360,38 @@ class TransitRepositoryImpl implements TransitRepository {
     String? mode,
     TransitTerritory? territory,
   }) async {
+    if (operatorId == 'metro') {
+      return const [
+        TransitRoute(
+          id: 'metro:MB:L1',
+          operatorId: 'metro',
+          shortName: 'L1',
+          longName: 'Plentzia ↔ Etxebarri',
+          type: 1,
+          colorHex: '#E8590C',
+          territory: 'bizkaia',
+        ),
+        TransitRoute(
+          id: 'metro:MB:L2',
+          operatorId: 'metro',
+          shortName: 'L2',
+          longName: 'Kabiezes ↔ Basauri',
+          type: 1,
+          colorHex: '#009E4D',
+          territory: 'bizkaia',
+        ),
+        TransitRoute(
+          id: 'metro:MB:L3',
+          operatorId: 'metro',
+          shortName: 'L3',
+          longName: 'Matiko ↔ Kukullaga',
+          type: 1,
+          colorHex: '#EA7125',
+          territory: 'bizkaia',
+        ),
+      ];
+    }
+
     final rows = await _db.getRoutes(
       operatorId: operatorId,
       mode: mode,
@@ -229,6 +405,54 @@ class TransitRepositoryImpl implements TransitRepository {
     String routeId, {
     int? directionId,
   }) async {
+    if (routeId == 'metro:MB:L1' || routeId == 'L1') {
+      final all = await _db.getStopsForRoute('metro:MB');
+      return all
+          .where((s) =>
+              !s.stopName.toLowerCase().contains('basauri') &&
+              !s.stopName.toLowerCase().contains('ariz') &&
+              !s.stopName.toLowerCase().contains('kabiezes') &&
+              !s.stopName.toLowerCase().contains('santurtzi') &&
+              !s.stopName.toLowerCase().contains('peñota') &&
+              !s.stopName.toLowerCase().contains('portugalete') &&
+              !s.stopName.toLowerCase().contains('abatxolo') &&
+              !s.stopName.toLowerCase().contains('sestao') &&
+              !s.stopName.toLowerCase().contains('urbinaga') &&
+              !s.stopName.toLowerCase().contains('bagatza') &&
+              !s.stopName.toLowerCase().contains('barakaldo') &&
+              !s.stopName.toLowerCase().contains('ansio') &&
+              !s.stopName.toLowerCase().contains('gurutzeta'))
+          .map(_toStop)
+          .toList();
+    }
+    if (routeId == 'metro:MB:L2' || routeId == 'L2') {
+      final all = await _db.getStopsForRoute('metro:MB');
+      return all
+          .where((s) =>
+              !s.stopName.toLowerCase().contains('plentzia') &&
+              !s.stopName.toLowerCase().contains('urduliz') &&
+              !s.stopName.toLowerCase().contains('sopela') &&
+              !s.stopName.toLowerCase().contains('larrabasterra') &&
+              !s.stopName.toLowerCase().contains('berango') &&
+              !s.stopName.toLowerCase().contains('ibarbengoa') &&
+              !s.stopName.toLowerCase().contains('bidezabal') &&
+              !s.stopName.toLowerCase().contains('algorta') &&
+              !s.stopName.toLowerCase().contains('aiboa') &&
+              !s.stopName.toLowerCase().contains('neguri') &&
+              !s.stopName.toLowerCase().contains('gobela') &&
+              !s.stopName.toLowerCase().contains('areeta') &&
+              !s.stopName.toLowerCase().contains('lamiazo') &&
+              !s.stopName.toLowerCase().contains('leioa') &&
+              !s.stopName.toLowerCase().contains('astillero') &&
+              !s.stopName.toLowerCase().contains('lutxana'))
+          .map(_toStop)
+          .toList();
+    }
+    if (routeId == 'metro:MB:L3' || routeId == 'L3') {
+      final rows = await _db.getStopsForRoute('euskotren:ES:Euskotren:Line:9:');
+      return rows.map(_toStop).toList();
+    }
+
     final rows = await _db.getStopsForRoute(routeId, directionId: directionId);
     return rows.map(_toStop).toList();
   }

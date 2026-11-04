@@ -513,6 +513,54 @@ class AppDatabase {
     return RawStopRecord.fromMap(rows.first);
   }
 
+  /// Retrieves the geographic shape by its specific [shapeId].
+  Future<List<List<double>>> getShapeById(String shapeId) async {
+    await _ensureOpen();
+    final rows = await _executor.runSelect(
+      'SELECT points_json FROM shapes WHERE shape_id = ? LIMIT 1',
+      [shapeId],
+    );
+    if (rows.isEmpty) return [];
+    final rawJson = rows.first['points_json'] as String?;
+    if (rawJson == null || rawJson.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(rawJson) as List<dynamic>;
+      return decoded.map<List<double>>((pt) {
+        final pair = pt as List<dynamic>;
+        return [
+          (pair[0] as num).toDouble(),
+          (pair[1] as num).toDouble(),
+        ];
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Retrieves raw shape records with route information for an operator.
+  Future<List<Map<String, Object?>>> getRawOperatorShapes(String operatorId) async {
+    await _ensureOpen();
+    final sql = '''
+      SELECT DISTINCT s.shape_id, s.points_json, r.route_color, r.route_short_name, t.inferred_line
+      FROM routes r
+      JOIN trips t ON r.route_id = t.route_id
+      JOIN shapes s ON t.shape_id = s.shape_id
+      WHERE r.operator_id = ?
+    ''';
+    final rows = await _executor.runSelect(sql, [operatorId]);
+    if (operatorId == 'metro') {
+      final l3Rows = await _executor.runSelect('''
+        SELECT DISTINCT s.shape_id, s.points_json, r.route_color, r.route_short_name, t.inferred_line
+        FROM routes r
+        JOIN trips t ON r.route_id = t.route_id
+        JOIN shapes s ON t.shape_id = s.shape_id
+        WHERE t.route_id = 'euskotren:ES:Euskotren:Line:9:'
+      ''', []);
+      return [...rows, ...l3Rows];
+    }
+    return rows;
+  }
+
   /// Retrieves the geographic shape (ordered list of [lon, lat] points) for a given [routeId].
   /// If [directionId] is provided, selects the shape corresponding to that direction.
   Future<List<List<double>>> getRouteShape(
@@ -664,9 +712,61 @@ class AppDatabase {
     };
   }
 
+  /// Finds sibling stop IDs belonging to the same street or junction cluster
+  /// (e.g. opposite or adjacent bus poles on the same street within ~350m, sharing street name).
+  Future<List<String>> getSiblingStopIds(String stopId) async {
+    await _ensureOpen();
+    final stop = await getStopById(stopId);
+    if (stop == null) {
+      return [stopId];
+    }
+
+    // Do not group rail stations across platforms (Metro/train have parent stations)
+    if (stop.operatorId == 'metro' || stop.operatorId.contains('renfe')) {
+      return [stopId];
+    }
+
+    // Extract base street name (e.g. 'ANTONIO ALZAGA 7 (445)' -> 'ANTONIO ALZAGA')
+    final baseName = stop.stopName
+        .replaceAll(RegExp(r'\s*\d+\s*\(\d+\).*'), '')
+        .trim()
+        .toUpperCase();
+
+    const dLat = 350.0 / 111000.0;
+    const dLon = 350.0 / 80000.0;
+
+    final rows = await _executor.runSelect('''
+      SELECT stop_id, stop_name, stop_lat, stop_lon
+      FROM stops
+      WHERE operator_id = ?
+        AND stop_lat BETWEEN ? AND ?
+        AND stop_lon BETWEEN ? AND ?
+    ''', [
+      stop.operatorId,
+      stop.stopLat - dLat,
+      stop.stopLat + dLat,
+      stop.stopLon - dLon,
+      stop.stopLon + dLon,
+    ]);
+
+    final siblings = <String>[stopId];
+    for (final row in rows) {
+      final sid = row['stop_id']! as String;
+      if (sid == stopId) continue;
+      final sname = (row['stop_name'] as String?)?.toUpperCase() ?? '';
+      final sbase = sname.replaceAll(RegExp(r'\s*\d+\s*\(\d+\).*'), '').trim();
+      if ((baseName.length >= 4 && sbase == baseName) ||
+          (baseName.length >= 5 && sname.contains(baseName))) {
+        siblings.add(sid);
+      }
+    }
+    return siblings.toSet().toList();
+  }
+
   /// Queries upcoming scheduled departures for a station, with optional destination filtering.
   Future<List<RawDepartureRecord>> getDepartures({
     required String stationId,
+    List<String>? siblingStationIds,
     required Set<String> activeServiceIds,
     required String minDepartureTime,
     String? destinationStopId,
@@ -676,6 +776,13 @@ class AppDatabase {
   }) async {
     if (activeServiceIds.isEmpty) return [];
     await _ensureOpen();
+
+    final stationIds = [
+      stationId,
+      if (siblingStationIds != null) ...siblingStationIds,
+    ];
+    final stationPlaceholders =
+        List.filled(stationIds.length, '?').join(',');
 
     final servicePlaceholders =
         List.filled(activeServiceIds.length, '?').join(',');
@@ -694,14 +801,14 @@ class AppDatabase {
       JOIN trips t ON st.trip_id = t.trip_id
       JOIN routes r ON t.route_id = r.route_id
       JOIN stops s ON st.stop_id = s.stop_id
-      WHERE (s.stop_id = ? OR s.parent_station = ?)
+      WHERE (s.stop_id IN ($stationPlaceholders) OR s.parent_station IN ($stationPlaceholders))
         AND t.service_id IN ($servicePlaceholders)
         AND st.departure_time >= ?
     ''');
 
     final args = <Object?>[
-      stationId,
-      stationId,
+      ...stationIds,
+      ...stationIds,
       ...activeServiceIds,
       minDepartureTime,
     ];
