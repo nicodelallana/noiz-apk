@@ -31,10 +31,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 350),
+      duration: const Duration(milliseconds: 700),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.88, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.86, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
         curve: Curves.easeOutCubic,
@@ -61,7 +61,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _initializeAndNavigate() async {
-    // Warm up database stops & GPS in parallel in background without blocking startup
+    // Warm up database stops & GPS in parallel in background
     unawaited(
       ref.read(resolvedUserLocationProvider.future).then<void>(
         (_) {},
@@ -81,11 +81,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       return;
     }
 
-    try {
-      await _controller.forward().orCancel;
-    } on TickerCanceled {
-      return;
-    }
+    // Play entrance animation
+    _controller.forward();
+
+    // Allow comfortable time (~1200ms) for GPS & nearest stop resolution
+    // so the user lands directly on their departures without seeing "Buscando parada…"
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
 
     if (mounted) {
       context.go('/');

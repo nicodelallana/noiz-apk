@@ -57,8 +57,8 @@ void main() {
       // Verify no circular progress indicator
       expect(find.byType(CircularProgressIndicator), findsNothing);
 
-      // Advance clock by animation duration (350ms) + post frame
-      await tester.pump(const Duration(milliseconds: 360));
+      // Advance clock by splash display duration (1200ms) + transition
+      await tester.pump(const Duration(milliseconds: 1300));
       await tester.pumpAndSettle();
 
       // Home should be reached without blocking on slow GPS or GTFS

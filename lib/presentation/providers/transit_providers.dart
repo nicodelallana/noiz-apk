@@ -76,10 +76,32 @@ final resolvedUserLocationProvider = FutureProvider<UserLocation>((ref) async {
       return loc;
     }
   }
-  return const UserLocation(
+  const fallbackLoc = UserLocation(
     latitude: TransitConstants.defaultLatitude,
     longitude: TransitConstants.defaultLongitude,
   );
+  if (ref.read(selectedTransitStopProvider) == null) {
+    const op = TransitOperator.metro;
+    ref.read(selectedTerritoryProvider.notifier).state = TransitTerritory.bizkaia;
+    ref.read(selectedOperatorProvider.notifier).state = op;
+    final repo = ref.read(transitRepositoryProvider);
+    final stops = await repo.getStops(operatorId: op.id);
+    if (stops.isNotEmpty) {
+      final best = stops.reduce((a, b) {
+        final aLat = a.latitude ?? 0.0;
+        final aLon = a.longitude ?? 0.0;
+        final bLat = b.latitude ?? 0.0;
+        final bLon = b.longitude ?? 0.0;
+        final da = (aLat - fallbackLoc.latitude) * (aLat - fallbackLoc.latitude) +
+            (aLon - fallbackLoc.longitude) * (aLon - fallbackLoc.longitude);
+        final db = (bLat - fallbackLoc.latitude) * (bLat - fallbackLoc.latitude) +
+            (bLon - fallbackLoc.longitude) * (bLon - fallbackLoc.longitude);
+        return da < db ? a : b;
+      });
+      ref.read(selectedTransitStopProvider.notifier).state = best;
+    }
+  }
+  return fallbackLoc;
 });
 
 /// Stops (all operators) within `radiusKm` of a point, for the map's first load.
