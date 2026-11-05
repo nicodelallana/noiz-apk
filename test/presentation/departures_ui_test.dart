@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Departures UI, Operator Theme & Navigation Tests', () {
     testWidgets(
-        'AppShell renders "Cuenta" tab in navigation bar instead of "Ajustes"',
+        'AppShell renders "Tarifas" tab in navigation bar instead of "Ajustes"',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -30,10 +30,11 @@ void main() {
         ),
       );
 
-      // Verify "Cuenta" is present
-      expect(find.text('Cuenta'), findsOneWidget);
-      // Verify "Ajustes" is NOT present
+      // Verify "Tarifas" is present
+      expect(find.text('Tarifas'), findsOneWidget);
+      // Verify "Ajustes" and "Cuenta" are NOT present
       expect(find.text('Ajustes'), findsNothing);
+      expect(find.text('Cuenta'), findsNothing);
       expect(find.text('Inicio'), findsOneWidget);
       expect(find.text('Mapa'), findsOneWidget);
       expect(find.text('Alertas'), findsOneWidget);

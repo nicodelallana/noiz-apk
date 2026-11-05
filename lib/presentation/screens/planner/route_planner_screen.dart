@@ -359,17 +359,99 @@ class _ItineraryResultCard extends ConsumerWidget {
     final hours = itinerary.totalDurationMinutes ~/ 60;
     final mins = itinerary.totalDurationMinutes % 60;
     final durationStr = hours > 0 ? '${hours}h ${mins} min' : '$mins min';
+    final alerts = ref.watch(serviceAlertsProvider).valueOrNull ?? const [];
+
+    final matchingAlerts = alerts.where((alert) {
+      return itinerary.legs.any((leg) {
+        if (alert.operatorId.isNotEmpty &&
+            alert.operatorId == leg.operatorId &&
+            alert.networkWide) {
+          return true;
+        }
+        if (leg.lineName != null &&
+            (alert.lineName.toLowerCase().contains(leg.lineName!.toLowerCase()) ||
+                leg.lineName!.toLowerCase().contains(alert.lineName.toLowerCase()))) {
+          return true;
+        }
+        if (alert.affectedStopIds.contains(leg.originStopName) ||
+            alert.affectedStopIds.contains(leg.destStopName)) {
+          return true;
+        }
+        return alert.locations.any((loc) =>
+            loc.name.toLowerCase() == leg.originStopName.toLowerCase() ||
+            loc.name.toLowerCase() == leg.destStopName.toLowerCase());
+      });
+    }).toList();
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.darkSurface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.darkBorderStrong),
+        border: Border.all(
+          color: matchingAlerts.isNotEmpty
+              ? AppColors.delayedAmber.withValues(alpha: 0.5)
+              : AppColors.darkBorderStrong,
+          width: matchingAlerts.isNotEmpty ? 1.5 : 1.0,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Disruption Warning Banner if incident affects this journey
+          if (matchingAlerts.isNotEmpty) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.delayedAmber.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.delayedAmber.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: AppColors.delayedAmber,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          matchingAlerts.first.title.isNotEmpty
+                              ? matchingAlerts.first.title
+                              : 'Incidencia o retraso en la línea',
+                          style: const TextStyle(
+                            color: AppColors.darkTextPrimary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          matchingAlerts.first.description,
+                          style: const TextStyle(
+                            color: AppColors.darkTextSecondary,
+                            fontSize: 12,
+                            height: 1.3,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // Header: Duration + Transfer count
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -426,6 +508,8 @@ class _ItineraryResultCard extends ConsumerWidget {
                 final firstLeg = itinerary.legs.first;
                 final hasPerm =
                     await ref.read(liveTripServiceProvider).requestPermission();
+                final hasDisruption = matchingAlerts.isNotEmpty;
+                final delaySecs = hasDisruption ? 300 : 0;
 
                 final liveTrip = LiveTripState(
                   tripId: 'plan_${DateTime.now().millisecondsSinceEpoch}',
@@ -440,11 +524,13 @@ class _ItineraryResultCard extends ConsumerWidget {
                   nextStop: firstLeg.destStopName,
                   stopsRemaining: firstLeg.stopsCount,
                   progress: 0.1,
-                  arrivalTime: itinerary.arrivalTime,
-                  status: LiveTripStatus.tracking,
+                  arrivalTime: itinerary.arrivalTime.add(Duration(seconds: delaySecs)),
+                  status: hasDisruption ? LiveTripStatus.delayed : LiveTripStatus.tracking,
                   isRealtime: true,
-                  delaySeconds: 0,
-                  instruction: firstLeg.instruction,
+                  delaySeconds: delaySecs,
+                  instruction: hasDisruption
+                      ? 'Retraso: ${matchingAlerts.first.title}'
+                      : firstLeg.instruction,
                   updatedAt: DateTime.now(),
                 );
 
@@ -458,16 +544,22 @@ class _ItineraryResultCard extends ConsumerWidget {
                       backgroundColor: AppColors.darkSurfaceElevated,
                       content: Row(
                         children: [
-                          const Icon(
-                            Icons.notifications_active_rounded,
-                            color: AppColors.realtimeGreen,
+                          Icon(
+                            hasDisruption
+                                ? Icons.warning_rounded
+                                : Icons.notifications_active_rounded,
+                            color: hasDisruption
+                                ? AppColors.delayedAmber
+                                : AppColors.realtimeGreen,
                             size: 20,
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               hasPerm
-                                  ? 'Siguiendo ruta hacia ${itinerary.destination} en la pantalla de bloqueo'
+                                  ? (hasDisruption
+                                      ? 'Siguiendo ruta con aviso de incidencia activa en pantalla de bloqueo'
+                                      : 'Siguiendo ruta hacia ${itinerary.destination} en la pantalla de bloqueo')
                                   : 'Viaje iniciado. Para ver el progreso en bloqueo, activa las notificaciones.',
                               style: const TextStyle(
                                 color: AppColors.darkTextPrimary,
@@ -481,15 +573,15 @@ class _ItineraryResultCard extends ConsumerWidget {
                   );
                 }
               },
-              icon: const Icon(BarikIcons.navigationArrow),
-              label: const Text('Voy a coger este viaje'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.opMetroBilbao,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
+              icon: Icon(
+                matchingAlerts.isNotEmpty
+                    ? Icons.notification_important_rounded
+                    : Icons.notifications_active_outlined,
+              ),
+              label: Text(
+                matchingAlerts.isNotEmpty
+                    ? 'Seguir viaje (Aviso de retraso)'
+                    : 'Seguir este viaje en directo',
               ),
             ),
           ),

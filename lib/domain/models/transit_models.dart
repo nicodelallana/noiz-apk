@@ -29,6 +29,7 @@ class Stop {
     this.operatorId = 'metro',
     this.territory = 'bizkaia',
     this.mode = 'subway',
+    this.zoneId,
   });
 
   final String id;
@@ -41,6 +42,7 @@ class Stop {
   final String operatorId;
   final String territory;
   final String mode;
+  final String? zoneId;
 
   /// Public transport code or identifier (e.g. "1065", "3515", "13506", "abando").
   String get code {

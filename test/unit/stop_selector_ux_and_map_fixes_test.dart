@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:bizkaia_transit/data/local/app_database.dart';
 import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/domain/models/transit_models.dart';
-import 'package:bizkaia_transit/domain/repositories/transit_repository.dart';
 import 'package:bizkaia_transit/presentation/providers/transit_providers.dart';
 
 import 'smart_destinations_and_overhaul_test.dart';
@@ -14,12 +13,10 @@ void main() {
   group('Stop Selector UX & Strict Operator Scoping Tests', () {
     test('getStations does not search by numeric stop_id or stop code', () async {
       String? executedSql;
-      List<Object?>? executedArgs;
 
       final mockExecutor = MockQueryExecutor(
         customSelectHandler: (sql, args) async {
           executedSql = sql;
-          executedArgs = args;
           return [
             {
               'stop_id': 'bizkaibus:1065',

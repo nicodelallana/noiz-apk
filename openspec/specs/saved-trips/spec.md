@@ -6,7 +6,11 @@ Enables users to bookmark transit journeys, persist them for offline access, syn
 ## Requirements
 
 ### Requirement: Guardar un viaje
-The system SHALL let an authenticated or guest user save a trip defined by operator, origin stop and destination stop, with a custom name and widget enablement flag.
+The system SHALL let an authenticated or guest user save a trip defined by operator, origin stop and destination stop across all supported operators (Metro, Bizkaibus, Bilbobus, Euskotren, Renfe), with a custom name and widget enablement flag.
+
+#### Scenario: Guardar viaje de Renfe Cercanías
+- **WHEN** the user saves a Renfe Cercanías journey from "Bilbao-Intermod. Abando" to "Santurtzi"
+- **THEN** the dialog displays the origin station name correctly, populates reachable destinations for that operator, and persists the journey with operator "renfe"
 
 #### Scenario: Guardar Bagatza → Kabiezes
 - **WHEN** the user saves origin "Bagatza" and destination "Kabiezes" on Metro Bilbao

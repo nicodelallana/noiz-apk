@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:bizkaia_transit/presentation/navigation/app_shell.dart';
 import 'package:bizkaia_transit/presentation/screens/alerts/service_alerts_screen.dart';
-import 'package:bizkaia_transit/presentation/screens/auth/profile_settings_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/fares/transit_fares_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/legal/licenses_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/map/transit_map_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/metro/metro_departures_screen.dart';
@@ -96,9 +96,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/settings',
+                path: '/fares',
                 pageBuilder: (context, state) => const NoTransitionPage(
-                  child: ProfileSettingsScreen(),
+                  child: TransitFaresScreen(),
                 ),
                 routes: [
                   GoRoute(
@@ -106,6 +106,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                     builder: (context, state) => const LicensesScreen(),
                   ),
                 ],
+              ),
+              GoRoute(
+                path: '/settings',
+                redirect: (context, state) => '/fares',
               ),
             ],
           ),

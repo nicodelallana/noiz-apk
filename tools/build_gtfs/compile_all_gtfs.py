@@ -384,7 +384,7 @@ def parse_csv_from_zip(zf: zipfile.ZipFile, filename: str) -> List[Dict[str, str
         cleaned_fields = [fn.strip() for fn in reader.fieldnames if fn]
         rows = []
         for line in reader:
-            row = {k.strip(): (v.strip() if v else "") for k, v in line.items() if k}
+            row = {k.strip().strip("'\""): (v.strip() if v else "") for k, v in line.items() if k}
             rows.append(row)
         return rows
 
@@ -693,6 +693,30 @@ def process_operator_feed(conn: sqlite3.Connection, op_id: str, zip_path: str):
 
 def build_indices(conn: sqlite3.Connection):
     cur = conn.cursor()
+    log("Backfilling missing trip headsigns and inferred lines...")
+    cur.execute("""
+        UPDATE trips 
+        SET trip_headsign = (
+            SELECT s.stop_name 
+            FROM stop_times st 
+            JOIN stops s ON st.stop_id = s.stop_id 
+            WHERE st.trip_id = trips.trip_id 
+            ORDER BY st.stop_sequence DESC 
+            LIMIT 1
+        )
+        WHERE trip_headsign IS NULL OR trim(trip_headsign) = '';
+    """)
+    cur.execute("""
+        UPDATE trips 
+        SET inferred_line = (
+            SELECT COALESCE(NULLIF(r.route_short_name, ''), r.route_long_name)
+            FROM routes r 
+            WHERE r.route_id = trips.route_id
+        )
+        WHERE inferred_line IS NULL OR trim(inferred_line) = '';
+    """)
+    conn.commit()
+
     log("Building performance indexes...")
     cur.executescript("""
     CREATE INDEX IF NOT EXISTS idx_stops_bounds ON stops (stop_lat, stop_lon);

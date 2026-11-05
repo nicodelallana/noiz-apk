@@ -176,7 +176,9 @@ class TransitRepositoryImpl implements TransitRepository {
         tripId: raw.tripId,
         stationId: raw.stopId,
         stationName: raw.stopName,
-        headsign: raw.headsign ?? 'Destino',
+        headsign: (raw.headsign != null && raw.headsign!.trim().isNotEmpty)
+            ? raw.headsign!.trim()
+            : 'Destino',
         line: metroLine,
         lineCode: cleanLine,
         routeColorHex: colorHex,
@@ -286,28 +288,43 @@ class TransitRepositoryImpl implements TransitRepository {
     int? directionId,
   }) async {
     if (routeId == 'metro:MB:L1' || routeId == 'L1') {
-      final s1 = await _db.getShapeById('metro:ETX_PLE');
-      final s2 = await _db.getShapeById('metro:PLE_ETX');
-      final list = [if (s1.isNotEmpty) s1, if (s2.isNotEmpty) s2];
-      if (list.isNotEmpty) return list;
-      return _db.getRouteShapes('metro:MB');
+      final s = directionId == 1
+          ? await _db.getShapeById('metro:PLE_ETX')
+          : await _db.getShapeById('metro:ETX_PLE');
+      if (s.isNotEmpty) return [s];
+      return _db.getRouteShapes('metro:MB', directionId: directionId);
     }
     if (routeId == 'metro:MB:L2' || routeId == 'L2') {
-      final s1 = await _db.getShapeById('metro:BSR_KAB');
-      final s2 = await _db.getShapeById('metro:KAB_BSR');
-      final list = [if (s1.isNotEmpty) s1, if (s2.isNotEmpty) s2];
-      if (list.isNotEmpty) return list;
+      final s = directionId == 1
+          ? await _db.getShapeById('metro:KAB_BSR')
+          : await _db.getShapeById('metro:BSR_KAB');
+      if (s.isNotEmpty) return [s];
     }
     if (routeId == 'metro:MB:L3' || routeId == 'L3') {
-      final s = await _db.getRouteShapes('euskotren:ES:Euskotren:Line:9:');
-      if (s.isNotEmpty) return s;
+      final s = await _db.getRouteShapes('euskotren:ES:Euskotren:Line:9:', directionId: directionId);
+      if (s.isNotEmpty) {
+        s.sort((a, b) => b.length.compareTo(a.length));
+        return [s.first];
+      }
     }
     final shapes = await _db.getRouteShapes(routeId, directionId: directionId);
-    if (shapes.isNotEmpty) return shapes;
+    if (shapes.isNotEmpty) {
+      // Return single canonical longest shape to avoid reverse-track zigzagging
+      shapes.sort((a, b) => b.length.compareTo(a.length));
+      return [shapes.first];
+    }
 
-    // Fallback: connect stops in sequence
-    final stops = await getStopsForRoute(routeId, directionId: directionId);
-    final fallbackCoords = stops
+    // Fallback: connect stops in sequence without concatenating opposite directions
+    final d0Stops = await _db.getStopsForRoute(routeId, directionId: directionId ?? 0);
+    final d0Coords = d0Stops
+        .map((s) => [s.stopLon, s.stopLat])
+        .toList();
+    if (d0Coords.isNotEmpty) {
+      return [d0Coords];
+    }
+
+    final allStops = await getStopsForRoute(routeId, directionId: directionId);
+    final fallbackCoords = allStops
         .where((s) => s.longitude != null && s.latitude != null)
         .map((s) => [s.longitude!, s.latitude!])
         .toList();
@@ -330,9 +347,28 @@ class TransitRepositoryImpl implements TransitRepository {
     final op = TransitOperator.fromId(operatorId);
     final fallbackColor = _hex(op.colorHex);
 
+    // Group shapes by line/corridor so we only draw ONE canonical shape per line/branch,
+    // avoiding the moiré and zig-zag artifacts of overlapping reverse tracks.
+    final shapesByLine = <String, Map<String, dynamic>>{};
+
     for (final row in rows) {
       final ptsJson = row['points_json'] as String?;
       if (ptsJson == null || ptsJson.isEmpty) continue;
+      final shapeId = row['shape_id'] as String? ?? '';
+
+      // Skip reverse shapes in network overview to avoid parallel track zig-zag
+      if (shapeId.endsWith('_INV') || shapeId.contains('_INV_')) continue;
+      if (operatorId == 'metro' &&
+          (shapeId == 'metro:PLE_ETX' ||
+              shapeId == 'metro:KAB_BSR' ||
+              shapeId == 'metro:BID_ETX' ||
+              shapeId == 'metro:IBB_ETX' ||
+              shapeId == 'metro:SOP_ETX' ||
+              shapeId == 'metro:URD_ETX' ||
+              shapeId == 'metro:LAR_ETX')) {
+        continue;
+      }
+
       try {
         final coords = (jsonDecode(ptsJson) as List<dynamic>)
             .map((pt) => [
@@ -345,7 +381,6 @@ class TransitRepositoryImpl implements TransitRepository {
         String color = fallbackColor;
         final rawColor = row['route_color'] as String?;
         final inferredLine = row['inferred_line'] as String?;
-        final shapeId = row['shape_id'] as String? ?? '';
         if (operatorId == 'metro') {
           if (inferredLine == 'L2' || shapeId.contains('KAB') || shapeId.contains('BSR')) {
             color = '#009E4D';
@@ -359,19 +394,33 @@ class TransitRepositoryImpl implements TransitRepository {
           if (clean.length == 6) color = '#$clean';
         }
 
-        features.add({
-          'type': 'Feature',
-          'properties': {
+        final lineKey = inferredLine ?? (row['route_short_name'] as String?) ?? shapeId;
+        final existing = shapesByLine[lineKey];
+        // Keep the shape with the most points (longest, most detailed coverage)
+        if (existing == null || coords.length > (existing['coords'] as List).length) {
+          shapesByLine[lineKey] = {
             'color': color,
             'shape_id': shapeId,
-            'line': inferredLine ?? row['route_short_name'] ?? '',
-          },
-          'geometry': {
-            'type': 'LineString',
-            'coordinates': coords,
-          },
-        });
+            'line': lineKey,
+            'coords': coords,
+          };
+        }
       } catch (_) {}
+    }
+
+    for (final entry in shapesByLine.values) {
+      features.add({
+        'type': 'Feature',
+        'properties': {
+          'color': entry['color'],
+          'shape_id': entry['shape_id'],
+          'line': entry['line'],
+        },
+        'geometry': {
+          'type': 'LineString',
+          'coordinates': entry['coords'],
+        },
+      });
     }
 
     return {
@@ -500,6 +549,7 @@ class TransitRepositoryImpl implements TransitRepository {
       operatorId: raw.operatorId,
       territory: raw.territory.isNotEmpty ? raw.territory : op.territory.id,
       mode: raw.mode.isNotEmpty ? raw.mode : op.mode.id,
+      zoneId: raw.zoneId,
     );
   }
 

@@ -482,6 +482,30 @@ def rdp_simplify(points: List[List[float]], epsilon: float = 0.00005) -> List[Li
 
 def build_indices(conn: sqlite3.Connection):
     cur = conn.cursor()
+    log("Backfilling missing trip headsigns and inferred lines...")
+    cur.execute("""
+        UPDATE trips 
+        SET trip_headsign = (
+            SELECT s.stop_name 
+            FROM stop_times st 
+            JOIN stops s ON st.stop_id = s.stop_id 
+            WHERE st.trip_id = trips.trip_id 
+            ORDER BY st.stop_sequence DESC 
+            LIMIT 1
+        )
+        WHERE trip_headsign IS NULL OR trim(trip_headsign) = '';
+    """)
+    cur.execute("""
+        UPDATE trips 
+        SET inferred_line = (
+            SELECT COALESCE(NULLIF(r.route_short_name, ''), r.route_long_name)
+            FROM routes r 
+            WHERE r.route_id = trips.route_id
+        )
+        WHERE inferred_line IS NULL OR trim(inferred_line) = '';
+    """)
+    conn.commit()
+
     log("Building high-performance SQLite indexes...")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_stops_operator ON stops (operator_id);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_stops_coords ON stops (stop_lat, stop_lon);")
@@ -515,7 +539,7 @@ def read_csv_from_zip(z: zipfile.ZipFile, filename: str) -> List[Dict[str, str]]
         return []
     with z.open(filename) as f:
         reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig", errors="replace"))
-        return [dict((k.strip(), (v.strip() if v else "")) for k, v in row.items() if k) for row in reader]
+        return [dict((k.strip().strip("'\""), (v.strip() if v else "")) for k, v in row.items() if k) for row in reader]
 
 def process_operator_feed(
     conn: sqlite3.Connection,

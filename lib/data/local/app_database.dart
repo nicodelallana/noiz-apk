@@ -971,7 +971,14 @@ class AppDatabase {
         st.departure_time,
         s.stop_id,
         s.stop_name,
-        t.trip_headsign,
+        COALESCE(NULLIF(TRIM(t.trip_headsign), ''), (
+          SELECT s_dest.stop_name
+          FROM stop_times st_dest
+          JOIN stops s_dest ON st_dest.stop_id = s_dest.stop_id
+          WHERE st_dest.trip_id = st.trip_id
+          ORDER BY st_dest.stop_sequence DESC
+          LIMIT 1
+        )) AS trip_headsign,
         COALESCE(NULLIF(r.route_short_name, ''), t.inferred_line, 'BUS') AS inferred_line,
         r.route_color,
         s.parent_station
@@ -1120,8 +1127,15 @@ class AppDatabase {
     await _ensureOpen();
     final rows = await _executor.runSelect('''
       SELECT 
-        t.inferred_line, 
-        t.trip_headsign, 
+        COALESCE(NULLIF(r.route_short_name, ''), t.inferred_line, 'Línea') as inferred_line, 
+        COALESCE(NULLIF(TRIM(t.trip_headsign), ''), (
+          SELECT s_dest.stop_name
+          FROM stop_times st_dest
+          JOIN stops s_dest ON st_dest.stop_id = s_dest.stop_id
+          WHERE st_dest.trip_id = t.trip_id
+          ORDER BY st_dest.stop_sequence DESC
+          LIMIT 1
+        )) as trip_headsign, 
         (s2.stop_sequence - s1.stop_sequence) as stops_count,
         r.operator_id,
         r.route_color

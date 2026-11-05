@@ -48,7 +48,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       0 => '/',
       1 => '/map',
       2 => '/alerts',
-      3 => '/settings',
+      3 => '/fares',
       _ => '/',
     };
     context.go(path);
@@ -173,7 +173,7 @@ const _tabs = [
   _TabSpec('Mapa', Icons.map_outlined, Icons.map_rounded),
   _TabSpec(
       'Alertas', Icons.notifications_none_rounded, Icons.notifications_rounded),
-  _TabSpec('Cuenta', Icons.person_outline_rounded, Icons.person_rounded),
+  _TabSpec('Tarifas', Icons.credit_card_outlined, Icons.credit_card_rounded),
 ];
 
 /// Capsule glass bar with a lighter glass "droplet" that springs between tabs.

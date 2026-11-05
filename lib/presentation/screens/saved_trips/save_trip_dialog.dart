@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/saved_trip_models.dart';
 import '../../../domain/models/transit_models.dart';
-import '../../providers/metro_providers.dart';
 import '../../providers/saved_trips_providers.dart';
 import '../../providers/transit_providers.dart';
 import '../../widgets/animations/save_trip_success_dialog.dart';
@@ -52,10 +51,13 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final stationsAsync = ref.watch(metroStationsProvider);
+    final effectiveOp = _origin != null
+        ? TransitOperator.fromId(_origin!.operatorId)
+        : ref.watch(selectedOperatorProvider);
+    final stationsAsync = ref.watch(stopsForActiveOperatorProvider);
 
     return AlertDialog(
-      title: const Text('Guardar viaje'),
+      title: Text('Guardar viaje · ${effectiveOp.name}'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -76,26 +78,39 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
             stationsAsync.when(
               loading: () => const LinearProgressIndicator(),
               error: (e, _) => Text('Error: $e'),
-              data: (stations) => DropdownButtonFormField<Stop>(
-                value: _origin,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Estación de origen',
-                  prefixIcon: Icon(Icons.trip_origin, color: Colors.green),
-                ),
-                items: stations
-                    .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(s.name, overflow: TextOverflow.ellipsis),
-                        ))
-                    .toList(),
-                onChanged: (val) {
-                  setState(() {
-                    _origin = val;
-                    _updateDefaultName();
-                  });
-                },
-              ),
+              data: (stations) {
+                final allStations = [
+                  if (_origin != null &&
+                      !stations.any((s) => s.id == _origin!.id))
+                    _origin!,
+                  ...stations,
+                ];
+                final currentOriginValid =
+                    _origin != null && allStations.any((s) => s.id == _origin!.id);
+                final selectedOrigin = currentOriginValid ? _origin : null;
+
+                return DropdownButtonFormField<Stop>(
+                  value: selectedOrigin,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Estación de origen',
+                    prefixIcon: Icon(Icons.trip_origin, color: Colors.green),
+                  ),
+                  items: allStations
+                      .map((s) => DropdownMenuItem(
+                            value: s,
+                            child: Text(s.name, overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _origin = val;
+                      _destination = null;
+                      _updateDefaultName();
+                    });
+                  },
+                );
+              },
             ),
             const SizedBox(height: 12),
 
@@ -108,8 +123,14 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
                   : Future.value(<Stop>[]),
               builder: (context, snapshot) {
                 final reachable = snapshot.data ?? [];
-                final currentValid =
-                    reachable.any((s) => s.id == _destination?.id);
+                final allDestinations = [
+                  if (_destination != null &&
+                      !reachable.any((s) => s.id == _destination!.id))
+                    _destination!,
+                  ...reachable,
+                ];
+                final currentValid = _destination != null &&
+                    allDestinations.any((s) => s.id == _destination?.id);
                 final selectedDest = currentValid ? _destination : null;
 
                 return DropdownButtonFormField<Stop>(
@@ -125,7 +146,7 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
                         ? 'No hay destinos directos sin transbordo'
                         : null,
                   ),
-                  items: reachable
+                  items: allDestinations
                       .map((s) => DropdownMenuItem(
                             value: s,
                             child:
@@ -169,11 +190,14 @@ class _SaveTripDialogState extends ConsumerState<SaveTripDialog> {
                   final finalName = _nameController.text.trim().isNotEmpty
                       ? _nameController.text.trim()
                       : '${_origin!.name} → ${_destination!.name}';
+                  final tripOp = _origin != null
+                      ? TransitOperator.fromId(_origin!.operatorId)
+                      : effectiveOp;
                   await ref
                       .read(savedTripsControllerProvider.notifier)
                       .saveTrip(
                         name: finalName,
-                        operator: TransitOperator.metro,
+                        operator: tripOp,
                         originStopId: _origin!.id,
                         originStopName: _origin!.name,
                         destStopId: _destination!.id,
