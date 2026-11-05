@@ -25,7 +25,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.noiz.app"
+        applicationId = "eus.noiz.app"
         minSdk = 24
         targetSdk = 34
         versionCode = flutter.versionCode
