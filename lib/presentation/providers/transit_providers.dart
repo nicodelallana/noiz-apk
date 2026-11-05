@@ -135,6 +135,18 @@ final selectedTransitStopProvider = StateProvider<Stop?>((ref) => null);
 /// Optional active destination stop filter ("de qué parada a qué parada")
 final selectedDestinationStopProvider = StateProvider<Stop?>((ref) => null);
 
+/// Optional active line filter (e.g. "A3336", "A2336", "L1")
+final selectedLineFilterProvider = StateProvider<String?>((ref) => null);
+
+/// Lines serving the currently active stop (for line selector / filter)
+final servedLinesForActiveStopProvider =
+    FutureProvider<List<String>>((ref) async {
+  final stop = ref.watch(selectedTransitStopProvider);
+  if (stop == null) return const [];
+  final repo = ref.watch(transitRepositoryProvider);
+  return repo.getServedLinesForStation(stop.id);
+});
+
 /// Stops for the currently selected operator
 final stopsForActiveOperatorProvider = FutureProvider<List<Stop>>((ref) async {
   final repo = ref.watch(transitRepositoryProvider);
@@ -147,13 +159,32 @@ final stopsForActiveOperatorProvider = FutureProvider<List<Stop>>((ref) async {
   );
 });
 
+/// Stops strictly for the currently selected operator matching a search query
+final stopsForActiveOperatorSearchProvider =
+    FutureProvider.family<List<Stop>, String>((ref, query) async {
+  final repo = ref.watch(transitRepositoryProvider);
+  final operator = ref.watch(selectedOperatorProvider);
+  final territory = ref.watch(selectedTerritoryProvider);
+  final trimmed = query.trim();
+
+  return repo.getStops(
+    operatorId: operator.id,
+    territory: territory,
+    searchQuery: trimmed.isEmpty ? null : trimmed,
+  );
+});
+
 /// Reachable destination stops from the active origin stop.
 /// Only returns stops that can be reached on a direct trip on the same line.
 final reachableDestinationsProvider = FutureProvider<List<Stop>>((ref) async {
   final origin = ref.watch(selectedTransitStopProvider);
   if (origin == null) return [];
+  final lineFilter = ref.watch(selectedLineFilterProvider);
   final repo = ref.watch(transitRepositoryProvider);
-  return repo.getReachableDestinations(originStopId: origin.id);
+  return repo.getReachableDestinations(
+    originStopId: origin.id,
+    lineFilter: lineFilter,
+  );
 });
 
 /// Search results across all operators by name, stop code, line code or synonyms
@@ -170,10 +201,12 @@ final reachableDestinationsSearchProvider =
     FutureProvider.family<List<Stop>, String>((ref, query) async {
   final origin = ref.watch(selectedTransitStopProvider);
   if (origin == null) return const [];
+  final lineFilter = ref.watch(selectedLineFilterProvider);
   final repo = ref.watch(transitRepositoryProvider);
   return repo.getReachableDestinations(
     originStopId: origin.id,
     searchQuery: query.trim().isEmpty ? null : query.trim(),
+    lineFilter: lineFilter,
   );
 });
 
@@ -209,6 +242,7 @@ Future<void> _switchOperatorInternal({
 }) async {
   read(selectedOperatorProvider.notifier).state = newOperator;
   read(selectedDestinationStopProvider.notifier).state = null;
+  read(selectedLineFilterProvider.notifier).state = null;
 
   final userLoc = read(userLocationProvider);
   if (userLoc != null) {
@@ -270,16 +304,29 @@ Future<List<Departure>> _departuresFor(
   Stop stop, {
   required String operatorId,
   Stop? destination,
+  String? lineFilter,
 }) async {
   if (destination == null && LiveDeparturesService.supports(operatorId)) {
     final live =
         await ref.read(liveDeparturesServiceProvider).fetch(stop, operatorId);
-    if (live != null) return live;
+    if (live != null) {
+      if (lineFilter != null && lineFilter.isNotEmpty) {
+        final filtered = live
+            .where((d) =>
+                d.lineCode.toLowerCase() == lineFilter.toLowerCase() ||
+                d.headsign.toLowerCase().contains(lineFilter.toLowerCase()))
+            .toList();
+        if (filtered.isNotEmpty) return filtered;
+      } else {
+        return live;
+      }
+    }
   }
   return ref.read(transitRepositoryProvider).getDepartures(
         stopId: stop.id,
         destinationStopId: destination?.id,
         operatorId: operatorId,
+        lineFilter: lineFilter,
       );
 }
 
@@ -288,6 +335,7 @@ final departuresForActiveStopProvider =
   ref.watch(minuteTickProvider);
   final stop = ref.watch(selectedTransitStopProvider);
   final destStop = ref.watch(selectedDestinationStopProvider);
+  final lineFilter = ref.watch(selectedLineFilterProvider);
   ref.watch(transitRepositoryProvider);
   final op = ref.watch(selectedOperatorProvider);
 
@@ -295,7 +343,13 @@ final departuresForActiveStopProvider =
     return [];
   }
 
-  return _departuresFor(ref, stop, operatorId: op.id, destination: destStop);
+  return _departuresFor(
+    ref,
+    stop,
+    operatorId: op.id,
+    destination: destStop,
+    lineFilter: lineFilter,
+  );
 });
 
 /// Upcoming departures for any stop, independent of the home screen selection

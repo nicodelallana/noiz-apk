@@ -24,6 +24,7 @@ class FakeTransitRepository implements TransitRepository {
   Future<List<Stop>> getReachableDestinations({
     required String originStopId,
     String? searchQuery,
+    String? lineFilter,
   }) async {
     return reachableToReturn;
   }
@@ -43,7 +44,16 @@ class FakeTransitRepository implements TransitRepository {
     String? destinationStopId,
     String? operatorId,
     DateTime? atTime,
+    String? lineFilter,
   }) async =>
+      [];
+
+  @override
+  Future<List<String>> getServedLinesForStation(String stationId) async => [];
+
+  @override
+  Future<List<List<List<double>>>> getRouteShapes(String routeId,
+          {int? directionId}) async =>
       [];
 
   @override

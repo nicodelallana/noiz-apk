@@ -45,12 +45,14 @@ class TransitRepositoryImpl implements TransitRepository {
   Future<List<Stop>> getReachableDestinations({
     required String originStopId,
     String? searchQuery,
+    String? lineFilter,
   }) async {
     final siblingIds = await _db.getSiblingStopIds(originStopId);
     final rawStops = await _db.getReachableDestinations(
       originStopId,
       siblingStationIds: siblingIds,
       searchQuery: searchQuery,
+      lineFilter: lineFilter,
     );
     return rawStops.map(_toStop).toList();
   }
@@ -61,6 +63,7 @@ class TransitRepositoryImpl implements TransitRepository {
     String? destinationStopId,
     String? operatorId,
     DateTime? atTime,
+    String? lineFilter,
   }) async {
     final time = atTime ?? DateTime.now();
     final activeServices = await _db.getActiveServiceIds(time);
@@ -78,6 +81,7 @@ class TransitRepositoryImpl implements TransitRepository {
             activeServiceIds: activeServices,
             minDepartureTime: minTime,
             limit: 15,
+            lineFilter: lineFilter,
           );
 
     final departures = _mapRawToDepartures(
@@ -101,6 +105,7 @@ class TransitRepositoryImpl implements TransitRepository {
           minDepartureTime: '04:00:00',
           maxDepartureTime: '12:00:00',
           limit: 15 - departures.length,
+          lineFilter: lineFilter,
         );
         departures.addAll(
           _mapRawToDepartures(
@@ -270,32 +275,52 @@ class TransitRepositoryImpl implements TransitRepository {
   }
 
   @override
-  Future<List<List<double>>> getRouteShape(
+  Future<List<String>> getServedLinesForStation(String stationId) async {
+    final siblings = await _db.getSiblingStopIds(stationId);
+    return _db.getServedLinesForStation(stationId, siblingStopIds: siblings);
+  }
+
+  @override
+  Future<List<List<List<double>>>> getRouteShapes(
     String routeId, {
     int? directionId,
   }) async {
     if (routeId == 'metro:MB:L1' || routeId == 'L1') {
-      final s = await _db.getShapeById('metro:ETX_PLE');
-      if (s.isNotEmpty) return s;
-      return _db.getRouteShape('metro:MB');
+      final s1 = await _db.getShapeById('metro:ETX_PLE');
+      final s2 = await _db.getShapeById('metro:PLE_ETX');
+      final list = [if (s1.isNotEmpty) s1, if (s2.isNotEmpty) s2];
+      if (list.isNotEmpty) return list;
+      return _db.getRouteShapes('metro:MB');
     }
     if (routeId == 'metro:MB:L2' || routeId == 'L2') {
-      final s = await _db.getShapeById('metro:BSR_KAB');
-      if (s.isNotEmpty) return s;
+      final s1 = await _db.getShapeById('metro:BSR_KAB');
+      final s2 = await _db.getShapeById('metro:KAB_BSR');
+      final list = [if (s1.isNotEmpty) s1, if (s2.isNotEmpty) s2];
+      if (list.isNotEmpty) return list;
     }
     if (routeId == 'metro:MB:L3' || routeId == 'L3') {
-      final s = await _db.getRouteShape('euskotren:ES:Euskotren:Line:9:');
+      final s = await _db.getRouteShapes('euskotren:ES:Euskotren:Line:9:');
       if (s.isNotEmpty) return s;
     }
-    final shape = await _db.getRouteShape(routeId, directionId: directionId);
-    if (shape.isNotEmpty) return shape;
+    final shapes = await _db.getRouteShapes(routeId, directionId: directionId);
+    if (shapes.isNotEmpty) return shapes;
 
     // Fallback: connect stops in sequence
     final stops = await getStopsForRoute(routeId, directionId: directionId);
-    return stops
+    final fallbackCoords = stops
         .where((s) => s.longitude != null && s.latitude != null)
         .map((s) => [s.longitude!, s.latitude!])
         .toList();
+    return fallbackCoords.isNotEmpty ? [fallbackCoords] : const [];
+  }
+
+  @override
+  Future<List<List<double>>> getRouteShape(
+    String routeId, {
+    int? directionId,
+  }) async {
+    final shapes = await getRouteShapes(routeId, directionId: directionId);
+    return shapes.isNotEmpty ? shapes.first : const [];
   }
 
   @override

@@ -115,6 +115,7 @@ abstract class TransitRepository {
   Future<List<Stop>> getReachableDestinations({
     required String originStopId,
     String? searchQuery,
+    String? lineFilter,
   });
 
   Future<List<Departure>> getDepartures({
@@ -122,7 +123,11 @@ abstract class TransitRepository {
     String? destinationStopId,
     String? operatorId,
     DateTime? atTime,
+    String? lineFilter,
   });
+
+  /// Resolves which lines (e.g. A3336, A2336, L1) serve a specific station or stop.
+  Future<List<String>> getServedLinesForStation(String stationId);
 
   Future<List<Stop>> getNearbyStops({
     required double latitude,
@@ -142,7 +147,13 @@ abstract class TransitRepository {
     bool includePlatforms = false,
   });
 
-  /// Retrieves the polyline coordinates [lon, lat] for a route.
+  /// Retrieves all polyline coordinate paths [lon, lat] for all shapes/branches of a route.
+  Future<List<List<List<double>>>> getRouteShapes(
+    String routeId, {
+    int? directionId,
+  });
+
+  /// Retrieves the primary polyline coordinates [lon, lat] for a route.
   Future<List<List<double>>> getRouteShape(
     String routeId, {
     int? directionId,

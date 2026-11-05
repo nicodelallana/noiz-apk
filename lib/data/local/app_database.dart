@@ -424,11 +424,17 @@ class AppDatabase {
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       final q = searchQuery.trim().toLowerCase();
 
-      // Check if query matches routes (e.g. A2336, 2336, L1, C2)
-      final routeRows = await _executor.runSelect(
-        'SELECT route_id FROM routes WHERE LOWER(route_short_name) = ? OR LOWER(route_short_name) LIKE ?',
-        [q, '%$q%'],
+      // Check if query matches routes for this operator (e.g. A2336, 2336, L1, C2)
+      final routeSql = StringBuffer(
+        'SELECT route_id FROM routes WHERE (LOWER(route_short_name) = ? OR LOWER(route_short_name) LIKE ?)',
       );
+      final routeArgs = <Object?>[q, '%$q%'];
+      if (operatorId != null && operatorId.isNotEmpty) {
+        routeSql.write(' AND operator_id = ?');
+        routeArgs.add(operatorId);
+      }
+      final routeRows =
+          await _executor.runSelect(routeSql.toString(), routeArgs);
       final matchingRouteIds = [
         for (final r in routeRows)
           if (r['route_id'] != null) r['route_id']! as String,
@@ -445,12 +451,10 @@ class AppDatabase {
         args.add('%$s%');
       }
 
-      // Match stop code / stop id (e.g. 1065, bizkaibus:1065, renfe:13506)
-      orConditions.add('s.stop_id LIKE ?');
-      args.add('%$q%');
-
       // Match sibling stops within ~350m that match the query
       // (solves cases like Muskiz where 1066 has "(Muskiz)" in name and 1065 does not)
+      final sibSynonymConditions =
+          synonyms.map((_) => 'LOWER(sib.stop_name) LIKE ?').join(' OR ');
       orConditions.add('''
         EXISTS (
           SELECT 1 FROM stops sib
@@ -458,11 +462,12 @@ class AppDatabase {
             AND sib.stop_id != s.stop_id
             AND abs(sib.stop_lat - s.stop_lat) < 0.003
             AND abs(sib.stop_lon - s.stop_lon) < 0.003
-            AND (LOWER(sib.stop_name) LIKE ? OR sib.stop_id LIKE ?)
+            AND ($sibSynonymConditions)
         )
       ''');
-      args.add('%$q%');
-      args.add('%$q%');
+      for (final s in synonyms) {
+        args.add('%$s%');
+      }
 
       // Match stops served by matching route/line
       if (matchingRouteIds.isNotEmpty) {
@@ -618,16 +623,16 @@ class AppDatabase {
     return rows;
   }
 
-  /// Retrieves the geographic shape (ordered list of [lon, lat] points) for a given [routeId].
-  /// If [directionId] is provided, selects the shape corresponding to that direction.
-  Future<List<List<double>>> getRouteShape(
+  /// Retrieves all geographic shapes (ordered lists of [lon, lat] points) for a given [routeId].
+  /// If [directionId] is provided, selects the shapes corresponding to that direction.
+  Future<List<List<List<double>>>> getRouteShapes(
     String routeId, {
     int? directionId,
   }) async {
     await _ensureOpen();
 
     final sql = StringBuffer('''
-      SELECT s.points_json
+      SELECT DISTINCT s.points_json
       FROM trips t
       JOIN shapes s ON t.shape_id = s.shape_id
       WHERE t.route_id = ?
@@ -639,26 +644,37 @@ class AppDatabase {
       args.add(directionId);
     }
 
-    sql.write(' LIMIT 1');
-
     final rows = await _executor.runSelect(sql.toString(), args);
-    if (rows.isEmpty) return [];
+    final results = <List<List<double>>>[];
+    for (final row in rows) {
+      final rawJson = row['points_json'] as String?;
+      if (rawJson == null || rawJson.isEmpty) continue;
 
-    final rawJson = rows.first['points_json'] as String?;
-    if (rawJson == null || rawJson.isEmpty) return [];
-
-    try {
-      final decoded = jsonDecode(rawJson) as List<dynamic>;
-      return decoded.map<List<double>>((pt) {
-        final pair = pt as List<dynamic>;
-        return [
-          (pair[0] as num).toDouble(),
-          (pair[1] as num).toDouble(),
-        ];
-      }).toList();
-    } catch (_) {
-      return [];
+      try {
+        final decoded = jsonDecode(rawJson) as List<dynamic>;
+        final points = decoded.map<List<double>>((pt) {
+          final pair = pt as List<dynamic>;
+          return [
+            (pair[0] as num).toDouble(),
+            (pair[1] as num).toDouble(),
+          ];
+        }).toList();
+        if (points.isNotEmpty) {
+          results.add(points);
+        }
+      } catch (_) {}
     }
+    return results;
+  }
+
+  /// Retrieves the first geographic shape (ordered list of [lon, lat] points) for a given [routeId].
+  /// If [directionId] is provided, selects the shape corresponding to that direction.
+  Future<List<List<double>>> getRouteShape(
+    String routeId, {
+    int? directionId,
+  }) async {
+    final shapes = await getRouteShapes(routeId, directionId: directionId);
+    return shapes.isNotEmpty ? shapes.first : const [];
   }
 
   /// Retrieves transit routes, with optional filtering by [operatorId], [mode], or [territory].
@@ -713,60 +729,159 @@ class AppDatabase {
     return rows.map(RawRouteRecord.fromMap).toList();
   }
 
-  /// Retrieves ordered stops along a specific route and direction.
+  /// Retrieves ordered stops along a specific route and direction, maintaining
+  /// strict continuous traversal order (canonical outbound trip followed by canonical return trip).
   Future<List<RawStopRecord>> getStopsForRoute(
     String routeId, {
     int? directionId,
   }) async {
     await _ensureOpen();
 
-    final sql = StringBuffer('''
-      SELECT DISTINCT s.stop_id, s.operator_id, s.stop_name, s.stop_lat, s.stop_lon,
-             s.zone_id, s.parent_station, s.territory, s.mode, s.location_type,
-             st.stop_sequence
-      FROM stops s
-      JOIN stop_times st ON s.stop_id = st.stop_id
-      JOIN trips t ON st.trip_id = t.trip_id
-      WHERE t.route_id = ?
-    ''');
-    final args = <Object?>[routeId];
-
     if (directionId != null) {
-      sql.write(' AND t.direction_id = ?');
-      args.add(directionId);
-    }
+      // Find the canonical trip in this direction with the most stops
+      final tripRows = await _executor.runSelect('''
+        SELECT t.trip_id, COUNT(st.stop_id) as stop_count
+        FROM trips t
+        JOIN stop_times st ON t.trip_id = st.trip_id
+        WHERE t.route_id = ? AND t.direction_id = ?
+        GROUP BY t.trip_id
+        ORDER BY stop_count DESC
+        LIMIT 1
+      ''', [routeId, directionId]);
 
-    sql.write(' ORDER BY st.stop_sequence ASC');
-
-    final rows = await _executor.runSelect(sql.toString(), args);
-    final seen = <String>{};
-    final result = <RawStopRecord>[];
-    for (final row in rows) {
-      final stop = RawStopRecord.fromMap(row);
-      if (seen.add(stop.stopId)) {
-        result.add(stop);
+      final canonicalTripId = tripRows.firstOrNull?['trip_id'] as String?;
+      if (canonicalTripId != null) {
+        final rows = await _executor.runSelect('''
+          SELECT s.stop_id, s.operator_id, s.stop_name, s.stop_lat, s.stop_lon,
+                 s.zone_id, s.parent_station, s.territory, s.mode, s.location_type,
+                 st.stop_sequence
+          FROM stops s
+          JOIN stop_times st ON s.stop_id = st.stop_id
+          WHERE st.trip_id = ?
+          ORDER BY st.stop_sequence ASC
+        ''', [canonicalTripId]);
+        return rows.map(RawStopRecord.fromMap).toList();
       }
     }
+
+    // DirectionId is null: overview of the whole route.
+    // 1. Get canonical outbound trip (direction 0, or trip with most stops)
+    final d0TripRows = await _executor.runSelect('''
+      SELECT t.trip_id, COUNT(st.stop_id) as stop_count
+      FROM trips t
+      JOIN stop_times st ON t.trip_id = st.trip_id
+      WHERE t.route_id = ? AND (t.direction_id = 0 OR t.direction_id IS NULL)
+      GROUP BY t.trip_id
+      ORDER BY stop_count DESC
+      LIMIT 1
+    ''', [routeId]);
+
+    final seenStopIds = <String>{};
+    final result = <RawStopRecord>[];
+    final d0TripId = d0TripRows.firstOrNull?['trip_id'] as String?;
+
+    if (d0TripId != null) {
+      final d0Rows = await _executor.runSelect('''
+        SELECT s.stop_id, s.operator_id, s.stop_name, s.stop_lat, s.stop_lon,
+               s.zone_id, s.parent_station, s.territory, s.mode, s.location_type,
+               st.stop_sequence
+        FROM stops s
+        JOIN stop_times st ON s.stop_id = st.stop_id
+        WHERE st.trip_id = ?
+        ORDER BY st.stop_sequence ASC
+      ''', [d0TripId]);
+      for (final row in d0Rows) {
+        final stop = RawStopRecord.fromMap(row);
+        if (seenStopIds.add(stop.stopId)) {
+          result.add(stop);
+        }
+      }
+    }
+
+    // 2. Get canonical return trip (direction 1) to pick up any stops unique to direction 1
+    final d1TripRows = await _executor.runSelect('''
+      SELECT t.trip_id, COUNT(st.stop_id) as stop_count
+      FROM trips t
+      JOIN stop_times st ON t.trip_id = st.trip_id
+      WHERE t.route_id = ? AND t.direction_id = 1
+      GROUP BY t.trip_id
+      ORDER BY stop_count DESC
+      LIMIT 1
+    ''', [routeId]);
+
+    final d1TripId = d1TripRows.firstOrNull?['trip_id'] as String?;
+    if (d1TripId != null) {
+      final d1Rows = await _executor.runSelect('''
+        SELECT s.stop_id, s.operator_id, s.stop_name, s.stop_lat, s.stop_lon,
+               s.zone_id, s.parent_station, s.territory, s.mode, s.location_type,
+               st.stop_sequence
+        FROM stops s
+        JOIN stop_times st ON s.stop_id = st.stop_id
+        WHERE st.trip_id = ?
+        ORDER BY st.stop_sequence ASC
+      ''', [d1TripId]);
+      for (final row in d1Rows) {
+        final stop = RawStopRecord.fromMap(row);
+        if (seenStopIds.add(stop.stopId)) {
+          result.add(stop);
+        }
+      }
+    }
+
+    // 3. Fallback: Any other stops on the route not in the canonical trips (or if mock returned stops directly)
+    if (result.isEmpty || d0TripId == null) {
+      final remainingRows = await _executor.runSelect('''
+        SELECT DISTINCT s.stop_id, s.operator_id, s.stop_name, s.stop_lat, s.stop_lon,
+               s.zone_id, s.parent_station, s.territory, s.mode, s.location_type,
+               st.stop_sequence
+        FROM stops s
+        JOIN stop_times st ON s.stop_id = st.stop_id
+        JOIN trips t ON st.trip_id = t.trip_id
+        WHERE t.route_id = ?
+        ORDER BY st.stop_sequence ASC
+      ''', [routeId]);
+
+      for (final row in remainingRows) {
+        final stop = RawStopRecord.fromMap(row);
+        if (seenStopIds.add(stop.stopId)) {
+          result.add(stop);
+        }
+      }
+    }
+
     return result;
   }
 
-  /// Resolves which lines (L1, L2) serve a specific station.
-  Future<Set<String>> getServedLinesForStation(String stationId) async {
+  /// Resolves which lines serve a specific station or stop cluster.
+  Future<List<String>> getServedLinesForStation(
+    String stationId, {
+    List<String> siblingStopIds = const [],
+  }) async {
     await _ensureOpen();
 
-    const sql = '''
-      SELECT DISTINCT t.inferred_line
+    final allIds = {stationId, ...siblingStopIds}.toList();
+    final placeholders = List.filled(allIds.length, '?').join(',');
+
+    final sql = '''
+      SELECT DISTINCT COALESCE(NULLIF(r.route_short_name, ''), t.inferred_line) AS line_name
       FROM stop_times st
       JOIN trips t ON st.trip_id = t.trip_id
+      JOIN routes r ON t.route_id = r.route_id
       JOIN stops s ON st.stop_id = s.stop_id
-      WHERE (s.stop_id = ? OR s.parent_station = ?)
-        AND t.inferred_line IS NOT NULL
+      WHERE (s.stop_id IN ($placeholders) OR s.parent_station IN ($placeholders))
+        AND COALESCE(NULLIF(r.route_short_name, ''), t.inferred_line) IS NOT NULL
+      ORDER BY line_name ASC
     ''';
-    final rows = await _executor.runSelect(sql, [stationId, stationId]);
-    return {
-      for (final r in rows)
-        if (r['inferred_line'] != null) r['inferred_line']! as String,
-    };
+    final args = [...allIds, ...allIds];
+    final rows = await _executor.runSelect(sql, args);
+    final results = <String>[];
+    for (final r in rows) {
+      final name = (r['line_name'] as String?)?.trim();
+      if (name != null && name.isNotEmpty && !results.contains(name)) {
+        results.add(name);
+      }
+    }
+    return results;
   }
 
   /// Finds sibling stop IDs belonging to the same street or junction cluster
@@ -917,6 +1032,7 @@ class AppDatabase {
     String originStopId, {
     List<String> siblingStationIds = const [],
     String? searchQuery,
+    String? lineFilter,
   }) async {
     await _ensureOpen();
 
@@ -962,26 +1078,33 @@ class AppDatabase {
       args.addAll(allOriginIds);
     }
 
+    if (lineFilter != null && lineFilter.isNotEmpty) {
+      sql.write('''
+        AND EXISTS (
+          SELECT 1 FROM trips t_filt
+          JOIN routes r_filt ON t_filt.route_id = r_filt.route_id
+          WHERE t_filt.trip_id = st1.trip_id
+            AND (t_filt.inferred_line = ? OR r_filt.route_short_name = ?)
+        )
+      ''');
+      args.addAll([lineFilter, lineFilter]);
+    }
+
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       final q = searchQuery.trim().toLowerCase();
       final synonyms = (q.contains('upv') || q.contains('ehu'))
           ? ['upv', 'ehu']
           : [q];
-      final nameOrCodeConditions = <String>[];
+      final nameConditions = <String>[];
       final searchArgs = <Object?>[];
 
       for (final s in synonyms) {
-        nameOrCodeConditions.add(
+        nameConditions.add(
             'LOWER(COALESCE(parent.stop_name, s2.stop_name)) LIKE ?');
         searchArgs.add('%$s%');
       }
 
-      nameOrCodeConditions.add('s2.stop_id LIKE ?');
-      searchArgs.add('%$q%');
-      nameOrCodeConditions.add('COALESCE(parent.stop_id, s2.stop_id) LIKE ?');
-      searchArgs.add('%$q%');
-
-      sql.write(' AND (${nameOrCodeConditions.join(' OR ')})');
+      sql.write(' AND (${nameConditions.join(' OR ')})');
       args.addAll(searchArgs);
     }
 

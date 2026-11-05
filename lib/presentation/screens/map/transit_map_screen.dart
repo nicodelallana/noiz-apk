@@ -151,20 +151,20 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
       _haloLayerId,
       const CircleLayerProperties(
         circleColor: [Expressions.get, 'color'],
-        circleOpacity: 0.32,
+        circleOpacity: 0.35,
         circleBlur: 0.45,
         circleRadius: [
           Expressions.interpolate,
           ['linear'],
           [Expressions.zoom],
           11,
-          12,
           14,
-          16,
-          16,
-          20,
+          14,
           18,
+          16,
           24,
+          18,
+          28,
         ],
       ),
       filter: _isSelected,
@@ -182,13 +182,13 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
           ['linear'],
           [Expressions.zoom],
           11,
-          [Expressions.caseExpression, _isSelected, 6, 2.5],
+          [Expressions.caseExpression, _isSelected, 7.5, 4.5],
           14,
-          [Expressions.caseExpression, _isSelected, 8, 4],
+          [Expressions.caseExpression, _isSelected, 10, 6.5],
           16,
-          [Expressions.caseExpression, _isSelected, 10, 6],
+          [Expressions.caseExpression, _isSelected, 13, 9.0],
           18,
-          [Expressions.caseExpression, _isSelected, 12, 8],
+          [Expressions.caseExpression, _isSelected, 16, 12.0],
         ],
         circleStrokeColor: [
           Expressions.caseExpression,
@@ -228,23 +228,24 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
       };
 
   Map<String, dynamic> _routeLineCollection(
-    List<List<double>> coords,
+    List<List<List<double>>> shapes,
     String colorHex,
   ) =>
       {
         'type': 'FeatureCollection',
         'features': [
-          if (coords.isNotEmpty)
-            {
-              'type': 'Feature',
-              'properties': {
-                'color': colorHex,
+          for (final coords in shapes)
+            if (coords.isNotEmpty)
+              {
+                'type': 'Feature',
+                'properties': {
+                  'color': colorHex,
+                },
+                'geometry': {
+                  'type': 'LineString',
+                  'coordinates': coords,
+                },
               },
-              'geometry': {
-                'type': 'LineString',
-                'coordinates': coords,
-              },
-            },
         ],
       };
 
@@ -320,21 +321,23 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
     }
 
     final repo = ref.read(transitRepositoryProvider);
-    final coords = await repo.getRouteShape(route.id);
+    final shapes = await repo.getRouteShapes(route.id);
     final routeColorHex = route.colorHex ??
         _hex(TransitOperator.fromId(route.operatorId).colorHex);
 
     await controller.setGeoJsonSource(
       _routeSourceId,
-      _routeLineCollection(coords, routeColorHex),
+      _routeLineCollection(shapes, routeColorHex),
     );
 
-    if (coords.isNotEmpty) {
-      double minLat = 90.0;
-      double maxLat = -90.0;
-      double minLon = 180.0;
-      double maxLon = -180.0;
+    double minLat = 90.0;
+    double maxLat = -90.0;
+    double minLon = 180.0;
+    double maxLon = -180.0;
+    bool hasCoords = false;
+    for (final coords in shapes) {
       for (final pt in coords) {
+        hasCoords = true;
         final lon = pt[0];
         final lat = pt[1];
         if (lat < minLat) minLat = lat;
@@ -342,6 +345,9 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
         if (lon < minLon) minLon = lon;
         if (lon > maxLon) maxLon = lon;
       }
+    }
+
+    if (hasCoords) {
       // Safety guard against identical points or zero-size bounds
       if ((maxLat - minLat).abs() < 0.002) {
         minLat -= 0.005;

@@ -191,7 +191,7 @@ class _TransitScreenContent extends ConsumerWidget {
         ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: _Reveal(
               index: 1,
               fade: false, // glass
@@ -226,6 +226,10 @@ class _TransitScreenContent extends ConsumerWidget {
               ),
             ),
           ),
+        ),
+
+        const SliverToBoxAdapter(
+          child: _LineFilterBar(),
         ),
 
         const _MultiOperatorDeparturesSliverList(),
@@ -858,6 +862,154 @@ class _Reveal extends StatelessWidget {
   }
 }
 
+/// Horizontal filter pills for the lines served by the active stop (e.g. A3336, A2336, L1, L2).
+class _LineFilterBar extends ConsumerWidget {
+  const _LineFilterBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeStop = ref.watch(selectedTransitStopProvider);
+    final activeOp = ref.watch(selectedOperatorProvider);
+    if (activeStop == null || activeStop.operatorId != activeOp.id) {
+      return const SizedBox.shrink();
+    }
+
+    final linesAsync = ref.watch(servedLinesForActiveStopProvider);
+    return linesAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (lines) {
+        if (lines.length <= 1) {
+          return const SizedBox.shrink();
+        }
+
+        final selectedLine = ref.watch(selectedLineFilterProvider);
+        final opColor = Color(activeOp.colorHex);
+        final t = AppTypography.textTheme();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: SizedBox(
+            height: 38,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: lines.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (ctx, idx) {
+                if (idx == 0) {
+                  final isAllSelected = selectedLine == null;
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      ref.read(selectedLineFilterProvider.notifier).state =
+                          null;
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isAllSelected
+                            ? opColor.withValues(alpha: 0.22)
+                            : Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isAllSelected
+                              ? opColor
+                              : Colors.white.withValues(alpha: 0.12),
+                          width: isAllSelected ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Todas las líneas',
+                          style: t.labelMedium!.copyWith(
+                            color: isAllSelected
+                                ? Colors.white
+                                : AppColors.darkTextSecondary,
+                            fontWeight: isAllSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                final line = lines[idx - 1];
+                final isSelected = selectedLine == line;
+
+                return InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    if (isSelected) {
+                      ref.read(selectedLineFilterProvider.notifier).state =
+                          null;
+                    } else {
+                      ref.read(selectedLineFilterProvider.notifier).state =
+                          line;
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? opColor.withValues(alpha: 0.28)
+                          : Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected
+                            ? opColor
+                            : Colors.white.withValues(alpha: 0.12),
+                        width: isSelected ? 1.5 : 1.0,
+                      ),
+                    ),
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isSelected
+                                  ? opColor
+                                  : AppColors.darkTextTertiary,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            line,
+                            style: t.labelMedium!.copyWith(
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppColors.darkTextPrimary,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Glass sheet to search and pick a stop of the active operator, as origin
 /// or as destination ("Todas las direcciones" first).
 class _MultiOperatorStopSearchModal extends ConsumerStatefulWidget {
@@ -874,11 +1026,37 @@ class _MultiOperatorStopSearchModalState
     extends ConsumerState<_MultiOperatorStopSearchModal> {
   final _searchController = TextEditingController();
   String _query = '';
+  Stop? _selectedStopForLines;
+  List<String>? _availableLines;
+  bool _loadingLines = false;
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _selectLineAndFinish(Stop stop, String? line) async {
+    ref.read(selectedTransitStopProvider.notifier).state = stop;
+    ref.read(selectedLineFilterProvider.notifier).state = line;
+    final currentDest = ref.read(selectedDestinationStopProvider);
+    if (currentDest != null) {
+      if (currentDest.id == stop.id) {
+        ref.read(selectedDestinationStopProvider.notifier).state = null;
+      } else {
+        final repo = ref.read(transitRepositoryProvider);
+        final reachable = await repo.getReachableDestinations(
+          originStopId: stop.id,
+          lineFilter: line,
+        );
+        if (!reachable.any((s) => s.id == currentDest.id)) {
+          ref.read(selectedDestinationStopProvider.notifier).state = null;
+        }
+      }
+    }
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -887,11 +1065,10 @@ class _MultiOperatorStopSearchModalState
     final isDest = widget.isDestination;
     final stopsAsync = isDest
         ? ref.watch(reachableDestinationsSearchProvider(_query))
-        : (_query.isEmpty
-            ? ref.watch(stopsForActiveOperatorProvider)
-            : ref.watch(globalStopSearchResultsProvider(_query)));
+        : ref.watch(stopsForActiveOperatorSearchProvider(_query));
     final t = AppTypography.textTheme();
     final media = MediaQuery.of(context);
+    final opColor = Color(activeOperator.colorHex);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(8, 0, 8, 8 + media.viewInsets.bottom),
@@ -916,241 +1093,316 @@ class _MultiOperatorStopSearchModalState
                 ),
               ),
               const SizedBox(height: 14),
-              Text(
-                isDest ? 'Hacia dónde' : 'Desde qué parada',
-                style:
-                    t.headlineSmall!.copyWith(color: AppColors.darkTextPrimary),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                isDest
-                    ? 'Destinos directos en la misma línea · ${activeOperator.name}'
-                    : (_query.isEmpty
-                        ? 'Toca una parada o busca por código · ${activeOperator.name}'
-                        : 'Buscando en todos los operadores de transporte'),
-                style:
-                    t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: _searchController,
-                onChanged: (val) =>
-                    setState(() => _query = val.trim().toLowerCase()),
-                style: t.bodyLarge!.copyWith(color: AppColors.darkTextPrimary),
-                cursorColor: AppColors.accent,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(
-                    BarikIcons.magnifyingGlass,
-                    color: AppColors.darkTextSecondary,
-                    size: 20,
-                  ),
-                  hintText: isDest
-                      ? 'Nombre, código de parada o línea (ej: 3515)...'
-                      : 'Nombre, código (ej: 1065) o línea (ej: A2336)...',
-                  hintStyle:
-                      t.bodyMedium!.copyWith(color: AppColors.darkTextTertiary),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.08),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  border: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(999)),
-                    borderSide: BorderSide.none,
-                  ),
-                  enabledBorder: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(999)),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(999)),
-                    borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+
+              // STEP 2: Line selection for the chosen stop
+              if (_selectedStopForLines != null) ...[
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_rounded,
+                        color: AppColors.darkTextPrimary,
+                      ),
+                      onPressed: () => setState(() {
+                        _selectedStopForLines = null;
+                        _availableLines = null;
+                      }),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '¿Qué línea vas a coger?',
+                            style: t.headlineSmall!
+                                .copyWith(color: AppColors.darkTextPrimary),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${_selectedStopForLines!.name} · ${activeOperator.name}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: t.bodySmall!
+                                .copyWith(color: AppColors.darkTextSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints:
+                      BoxConstraints(maxHeight: media.size.height * 0.55),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.only(top: 4),
+                    itemCount: (_availableLines?.length ?? 0) + 1,
+                    separatorBuilder: (_, __) => const Padding(
+                      padding: EdgeInsets.only(left: 44),
+                      child: Divider(
+                        height: 1,
+                        thickness: 0.7,
+                        color: AppColors.darkBorder,
+                      ),
+                    ),
+                    itemBuilder: (ctx, index) {
+                      if (index == 0) {
+                        return _StopOption(
+                          icon: Icons.all_inclusive_rounded,
+                          iconColor: AppColors.darkTextSecondary,
+                          title: 'Todas las líneas',
+                          subtitle: 'Ver todas las salidas de esta parada',
+                          selected:
+                              ref.watch(selectedLineFilterProvider) == null,
+                          selectedColor: AppColors.accent,
+                          onTap: () => _selectLineAndFinish(
+                              _selectedStopForLines!, null),
+                        );
+                      }
+                      final line = _availableLines![index - 1];
+                      final isSelected =
+                          ref.watch(selectedLineFilterProvider) == line;
+                      return _StopOption(
+                        icon: _iconForMode(activeOperator.mode),
+                        iconColor: opColor,
+                        title: 'Línea $line',
+                        subtitle: 'Filtrar salidas para la línea $line',
+                        selected: isSelected,
+                        selectedColor: opColor,
+                        onTap: () => _selectLineAndFinish(
+                            _selectedStopForLines!, line),
+                      );
+                    },
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              ConstrainedBox(
-                constraints:
-                    BoxConstraints(maxHeight: media.size.height * 0.55),
-                child: stopsAsync.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
+              ] else ...[
+                // STEP 1: Stop Search
+                Text(
+                  isDest ? 'Hacia dónde' : 'Desde qué parada',
+                  style: t.headlineSmall!
+                      .copyWith(color: AppColors.darkTextPrimary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isDest
+                      ? 'Destinos directos · ${activeOperator.name}'
+                      : (_query.isEmpty
+                          ? 'Toca una parada o busca por nombre · ${activeOperator.name}'
+                          : 'Buscando en ${activeOperator.name}'),
+                  style:
+                      t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _searchController,
+                  onChanged: (val) =>
+                      setState(() => _query = val.trim().toLowerCase()),
+                  style:
+                      t.bodyLarge!.copyWith(color: AppColors.darkTextPrimary),
+                  cursorColor: AppColors.accent,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(
+                      BarikIcons.magnifyingGlass,
+                      color: AppColors.darkTextSecondary,
+                      size: 20,
+                    ),
+                    hintText: isDest
+                        ? 'Nombre de parada o destino (ej: Bilbao)...'
+                        : 'Nombre de parada o calle (ej: Muskiz)...',
+                    hintStyle: t.bodyMedium!
+                        .copyWith(color: AppColors.darkTextTertiary),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.08),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    border: const OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(999)),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: const OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(999)),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(999)),
+                      borderSide:
+                          BorderSide(color: AppColors.accent, width: 1.5),
                     ),
                   ),
-                  error: (e, _) => Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      'No se pudieron cargar las paradas: $e',
-                      style: const TextStyle(color: AppColors.disruptedRed),
+                ),
+                if (_loadingLines)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(
+                      backgroundColor: Colors.transparent,
+                      color: AppColors.accent,
                     ),
-                  ),
-                  data: (stops) {
-                    final currentOrigin =
-                        ref.watch(selectedTransitStopProvider);
-                    final currentDest =
-                        ref.watch(selectedDestinationStopProvider);
-                    final showAll = isDest && _query.isEmpty;
+                  )
+                else
+                  const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints:
+                      BoxConstraints(maxHeight: media.size.height * 0.55),
+                  child: stopsAsync.when(
+                    loading: () => const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                    error: (e, _) => Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'No se pudieron cargar las paradas: $e',
+                        style: const TextStyle(color: AppColors.disruptedRed),
+                      ),
+                    ),
+                    data: (stops) {
+                      final currentOrigin =
+                          ref.watch(selectedTransitStopProvider);
+                      final currentDest =
+                          ref.watch(selectedDestinationStopProvider);
+                      final showAll = isDest && _query.isEmpty;
 
-                    if (stops.isEmpty && !showAll) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 28, horizontal: 16),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                isDest
-                                    ? Icons.alt_route_rounded
-                                    : BarikIcons.magnifyingGlass,
-                                size: 36,
-                                color: AppColors.darkTextTertiary,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                isDest
-                                    ? 'Sin destinos directos'
-                                    : 'Ninguna parada coincide',
-                                style: t.titleMedium!.copyWith(
-                                  color: AppColors.darkTextPrimary,
+                      if (stops.isEmpty && !showAll) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 28, horizontal: 16),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isDest
+                                      ? Icons.alt_route_rounded
+                                      : BarikIcons.magnifyingGlass,
+                                  size: 36,
+                                  color: AppColors.darkTextTertiary,
                                 ),
-                              ),
-                              if (isDest) ...[
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 12),
                                 Text(
-                                  'No hay paradas en la misma línea sin transbordo.',
-                                  textAlign: TextAlign.center,
-                                  style: t.bodySmall!.copyWith(
-                                    color: AppColors.darkTextSecondary,
+                                  isDest
+                                      ? 'Sin destinos directos'
+                                      : 'Ninguna parada coincide',
+                                  style: t.titleMedium!.copyWith(
+                                    color: AppColors.darkTextPrimary,
                                   ),
                                 ),
-                              ] else ...[
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Prueba con otro código de parada, nombre o línea.',
+                                  isDest
+                                      ? 'No hay paradas en la misma línea sin transbordo.'
+                                      : 'Prueba con otro nombre de parada o calle.',
                                   textAlign: TextAlign.center,
                                   style: t.bodySmall!.copyWith(
                                     color: AppColors.darkTextSecondary,
                                   ),
                                 ),
                               ],
-                            ],
+                            ),
+                          ),
+                        );
+                      }
+
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.only(top: 4),
+                        itemCount:
+                            showAll ? stops.length + 1 : stops.length,
+                        separatorBuilder: (_, __) => const Padding(
+                          padding: EdgeInsets.only(left: 44),
+                          child: Divider(
+                            height: 1,
+                            thickness: 0.7,
+                            color: AppColors.darkBorder,
                           ),
                         ),
-                      );
-                    }
-
-                    return ListView.separated(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.only(top: 4),
-                      itemCount:
-                          showAll ? stops.length + 1 : stops.length,
-                      separatorBuilder: (_, __) => const Padding(
-                        padding: EdgeInsets.only(left: 44),
-                        child: Divider(
-                          height: 1,
-                          thickness: 0.7,
-                          color: AppColors.darkBorder,
-                        ),
-                      ),
-                      itemBuilder: (ctx, index) {
-                        if (showAll && index == 0) {
-                          return _StopOption(
-                            icon: Icons.all_inclusive_rounded,
-                            iconColor: AppColors.darkTextSecondary,
-                            title: 'Todas las direcciones',
-                            subtitle: 'Todas las salidas desde el origen',
-                            selected: currentDest == null,
-                            selectedColor: AppColors.accent,
-                            onTap: () {
-                              ref
-                                  .read(
-                                      selectedDestinationStopProvider.notifier)
-                                  .state = null;
-                              Navigator.of(context).pop();
-                            },
-                          );
-                        }
-                        final stop =
-                            showAll ? stops[index - 1] : stops[index];
-                        final stopOperator =
-                            TransitOperator.fromId(stop.operatorId);
-                        final isSelected = isDest
-                            ? currentDest?.id == stop.id
-                            : currentOrigin?.id == stop.id;
-                        final isOtherRole = isDest
-                            ? currentOrigin?.id == stop.id
-                            : currentDest?.id == stop.id;
-                        final stopColor = Color(stopOperator.colorHex);
-
-                        return _StopOption(
-                          icon: isDest
-                              ? Icons.flag_rounded
-                              : Icons.location_on_rounded,
-                          iconColor: isOtherRole
-                              ? AppColors.darkTextTertiary
-                              : stopColor,
-                          title: stop.name,
-                          stopCode: stop.code,
-                          operatorName: stopOperator.name,
-                          operatorColor: stopColor,
-                          subtitle: isOtherRole
-                              ? (isDest ? 'Es tu origen' : 'Es tu destino')
-                              : null,
-                          selected: isSelected,
-                          selectedColor: stopColor,
-                          onTap: () async {
-                            if (isDest) {
-                              ref
-                                  .read(
-                                      selectedDestinationStopProvider.notifier)
-                                  .state = stop;
-                            } else {
-                              // If stop belongs to another operator, switch seamlessly
-                              if (stopOperator != activeOperator) {
+                        itemBuilder: (ctx, index) {
+                          if (showAll && index == 0) {
+                            return _StopOption(
+                              icon: Icons.all_inclusive_rounded,
+                              iconColor: AppColors.darkTextSecondary,
+                              title: 'Todas las direcciones',
+                              subtitle: 'Todas las salidas desde el origen',
+                              selected: currentDest == null,
+                              selectedColor: AppColors.accent,
+                              onTap: () {
                                 ref
-                                    .read(selectedOperatorProvider.notifier)
-                                    .state = stopOperator;
-                                ref
-                                    .read(selectedTerritoryProvider.notifier)
-                                    .state = stopOperator.territory;
-                              }
-                              ref
-                                  .read(selectedTransitStopProvider.notifier)
-                                  .state = stop;
-                              if (currentDest != null) {
-                                if (currentDest.id == stop.id) {
-                                  ref
-                                      .read(selectedDestinationStopProvider
-                                          .notifier)
-                                      .state = null;
-                                } else {
-                                  final repo =
-                                      ref.read(transitRepositoryProvider);
-                                  final reachable =
-                                      await repo.getReachableDestinations(
-                                    originStopId: stop.id,
-                                  );
-                                  if (!reachable
-                                      .any((s) => s.id == currentDest.id)) {
-                                    ref
-                                        .read(selectedDestinationStopProvider
+                                    .read(
+                                        selectedDestinationStopProvider
                                             .notifier)
-                                        .state = null;
-                                  }
+                                    .state = null;
+                                Navigator.of(context).pop();
+                              },
+                            );
+                          }
+                          final stop =
+                              showAll ? stops[index - 1] : stops[index];
+                          final stopOperator =
+                              TransitOperator.fromId(stop.operatorId);
+                          final isSelected = isDest
+                              ? currentDest?.id == stop.id
+                              : currentOrigin?.id == stop.id;
+                          final isOtherRole = isDest
+                              ? currentOrigin?.id == stop.id
+                              : currentDest?.id == stop.id;
+                          final stopColor = Color(stopOperator.colorHex);
+
+                          return _StopOption(
+                            icon: isDest
+                                ? Icons.flag_rounded
+                                : Icons.location_on_rounded,
+                            iconColor: isOtherRole
+                                ? AppColors.darkTextTertiary
+                                : stopColor,
+                            title: stop.name,
+                            operatorName: stopOperator == activeOperator
+                                ? null
+                                : stopOperator.name,
+                            operatorColor: stopColor,
+                            subtitle: isOtherRole
+                                ? (isDest ? 'Es tu origen' : 'Es tu destino')
+                                : null,
+                            selected: isSelected,
+                            selectedColor: stopColor,
+                            onTap: () async {
+                              if (isDest) {
+                                ref
+                                    .read(
+                                        selectedDestinationStopProvider
+                                            .notifier)
+                                    .state = stop;
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+                                }
+                              } else {
+                                setState(() => _loadingLines = true);
+                                final repo =
+                                    ref.read(transitRepositoryProvider);
+                                final lines = await repo
+                                    .getServedLinesForStation(stop.id);
+                                if (!mounted) return;
+                                setState(() => _loadingLines = false);
+
+                                if (lines.length > 1) {
+                                  setState(() {
+                                    _selectedStopForLines = stop;
+                                    _availableLines = lines;
+                                  });
+                                } else {
+                                  await _selectLineAndFinish(
+                                      stop, lines.firstOrNull);
                                 }
                               }
-                            }
-                            if (context.mounted) {
-                              Navigator.of(context).pop();
-                            }
-                          },
-                        );
-                      },
-                    );
-                  },
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -1168,7 +1420,6 @@ class _StopOption extends StatelessWidget {
     required this.selectedColor,
     required this.onTap,
     this.subtitle,
-    this.stopCode,
     this.operatorName,
     this.operatorColor,
   });
@@ -1177,7 +1428,6 @@ class _StopOption extends StatelessWidget {
   final Color iconColor;
   final String title;
   final String? subtitle;
-  final String? stopCode;
   final String? operatorName;
   final Color? operatorColor;
   final bool selected;
@@ -1213,7 +1463,7 @@ class _StopOption extends StatelessWidget {
                             selected ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
-                    if (operatorName != null || stopCode != null || subtitle != null) ...[
+                    if (operatorName != null || subtitle != null) ...[
                       const SizedBox(height: 3),
                       Row(
                         children: [
@@ -1237,25 +1487,6 @@ class _StopOption extends StatelessWidget {
                                   color: operatorColor ?? AppColors.accent,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 10,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                          ],
-                          if (stopCode != null && stopCode!.isNotEmpty) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 1.5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '#$stopCode',
-                                style: t.labelSmall!.copyWith(
-                                  color: AppColors.darkTextSecondary,
-                                  fontFamily: 'monospace',
-                                  fontSize: 10.5,
                                 ),
                               ),
                             ),
