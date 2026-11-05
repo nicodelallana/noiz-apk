@@ -63,9 +63,13 @@ class _TransitMapViewState extends State<TransitMapView> {
   }
 
   void _animateToCurrentStation() {
-    final update = CameraUpdate.newLatLngZoom(
-      LatLng(widget.latitude, widget.longitude),
-      14.8,
+    final update = CameraUpdate.newCameraPosition(
+      CameraPosition(
+        target: LatLng(widget.latitude, widget.longitude),
+        zoom: 14.8,
+        bearing: 0.0,
+        tilt: 0.0,
+      ),
     );
     if (_reduced) {
       _mapController?.moveCamera(update);
@@ -90,11 +94,19 @@ class _TransitMapViewState extends State<TransitMapView> {
               initialCameraPosition: CameraPosition(
                 target: LatLng(widget.latitude, widget.longitude),
                 zoom: 14.5,
+                bearing: 0.0,
+                tilt: 0.0,
               ),
               styleString: _mapStyle,
               onMapCreated: _onMapCreated,
               compassEnabled: false,
               myLocationEnabled: false,
+              rotateGesturesEnabled: false,
+              tiltGesturesEnabled: false,
+              scrollGesturesEnabled: false,
+              zoomGesturesEnabled: true,
+              doubleClickZoomEnabled: false,
+              minMaxZoomPreference: const MinMaxZoomPreference(12.0, 17.5),
               // Bottom-left, away from the recenter button.
               attributionButtonPosition: AttributionButtonPosition.bottomLeft,
               attributionButtonMargins: const math.Point(8, 8),

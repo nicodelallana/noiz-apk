@@ -156,6 +156,27 @@ final reachableDestinationsProvider = FutureProvider<List<Stop>>((ref) async {
   return repo.getReachableDestinations(originStopId: origin.id);
 });
 
+/// Search results across all operators by name, stop code, line code or synonyms
+final globalStopSearchResultsProvider =
+    FutureProvider.family<List<Stop>, String>((ref, query) async {
+  final trimmed = query.trim();
+  if (trimmed.isEmpty) return const [];
+  final repo = ref.watch(transitRepositoryProvider);
+  return repo.getStops(searchQuery: trimmed);
+});
+
+/// Direct destinations from active origin matching a search query
+final reachableDestinationsSearchProvider =
+    FutureProvider.family<List<Stop>, String>((ref, query) async {
+  final origin = ref.watch(selectedTransitStopProvider);
+  if (origin == null) return const [];
+  final repo = ref.watch(transitRepositoryProvider);
+  return repo.getReachableDestinations(
+    originStopId: origin.id,
+    searchQuery: query.trim().isEmpty ? null : query.trim(),
+  );
+});
+
 /// Switches the active operator and resets selections according to business rules:
 /// - Destination is always reset to null ("Todas las direcciones").
 /// - If user GPS location is known, resolves and selects the closest stop of [newOperator].

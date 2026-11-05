@@ -42,6 +42,21 @@ class Stop {
   final String territory;
   final String mode;
 
+  /// Public transport code or identifier (e.g. "1065", "3515", "13506", "abando").
+  String get code {
+    final nameMatch = RegExp(r'\((\d+)\)').firstMatch(name);
+    if (nameMatch != null) {
+      return nameMatch.group(1)!;
+    }
+    if (id.contains(':')) {
+      final suffix = id.split(':').last;
+      if (suffix.isNotEmpty) {
+        return suffix;
+      }
+    }
+    return id;
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

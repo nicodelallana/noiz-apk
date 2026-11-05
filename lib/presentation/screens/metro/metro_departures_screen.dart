@@ -884,11 +884,12 @@ class _MultiOperatorStopSearchModalState
   @override
   Widget build(BuildContext context) {
     final activeOperator = ref.watch(selectedOperatorProvider);
-    final stopsAsync = widget.isDestination
-        ? ref.watch(reachableDestinationsProvider)
-        : ref.watch(stopsForActiveOperatorProvider);
-    final opColor = Color(activeOperator.colorHex);
     final isDest = widget.isDestination;
+    final stopsAsync = isDest
+        ? ref.watch(reachableDestinationsSearchProvider(_query))
+        : (_query.isEmpty
+            ? ref.watch(stopsForActiveOperatorProvider)
+            : ref.watch(globalStopSearchResultsProvider(_query)));
     final t = AppTypography.textTheme();
     final media = MediaQuery.of(context);
 
@@ -924,7 +925,9 @@ class _MultiOperatorStopSearchModalState
               Text(
                 isDest
                     ? 'Destinos directos en la misma línea · ${activeOperator.name}'
-                    : 'Toca una parada para ver sus salidas · ${activeOperator.name}',
+                    : (_query.isEmpty
+                        ? 'Toca una parada o busca por código · ${activeOperator.name}'
+                        : 'Buscando en todos los operadores de transporte'),
                 style:
                     t.bodySmall!.copyWith(color: AppColors.darkTextSecondary),
               ),
@@ -941,9 +944,11 @@ class _MultiOperatorStopSearchModalState
                     color: AppColors.darkTextSecondary,
                     size: 20,
                   ),
-                  hintText: 'Buscar parada',
+                  hintText: isDest
+                      ? 'Nombre, código de parada o línea (ej: 3515)...'
+                      : 'Nombre, código (ej: 1065) o línea (ej: A2336)...',
                   hintStyle:
-                      t.bodyLarge!.copyWith(color: AppColors.darkTextTertiary),
+                      t.bodyMedium!.copyWith(color: AppColors.darkTextTertiary),
                   filled: true,
                   fillColor: Colors.white.withValues(alpha: 0.08),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -980,18 +985,13 @@ class _MultiOperatorStopSearchModalState
                     ),
                   ),
                   data: (stops) {
-                    final filtered = _query.isEmpty
-                        ? stops
-                        : stops
-                            .where((s) => s.name.toLowerCase().contains(_query))
-                            .toList();
                     final currentOrigin =
                         ref.watch(selectedTransitStopProvider);
                     final currentDest =
                         ref.watch(selectedDestinationStopProvider);
                     final showAll = isDest && _query.isEmpty;
 
-                    if (filtered.isEmpty && !showAll) {
+                    if (stops.isEmpty && !showAll) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(
                             vertical: 28, horizontal: 16),
@@ -1024,6 +1024,15 @@ class _MultiOperatorStopSearchModalState
                                     color: AppColors.darkTextSecondary,
                                   ),
                                 ),
+                              ] else ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Prueba con otro código de parada, nombre o línea.',
+                                  textAlign: TextAlign.center,
+                                  style: t.bodySmall!.copyWith(
+                                    color: AppColors.darkTextSecondary,
+                                  ),
+                                ),
                               ],
                             ],
                           ),
@@ -1035,7 +1044,7 @@ class _MultiOperatorStopSearchModalState
                       shrinkWrap: true,
                       padding: const EdgeInsets.only(top: 4),
                       itemCount:
-                          showAll ? filtered.length + 1 : filtered.length,
+                          showAll ? stops.length + 1 : stops.length,
                       separatorBuilder: (_, __) => const Padding(
                         padding: EdgeInsets.only(left: 44),
                         child: Divider(
@@ -1063,13 +1072,16 @@ class _MultiOperatorStopSearchModalState
                           );
                         }
                         final stop =
-                            showAll ? filtered[index - 1] : filtered[index];
+                            showAll ? stops[index - 1] : stops[index];
+                        final stopOperator =
+                            TransitOperator.fromId(stop.operatorId);
                         final isSelected = isDest
                             ? currentDest?.id == stop.id
                             : currentOrigin?.id == stop.id;
                         final isOtherRole = isDest
                             ? currentOrigin?.id == stop.id
                             : currentDest?.id == stop.id;
+                        final stopColor = Color(stopOperator.colorHex);
 
                         return _StopOption(
                           icon: isDest
@@ -1077,13 +1089,16 @@ class _MultiOperatorStopSearchModalState
                               : Icons.location_on_rounded,
                           iconColor: isOtherRole
                               ? AppColors.darkTextTertiary
-                              : opColor,
+                              : stopColor,
                           title: stop.name,
+                          stopCode: stop.code,
+                          operatorName: stopOperator.name,
+                          operatorColor: stopColor,
                           subtitle: isOtherRole
                               ? (isDest ? 'Es tu origen' : 'Es tu destino')
                               : null,
                           selected: isSelected,
-                          selectedColor: opColor,
+                          selectedColor: stopColor,
                           onTap: () async {
                             if (isDest) {
                               ref
@@ -1091,6 +1106,15 @@ class _MultiOperatorStopSearchModalState
                                       selectedDestinationStopProvider.notifier)
                                   .state = stop;
                             } else {
+                              // If stop belongs to another operator, switch seamlessly
+                              if (stopOperator != activeOperator) {
+                                ref
+                                    .read(selectedOperatorProvider.notifier)
+                                    .state = stopOperator;
+                                ref
+                                    .read(selectedTerritoryProvider.notifier)
+                                    .state = stopOperator.territory;
+                              }
                               ref
                                   .read(selectedTransitStopProvider.notifier)
                                   .state = stop;
@@ -1144,12 +1168,18 @@ class _StopOption extends StatelessWidget {
     required this.selectedColor,
     required this.onTap,
     this.subtitle,
+    this.stopCode,
+    this.operatorName,
+    this.operatorColor,
   });
 
   final IconData icon;
   final Color iconColor;
   final String title;
   final String? subtitle;
+  final String? stopCode;
+  final String? operatorName;
+  final Color? operatorColor;
   final bool selected;
   final Color selectedColor;
   final VoidCallback onTap;
@@ -1183,13 +1213,68 @@ class _StopOption extends StatelessWidget {
                             selected ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
-                    if (subtitle != null)
-                      Text(
-                        subtitle!,
-                        style: t.bodySmall!.copyWith(
-                          color: AppColors.darkTextSecondary,
-                        ),
+                    if (operatorName != null || stopCode != null || subtitle != null) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          if (operatorName != null) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: (operatorColor ?? AppColors.accent)
+                                    .withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: (operatorColor ?? AppColors.accent)
+                                      .withValues(alpha: 0.4),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                operatorName!,
+                                style: t.labelSmall!.copyWith(
+                                  color: operatorColor ?? AppColors.accent,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          if (stopCode != null && stopCode!.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '#$stopCode',
+                                style: t.labelSmall!.copyWith(
+                                  color: AppColors.darkTextSecondary,
+                                  fontFamily: 'monospace',
+                                  fontSize: 10.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          if (subtitle != null)
+                            Expanded(
+                              child: Text(
+                                subtitle!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: t.bodySmall!.copyWith(
+                                  color: AppColors.darkTextSecondary,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
+                    ],
                   ],
                 ),
               ),

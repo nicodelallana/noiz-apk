@@ -388,8 +388,10 @@ class AppDatabase {
   }
 
   /// Retrieves stations for an operator. Parent stations or stops without parent.
+  /// If [searchQuery] is provided, performs an intelligent multi-attribute match
+  /// (by stop name, stop code/ID, route line code, UPV/EHU synonyms, and nearby sibling poles).
   Future<List<RawStopRecord>> getStations({
-    String? operatorId = 'metro',
+    String? operatorId,
     String? mode,
     String? territory,
     String? searchQuery,
@@ -397,34 +399,89 @@ class AppDatabase {
     await _ensureOpen();
 
     final sql = StringBuffer('''
-      SELECT stop_id, operator_id, stop_name, stop_lat, stop_lon, zone_id,
-             parent_station, territory, mode, location_type
-      FROM stops
-      WHERE (location_type = 1 OR parent_station IS NULL OR parent_station = '')
+      SELECT s.stop_id, s.operator_id, s.stop_name, s.stop_lat, s.stop_lon, s.zone_id,
+             s.parent_station, s.territory, s.mode, s.location_type
+      FROM stops s
+      WHERE (s.location_type = 1 OR s.parent_station IS NULL OR s.parent_station = '')
     ''');
     final args = <Object?>[];
 
     if (operatorId != null && operatorId.isNotEmpty) {
-      sql.write(' AND operator_id = ?');
+      sql.write(' AND s.operator_id = ?');
       args.add(operatorId);
     }
 
     if (mode != null && mode.isNotEmpty) {
-      sql.write(' AND mode = ?');
+      sql.write(' AND s.mode = ?');
       args.add(mode);
     }
 
     if (territory != null && territory.isNotEmpty && territory != 'all') {
-      sql.write(' AND territory = ?');
+      sql.write(' AND s.territory = ?');
       args.add(territory);
     }
 
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-      sql.write(' AND LOWER(stop_name) LIKE ?');
-      args.add('%${searchQuery.trim().toLowerCase()}%');
+      final q = searchQuery.trim().toLowerCase();
+
+      // Check if query matches routes (e.g. A2336, 2336, L1, C2)
+      final routeRows = await _executor.runSelect(
+        'SELECT route_id FROM routes WHERE LOWER(route_short_name) = ? OR LOWER(route_short_name) LIKE ?',
+        [q, '%$q%'],
+      );
+      final matchingRouteIds = [
+        for (final r in routeRows)
+          if (r['route_id'] != null) r['route_id']! as String,
+      ];
+
+      // Handle synonyms: UPV <-> EHU
+      final synonyms = (q.contains('upv') || q.contains('ehu'))
+          ? ['upv', 'ehu']
+          : [q];
+
+      final orConditions = <String>[];
+      for (final s in synonyms) {
+        orConditions.add('LOWER(s.stop_name) LIKE ?');
+        args.add('%$s%');
+      }
+
+      // Match stop code / stop id (e.g. 1065, bizkaibus:1065, renfe:13506)
+      orConditions.add('s.stop_id LIKE ?');
+      args.add('%$q%');
+
+      // Match sibling stops within ~350m that match the query
+      // (solves cases like Muskiz where 1066 has "(Muskiz)" in name and 1065 does not)
+      orConditions.add('''
+        EXISTS (
+          SELECT 1 FROM stops sib
+          WHERE sib.operator_id = s.operator_id
+            AND sib.stop_id != s.stop_id
+            AND abs(sib.stop_lat - s.stop_lat) < 0.003
+            AND abs(sib.stop_lon - s.stop_lon) < 0.003
+            AND (LOWER(sib.stop_name) LIKE ? OR sib.stop_id LIKE ?)
+        )
+      ''');
+      args.add('%$q%');
+      args.add('%$q%');
+
+      // Match stops served by matching route/line
+      if (matchingRouteIds.isNotEmpty) {
+        final ph = List.filled(matchingRouteIds.length, '?').join(',');
+        orConditions.add('''
+          EXISTS (
+            SELECT 1 FROM stop_times st
+            JOIN trips t ON st.trip_id = t.trip_id
+            WHERE st.stop_id = s.stop_id
+              AND t.route_id IN ($ph)
+          )
+        ''');
+        args.addAll(matchingRouteIds);
+      }
+
+      sql.write(' AND (${orConditions.join(' OR ')})');
     }
 
-    sql.write(' ORDER BY stop_name COLLATE NOCASE ASC');
+    sql.write(' ORDER BY s.stop_name COLLATE NOCASE ASC');
 
     final rows = await _executor.runSelect(sql.toString(), args);
     return rows.map(RawStopRecord.fromMap).toList();
@@ -726,9 +783,12 @@ class AppDatabase {
       return [stopId];
     }
 
-    // Extract base street name (e.g. 'ANTONIO ALZAGA 7 (445)' -> 'ANTONIO ALZAGA')
+    // Extract base street name:
+    // Strip parenthetical descriptors: "(Muskiz)", "(1066)", "(ANBULATORIOA)", etc.
+    // Strip street numbers: " 7", " 22", etc.
     final baseName = stop.stopName
-        .replaceAll(RegExp(r'\s*\d+\s*\(\d+\).*'), '')
+        .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
+        .replaceAll(RegExp(r'\s*\d+.*'), '')
         .trim()
         .toUpperCase();
 
@@ -754,7 +814,10 @@ class AppDatabase {
       final sid = row['stop_id']! as String;
       if (sid == stopId) continue;
       final sname = (row['stop_name'] as String?)?.toUpperCase() ?? '';
-      final sbase = sname.replaceAll(RegExp(r'\s*\d+\s*\(\d+\).*'), '').trim();
+      final sbase = sname
+          .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
+          .replaceAll(RegExp(r'\s*\d+.*'), '')
+          .trim();
       if ((baseName.length >= 4 && sbase == baseName) ||
           (baseName.length >= 5 && sname.contains(baseName))) {
         siblings.add(sid);
@@ -900,8 +963,26 @@ class AppDatabase {
     }
 
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-      sql.write(' AND LOWER(COALESCE(parent.stop_name, s2.stop_name)) LIKE ?');
-      args.add('%${searchQuery.trim().toLowerCase()}%');
+      final q = searchQuery.trim().toLowerCase();
+      final synonyms = (q.contains('upv') || q.contains('ehu'))
+          ? ['upv', 'ehu']
+          : [q];
+      final nameOrCodeConditions = <String>[];
+      final searchArgs = <Object?>[];
+
+      for (final s in synonyms) {
+        nameOrCodeConditions.add(
+            'LOWER(COALESCE(parent.stop_name, s2.stop_name)) LIKE ?');
+        searchArgs.add('%$s%');
+      }
+
+      nameOrCodeConditions.add('s2.stop_id LIKE ?');
+      searchArgs.add('%$q%');
+      nameOrCodeConditions.add('COALESCE(parent.stop_id, s2.stop_id) LIKE ?');
+      searchArgs.add('%$q%');
+
+      sql.write(' AND (${nameOrCodeConditions.join(' OR ')})');
+      args.addAll(searchArgs);
     }
 
     sql.write(' ORDER BY stop_name COLLATE NOCASE ASC');

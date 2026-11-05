@@ -4,6 +4,12 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.bizkaia.transit"
     compileSdk = 36
@@ -19,7 +25,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.bizkaia.transit"
+        applicationId = "com.noiz.app"
         minSdk = 24
         targetSdk = 34
         versionCode = flutter.versionCode
@@ -32,10 +38,17 @@ android {
             v2SigningEnabled true
         }
         release {
-            storeFile file("${System.getProperty("user.home")}/.android/debug.keystore")
-            storePassword "android"
-            keyAlias "androiddebugkey"
-            keyPassword "android"
+            if (keystorePropertiesFile.exists()) {
+                keyAlias = keystoreProperties['keyAlias']
+                keyPassword = keystoreProperties['keyPassword']
+                storeFile = file(keystoreProperties['storeFile'])
+                storePassword = keystoreProperties['storePassword']
+            } else {
+                storeFile file("${System.getProperty("user.home")}/.android/debug.keystore")
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
             v1SigningEnabled true
             v2SigningEnabled true
         }

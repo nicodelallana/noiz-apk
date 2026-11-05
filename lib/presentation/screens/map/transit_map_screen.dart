@@ -61,6 +61,7 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
 
   MapLibreMapController? _controller;
   bool _styleReady = false;
+  bool _gesturesLocked = false;
   Timer? _debounce;
   Map<String, Stop> _visibleStops = const {};
   String? _selectedStopId;
@@ -89,6 +90,9 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
   void _onMapCreated(MapLibreMapController controller) {
     _controller = controller;
     controller.onFeatureTapped.add(_onFeatureTapped);
+    if (!_gesturesLocked && mounted) {
+      setState(() => _gesturesLocked = true);
+    }
   }
 
   Future<void> _onStyleLoaded() async {
@@ -276,6 +280,21 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
   void _onCameraIdle() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () async {
+      if (!mounted) return;
+      // Guard against runaway tilt/pitch or rotation: cleanly lock back to flat 2D
+      final pos = _controller?.cameraPosition;
+      if (pos != null && (pos.tilt > 0.5 || pos.bearing.abs() > 0.5)) {
+        await _controller?.moveCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: pos.target,
+              zoom: pos.zoom,
+              bearing: 0.0,
+              tilt: 0.0,
+            ),
+          ),
+        );
+      }
       await _reloadViewportStops();
     });
   }
@@ -322,6 +341,15 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
         if (lat > maxLat) maxLat = lat;
         if (lon < minLon) minLon = lon;
         if (lon > maxLon) maxLon = lon;
+      }
+      // Safety guard against identical points or zero-size bounds
+      if ((maxLat - minLat).abs() < 0.002) {
+        minLat -= 0.005;
+        maxLat += 0.005;
+      }
+      if ((maxLon - minLon).abs() < 0.002) {
+        minLon -= 0.005;
+        maxLon += 0.005;
       }
       final bounds = LatLngBounds(
         southwest: LatLng(minLat, minLon),
@@ -606,10 +634,12 @@ class _TransitMapScreenState extends ConsumerState<TransitMapScreen>
                 tilt: 0.0,
               ),
               rotateGesturesEnabled: false,
-              tiltGesturesEnabled: false,
+              tiltGesturesEnabled: !_gesturesLocked,
               scrollGesturesEnabled: true,
               zoomGesturesEnabled: true,
-              doubleClickZoomEnabled: true,
+              doubleClickZoomEnabled: false,
+              trackCameraPosition: true,
+              minMaxZoomPreference: const MinMaxZoomPreference(9.0, 18.5),
               myLocationEnabled: hasRealFix,
               compassEnabled: false,
               onMapCreated: _onMapCreated,
