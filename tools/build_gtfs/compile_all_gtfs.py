@@ -715,6 +715,102 @@ def build_indices(conn: sqlite3.Connection):
         )
         WHERE inferred_line IS NULL OR trim(inferred_line) = '';
     """)
+
+    log("Normalizing Tranvía de Bilbao & Gasteiz stops and modes...")
+    cur.execute("""
+        UPDATE stops
+        SET operator_id = 'tranbia_bilbao', mode = 'tram', territory = 'bizkaia'
+        WHERE stop_id IN (
+            SELECT DISTINCT st.stop_id
+            FROM stop_times st
+            JOIN trips t ON st.trip_id = t.trip_id
+            JOIN routes r ON t.route_id = r.route_id
+            WHERE r.operator_id = 'tranbia_bilbao'
+        );
+    """)
+    cur.execute("""
+        UPDATE stops
+        SET operator_id = 'tranbia_bilbao', mode = 'tram', territory = 'bizkaia'
+        WHERE stop_id IN (
+            SELECT DISTINCT parent_station
+            FROM stops
+            WHERE operator_id = 'tranbia_bilbao' AND parent_station IS NOT NULL
+        );
+    """)
+    cur.execute("""
+        UPDATE stops
+        SET operator_id = 'tranbia_gasteiz', mode = 'tram', territory = 'araba'
+        WHERE stop_id IN (
+            SELECT DISTINCT st.stop_id
+            FROM stop_times st
+            JOIN trips t ON st.trip_id = t.trip_id
+            JOIN routes r ON t.route_id = r.route_id
+            WHERE r.operator_id = 'tranbia_gasteiz'
+        );
+    """)
+    cur.execute("""
+        UPDATE stops
+        SET operator_id = 'tranbia_gasteiz', mode = 'tram', territory = 'araba'
+        WHERE stop_id IN (
+            SELECT DISTINCT parent_station
+            FROM stops
+            WHERE operator_id = 'tranbia_gasteiz' AND parent_station IS NOT NULL
+        );
+    """)
+
+    log("Ensuring continuous 24h schedule for Puente Colgante...")
+    cur.execute("""
+        UPDATE routes
+        SET route_short_name = 'PTE', route_long_name = 'Puente Bizkaia',
+            operator_id = 'pte_colgante', route_type = 4, route_color = '#8D6E63', territory = 'bizkaia'
+        WHERE route_id = 'pte_colgante:1';
+    """)
+    cur.execute("DELETE FROM calendar_dates WHERE service_id LIKE 'pte_colgante:%';")
+    cur.execute("DELETE FROM stop_times WHERE trip_id IN (SELECT trip_id FROM trips WHERE route_id = 'pte_colgante:1');")
+    cur.execute("DELETE FROM trips WHERE route_id = 'pte_colgante:1';")
+    cur.execute("DELETE FROM calendar WHERE service_id LIKE 'pte_colgante:%';")
+    cur.execute("""
+        INSERT INTO calendar (service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
+        VALUES ('pte_colgante:daily', 1, 1, 1, 1, 1, 1, 1, '20240101', '20351231');
+    """)
+
+    # 24h trips generation for Puente Colgante
+    stop_arenas = 'pte_colgante:Puente Bizkaia - Las Arenas'
+    stop_portu = 'pte_colgante:Puente Bizkaia - Portugalete'
+    time_mins = 0
+    trip_seq = 1
+    pte_trips = []
+    pte_st = []
+    while time_mins < 24 * 60:
+        h = time_mins // 60
+        m = time_mins % 60
+        t_str = f"{h:02d}:{m:02d}:00"
+        t_arr = f"{((time_mins + 2) // 60):02d}:{((time_mins + 2) % 60):02d}:00"
+        
+        t_id_1 = f"pte_colgante:trip_{trip_seq:04d}_A_P"
+        pte_trips.append((t_id_1, 'pte_colgante:1', 'pte_colgante:daily', 'PORTUGALETE', 0, 'PTE', None))
+        pte_st.append((t_id_1, stop_arenas, 1, t_str, t_str))
+        pte_st.append((t_id_1, stop_portu, 2, t_arr, t_arr))
+        trip_seq += 1
+
+        t_min_2 = time_mins + 3
+        t_str_2 = f"{(t_min_2 // 60):02d}:{(t_min_2 % 60):02d}:00"
+        t_arr_2 = f"{((t_min_2 + 2) // 60):02d}:{((t_min_2 + 2) % 60):02d}:00"
+        t_id_2 = f"pte_colgante:trip_{trip_seq:04d}_P_A"
+        pte_trips.append((t_id_2, 'pte_colgante:1', 'pte_colgante:daily', 'GETXO / LAS ARENAS', 1, 'PTE', None))
+        pte_st.append((t_id_2, stop_portu, 1, t_str_2, t_str_2))
+        pte_st.append((t_id_2, stop_arenas, 2, t_arr_2, t_arr_2))
+        trip_seq += 1
+
+        if time_mins < 5 * 60:
+            time_mins += 20
+        elif time_mins < 22 * 60:
+            time_mins += 8
+        else:
+            time_mins += 10
+
+    cur.executemany("INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?, ?);", pte_trips)
+    cur.executemany("INSERT INTO stop_times VALUES (?, ?, ?, ?, ?);", pte_st)
     conn.commit()
 
     log("Building performance indexes...")
