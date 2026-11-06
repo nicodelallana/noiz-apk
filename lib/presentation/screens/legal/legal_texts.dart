@@ -6,6 +6,13 @@ abstract final class LegalTexts {
       'Operadora, Euskotren, Bilbobus, Bizkaibus ni el Consorcio de '
       'Transportes de Bizkaia (CTB). La información procede de portales '
       'oficiales de datos abiertos bajo licencias públicas de reutilización.';
+
+  /// Public web URL hosted on GitHub Pages (meets Google Play HTTPS / no-login requirement).
+  static const privacyPolicyUrl =
+      'https://nicodelallana.github.io/noiz-apk/privacy.html';
+
+  /// Contact email for data protection and support inquiries.
+  static const developerEmail = 'nicolaspascualdelallana@gmail.com';
 }
 
 /// One open-data source and its reuse licence (see docs/licencias-datos.md).

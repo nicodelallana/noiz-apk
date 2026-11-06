@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:bizkaia_transit/data/adapters/transit_repository_impl.dart';
 import 'package:bizkaia_transit/data/local/app_database.dart';
-import 'package:bizkaia_transit/domain/models/saved_trip_models.dart';
 import 'package:bizkaia_transit/presentation/screens/fares/transit_fares_screen.dart';
 
 import 'transit_database_accuracy_test.dart';

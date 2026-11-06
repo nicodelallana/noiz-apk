@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Política de Privacidad · Noiz (Bizkaia Transit)</title>
+  <meta name="description" content="Política de privacidad oficial de la aplicación móvil Noiz (Bizkaia Transit).">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #151c2c;
+      --card-border: #232d42;
+      --text-primary: #f3f4f6;
+      --text-secondary: #9ca3af;
+      --text-muted: #6b7280;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      --badge-bg: #1e293b;
+      --badge-border: #334155;
+      --line: #1f293d;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --card-border: #e2e8f0;
+        --text-primary: #0f172a;
+        --text-secondary: #475569;
+        --text-muted: #64748b;
+        --accent: #0284c7;
+        --accent-glow: rgba(2, 132, 199, 0.1);
+        --badge-bg: #f1f5f9;
+        --badge-border: #cbd5e1;
+        --line: #e2e8f0;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-primary);
+      line-height: 1.65;
+      padding: 32px 16px 80px 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    header {
+      margin-bottom: 36px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: var(--badge-bg);
+      border: 1px solid var(--badge-border);
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+
+    .meta {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    .summary-card {
+      border-left: 4px solid var(--accent);
+      background: var(--card-bg);
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 18px 0 8px 0;
+      color: var(--text-primary);
+    }
+
+    p {
+      margin-bottom: 14px;
+      color: var(--text-secondary);
+      font-size: 0.98rem;
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    ul, ol {
+      margin-left: 20px;
+      margin-bottom: 14px;
+      color: var(--text-secondary);
+      font-size: 0.98rem;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+
+    strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.88em;
+      padding: 2px 6px;
+      background: var(--badge-bg);
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      word-break: break-word;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 10px 14px;
+      border: 1px solid var(--card-border);
+    }
+
+    th {
+      background: var(--badge-bg);
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    td {
+      color: var(--text-secondary);
+    }
+
+    footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      text-align: center;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Documento Oficial de Privacidad</span>
+      <h1>Política de Privacidad de Noiz</h1>
+      <div class="meta">
+        <strong>Aplicación:</strong> Noiz (Bizkaia Transit) · <code>com.bizkaia.transit</code><br>
+        <strong>Responsable:</strong> Nicolas Pascual de la Llana<br>
+        <strong>Contacto:</strong> <a href="mailto:nicolaspascualdelallana@gmail.com">nicolaspascualdelallana@gmail.com</a><br>
+        <strong>Fecha de última actualización:</strong> 6 de noviembre de 2026
+      </div>
+    </header>
+
+    <div class="card summary-card">
+      <h2>1. Resumen y Principios Fundamentales</h2>
+      <p>
+        <strong>Noiz</strong> es una aplicación móvil independiente concebida para consultar horarios, paradas, trayectos y tarifas del transporte público de Bizkaia y Euskadi (Metro Bilbao, Bizkaibus, Bilbobus, Euskotren, Renfe Cercanías, Tranvía y Puente Colgante).
+      </p>
+      <p>Nuestra arquitectura está diseñada bajo el principio de <strong>privacidad por diseño (Privacy by Design)</strong> y filosofía <strong>Offline-First</strong>:</p>
+      <ul>
+        <li><strong>Sin registro obligatorio:</strong> La totalidad de las funciones de consulta, mapa, horarios y cálculo de tarifas funciona sin necesidad de crear una cuenta ni identificarse.</li>
+        <li><strong>No vendemos datos:</strong> No recopilamos datos con fines publicitarios, no integramos redes de anuncios (sin AdMob ni similares) ni vendemos ni alquilamos tus datos a terceros.</li>
+        <li><strong>Ubicación efímera y local:</strong> Tu ubicación solo se usa para calcular distancias a paradas cercanas y rutas en el momento en que abres la app. No se almacena ningún historial de localización.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>2. Datos y Permisos del Dispositivo</h2>
+      <p>A continuación se detallan los permisos y datos que la aplicación puede requerir durante su funcionamiento:</p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Permiso / Dato</th>
+              <th>Finalidad específica</th>
+              <th>Tratamiento y Conservación</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <strong>Ubicación precisa y aproximada</strong><br>
+                <code>ACCESS_FINE_LOCATION</code><br>
+                <code>ACCESS_COARSE_LOCATION</code>
+              </td>
+              <td>
+                Calcular las paradas y estaciones de transporte más cercanas a tu posición actual, ordenar las líneas por proximidad y centrar el mapa interactivo.
+              </td>
+              <td>
+                <strong>Estrictamente local y en primer plano.</strong> No se rastrea la ubicación en segundo plano, no se transmite a servidores remotos ni se conserva ningún registro de tus desplazamientos.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <strong>Notificaciones</strong><br>
+                <code>POST_NOTIFICATIONS</code>
+              </td>
+              <td>
+                Enviar avisos sobre el estado del servicio de transporte o recordatorios de salida solicitados voluntariamente por el usuario.
+              </td>
+              <td>
+                Gestionadas localmente a través del sistema operativo del dispositivo. Puedes revocarlas en cualquier momento en los ajustes del sistema.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <strong>Servicio en Primer Plano</strong><br>
+                <code>FOREGROUND_SERVICE</code><br>
+                <code>FOREGROUND_SERVICE_SPECIAL_USE</code>
+              </td>
+              <td>
+                Mostrar la cuenta atrás en vivo del próximo tren o autobús en la pantalla de bloqueo (TransitLiveService), exclusivamente cuando el usuario activa manualmente el seguimiento de un viaje.
+              </td>
+              <td>
+                Se ejecuta únicamente mientras la cuenta atrás esté activa a petición del usuario y finaliza al transcurrir el viaje o al detenerlo manualmente.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <strong>Acceso a Internet</strong><br>
+                <code>INTERNET</code><br>
+                <code>ACCESS_NETWORK_STATE</code>
+              </td>
+              <td>
+                Descargar actualizaciones de horarios estáticos GTFS, consultar estimaciones en tiempo real de los operadores y renderizar las capas cartográficas.
+              </td>
+              <td>
+                Comunicaciones cifradas mediante protocolo HTTPS / TLS estándar.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3. Cuenta de Usuario y Datos Opcionales de Autenticación</h2>
+      <p>
+        El usuario puede optar libremente por iniciar sesión en la aplicación (mediante <strong>Google Sign-In</strong> o <strong>Sign in with Apple</strong>) con el único objetivo de sincronizar sus viajes favoritos y configuraciones entre varios dispositivos.
+      </p>
+      <p>Si decides iniciar sesión, se recogen los siguientes datos mínimos:</p>
+      <ul>
+        <li><strong>Identificador de usuario (UUID):</strong> Generado por el sistema de autenticación de Supabase.</li>
+        <li><strong>Dirección de correo electrónico:</strong> Proporcionada por Google o Apple tras tu consentimiento explícito.</li>
+        <li><strong>Viajes y paradas guardadas:</strong> Información configurada por ti para sincronizar tus widgets y accesos rápidos.</li>
+      </ul>
+      <h3>Eliminación de la Cuenta y Datos (Derecho de Supresión)</h3>
+      <p>
+        Puedes eliminar tu cuenta y todos tus datos sincronizados en cualquier momento de forma instantánea directamente desde la aplicación:
+      </p>
+      <ol>
+        <li>Abre <strong>Noiz</strong> y accede a la sección de <strong>Perfil / Ajustes</strong>.</li>
+        <li>Selecciona la opción <strong>"Eliminar definitivamente mi cuenta"</strong>.</li>
+        <li>Al confirmar, tu usuario, correo electrónico y todos los viajes sincronizados se borrarán de forma inmediata e irreversible de nuestra base de datos.</li>
+      </ol>
+      <p>También puedes solicitar la eliminación manual enviando un correo a <a href="mailto:nicolaspascualdelallana@gmail.com">nicolaspascualdelallana@gmail.com</a>.</p>
+    </div>
+
+    <div class="card">
+      <h2>4. Terceros y Proveedores de Servicios</h2>
+      <p>
+        Para proveer las funcionalidades del servicio, Noiz hace uso de las siguientes plataformas de infraestructura tecnológica:
+      </p>
+      <ul>
+        <li>
+          <strong>Supabase Inc.</strong>: Plataforma de backend en la nube con centros de datos en la Unión Europea. Gestiona la autenticación segura y el almacenamiento de bases de datos bajo estrictas políticas de cifrado en reposo y tránsito (SSL/TLS) y aislamiento de datos a nivel de fila (Row Level Security).
+        </li>
+        <li>
+          <strong>Google LLC &amp; Apple Inc.</strong>: Servicios de inicio de sesión federado opcional. Su uso está sujeto a sus respectivas políticas de privacidad.
+        </li>
+        <li>
+          <strong>OpenFreeMap / Colaboradores de OpenStreetMap</strong>: Proveedores de mapas libres utilizados para dibujar el mapa base de transporte sin rastreadores comerciales ni perfiles de usuario.
+        </li>
+        <li>
+          <strong>Portales Oficiales de Datos Abiertos de Transporte</strong>: Consorcio de Transportes de Bizkaia (CTB), Metro Bilbao S.A., Renfe Viajeros, Eusko Trenbideak (Euskotren), Bilbobus, Bizkaibus y Open Data Euskadi. La aplicación únicamente realiza peticiones de lectura a sus fuentes de datos públicos o paquetes GTFS; <strong>en ningún caso se transmiten datos personales, identificadores ni ubicaciones a estas entidades</strong>.
+        </li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>5. Ausencia de Publicidad y Venta de Datos</h2>
+      <p>
+        Reafirmamos con total transparencia que <strong>Noiz NO incluye anuncios publicitarios de ninguna índole</strong>. No incorporamos ningún kit de desarrollo (SDK) publicitario, de atribución comercial o de intermediación de anuncios.
+      </p>
+      <p>
+        Ningún dato personal o técnico es vendido, transferido ni cedido a anunciantes, agregadores de datos o entidades comerciales.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>6. Protección de Menores</h2>
+      <p>
+        Noiz es una herramienta de consulta de transporte apta para todo público, pero no está dirigida específicamente a menores de 13 años (o la edad mínima legal en su jurisdicción). No recopilamos conscientemente ningún dato personal de menores. Si un padre, madre o tutor tiene conocimiento de que un menor ha registrado una cuenta sin su consentimiento, puede contactarnos para eliminar la cuenta y los datos asociados inmediatamente.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>7. Tus Derechos de Privacidad (RGPD / GDPR)</h2>
+      <p>
+        De conformidad con el Reglamento General de Protección de Datos (RGPD) de la Unión Europea y normativas aplicables, tienes derecho a:
+      </p>
+      <ul>
+        <li><strong>Acceso:</strong> Conocer qué datos tuyos se conservan.</li>
+        <li><strong>Rectificación:</strong> Corregir información inexacta o desactualizada.</li>
+        <li><strong>Supresión ("Derecho al olvido"):</strong> Solicitar el borrado íntegro de tus datos de usuario.</li>
+        <li><strong>Oposición y Limitación:</strong> Oponerte al tratamiento o solicitar su restricción.</li>
+        <li><strong>Portabilidad:</strong> Solicitar una copia estructurada de tus datos guardados.</li>
+      </ul>
+      <p>
+        Para ejercitar cualquiera de estos derechos, basta con enviar una comunicación a <a href="mailto:nicolaspascualdelallana@gmail.com">nicolaspascualdelallana@gmail.com</a> indicando tu solicitud.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>8. Independencia Legal</h2>
+      <p>
+        Noiz es una aplicación de desarrollo independiente creada para facilitar la movilidad ciudadana. No cuenta con afiliación oficial, patrocinio ni representación de Metro Bilbao S.A., Renfe Operadora, Euskotren, Bilbobus, Bizkaibus, ni del Consorcio de Transportes de Bizkaia (CTB). La información procede de fuentes de datos abiertos oficiales conforme a licencias públicas de reutilización (CC BY 4.0 y legislación de reutilización del sector público).
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>9. Modificaciones a esta Política</h2>
+      <p>
+        Podemos actualizar esta Política de Privacidad de forma periódica para reflejar cambios en la aplicación o adaptaciones legislativas. Cualquier actualización se publicará en esta misma URL indicando la fecha de revisión más reciente. Te recomendamos consultar esta página periódicamente.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>10. Contacto</h2>
+      <p>
+        Si tienes cualquier duda, consulta o sugerencia en relación con esta Política de Privacidad o el tratamiento de datos en Noiz, puedes escribir a:
+      </p>
+      <p>
+        <strong>Nicolas Pascual de la Llana</strong><br>
+        Desarrollador de Noiz (Bizkaia Transit)<br>
+        Correo electrónico: <a href="mailto:nicolaspascualdelallana@gmail.com">nicolaspascualdelallana@gmail.com</a>
+      </p>
+    </div>
+
+    <footer>
+      <p>© 2026 Noiz · Todos los derechos reservados · Política de Privacidad accesible públicamente</p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -14,6 +14,7 @@ import '../../widgets/glass/glass_surface.dart';
 import '../../widgets/glass/motion.dart';
 import '../auth/auth_screen.dart';
 import '../legal/legal_texts.dart';
+import '../legal/privacy_policy_screen.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/shapes.dart';
 
 final _text = AppTypography.textTheme();
@@ -610,12 +611,37 @@ class _SignInPage extends ConsumerWidget {
 
                 const SizedBox(height: 16),
 
-                Text(
-                  'Al continuar, aceptas la política de privacidad. '
-                  'Tus datos se almacenan de forma segura.',
-                  style: _text.bodySmall!.copyWith(
-                    color: AppColors.darkTextSecondary,
-                    fontSize: 12,
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => const PrivacyPolicyScreen(),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text.rich(
+                      TextSpan(
+                        text: 'Al continuar, aceptas la ',
+                        children: const [
+                          TextSpan(
+                            text: 'política de privacidad',
+                            style: TextStyle(
+                              color: AppColors.accent,
+                              decoration: TextDecoration.underline,
+                              decorationColor: AppColors.accent,
+                            ),
+                          ),
+                          TextSpan(
+                            text: '. Tus datos se almacenan de forma segura.',
+                          ),
+                        ],
+                      ),
+                      style: _text.bodySmall!.copyWith(
+                        color: AppColors.darkTextSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ),
 

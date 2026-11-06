@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:bizkaia_transit/core/theme/app_colors.dart';
 import 'package:bizkaia_transit/core/theme/app_typography.dart';
 import 'package:bizkaia_transit/presentation/screens/legal/legal_texts.dart';
+import 'package:bizkaia_transit/presentation/screens/legal/privacy_policy_screen.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/aurora_background.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/content.dart';
 import 'package:bizkaia_transit/presentation/widgets/glass/glass_surface.dart';
@@ -44,6 +45,52 @@ class LicensesScreen extends StatelessWidget {
                     ),
                   ),
                   const DisclaimerCard(),
+                  const SizedBox(height: 12),
+                  SurfaceCard(
+                    padding: EdgeInsets.zero,
+                    child: Semantics(
+                      button: true,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (context) => const PrivacyPolicyScreen(),
+                          ),
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 52),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.shield_outlined,
+                                  size: 20,
+                                  color: AppColors.accent,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Política de Privacidad',
+                                    style: _text.bodyLarge!.copyWith(
+                                      color: AppColors.darkTextPrimary,
+                                    ),
+                                  ),
+                                ),
+                                const ExcludeSemantics(
+                                  child: Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 22,
+                                    color: AppColors.darkTextTertiary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SectionHeader(
                     'Fuentes',
                     subtitle: 'Toca un enlace para copiarlo.',

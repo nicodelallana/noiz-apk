@@ -5,6 +5,7 @@ import 'package:bizkaia_transit/presentation/navigation/app_shell.dart';
 import 'package:bizkaia_transit/presentation/screens/alerts/service_alerts_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/fares/transit_fares_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/legal/licenses_screen.dart';
+import 'package:bizkaia_transit/presentation/screens/legal/privacy_policy_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/map/transit_map_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/metro/metro_departures_screen.dart';
 import 'package:bizkaia_transit/presentation/screens/nearby/nearby_transit_screen.dart';
@@ -31,6 +32,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding',
         builder: (context, state) => const OnboardingScreen(),
+      ),
+
+      // Legal & Privacy routes (directly pushable from any screen)
+      GoRoute(
+        path: '/privacy',
+        builder: (context, state) => const PrivacyPolicyScreen(),
+      ),
+      GoRoute(
+        path: '/licenses',
+        builder: (context, state) => const LicensesScreen(),
       ),
 
       // Main app: one branch per tab, kept alive in an IndexedStack. Leaving
@@ -104,6 +115,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'licenses',
                     builder: (context, state) => const LicensesScreen(),
+                  ),
+                  GoRoute(
+                    path: 'privacy',
+                    builder: (context, state) => const PrivacyPolicyScreen(),
                   ),
                 ],
               ),
